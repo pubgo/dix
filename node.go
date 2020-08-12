@@ -1,7 +1,6 @@
 package dix
 
 import (
-	"fmt"
 	"github.com/pubgo/xerror"
 	"reflect"
 	"sort"
@@ -21,7 +20,7 @@ func newNode(c *dix, data interface{}) *node {
 func (n *node) handleCall(params []reflect.Value) error {
 	values := n.c.invokerFn(n.fn, params[:])
 
-	if len(values)==0{
+	if len(values) == 0 {
 		return nil
 	}
 
@@ -118,7 +117,7 @@ func (n *node) call() error {
 			}
 			params = append(params, mt)
 		default:
-			return fmt.Errorf("incorrect input parameter type, got(%s)", inType.Kind())
+			return xerror.Fmt("incorrect input parameter type, got(%s)", inType.Kind())
 		}
 	}
 

@@ -17,6 +17,7 @@ func New(opts ...Option) *dix {
 	for _, opt := range opts {
 		opt(c)
 	}
+	
 	return c
 }
 

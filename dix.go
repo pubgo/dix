@@ -2,7 +2,6 @@ package dix
 
 import (
 	"bytes"
-	"fmt"
 	"github.com/pubgo/xerror"
 	"math/rand"
 	"reflect"
@@ -106,7 +105,7 @@ func (x *dix) dixFunc(data interface{}) error {
 				x.setProvider(unWrapType(feTye.Type), x.getTagVal(feTye), nd)
 			}
 		default:
-			return fmt.Errorf("incorrect input parameter type, got(%s)", inTye.Kind())
+			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
 		}
 	}
 

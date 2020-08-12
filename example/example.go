@@ -10,35 +10,42 @@ import (
 	"time"
 )
 
+type Hello interface {
+	Hello()
+}
+
+type test1 struct {
+	h Hello
+}
+
 type Config struct {
 	Prefix string
 }
 
-func main() {
+func (Config) Hello() {
+	fmt.Println("config Hello")
+}
 
-	defer xerror.RespDebug()
-
-	i := 0
-	var di = dix.New()
-	err := di.Dix(func(cfg *Config) (*log.Logger, error) {
+func init() {
+	xerror.Exit(dix.Dix(func(h *test1) {
+		h.h.Hello()
+	}))
+	xerror.Exit(dix.Dix(func(cfg *Config) (*log.Logger, error) {
 		return log.New(os.Stdout, cfg.Prefix, log.Llongfile), nil
-	})
-	if err != nil {
-		panic(err)
-	}
-	err = di.Dix(func(l *log.Logger) {
+	}))
+	xerror.Exit(dix.Dix(func(l *log.Logger) {
 		l.Print("You've been invoked")
-	})
-	if err != nil {
-		panic(err)
-	}
+	}))
+}
 
+func main() {
+	i := 0
 	for {
 		var cfg Config
-		err := json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg)
-		xerror.Panic(err)
-		xerror.Panic(di.Dix(&cfg))
-		fmt.Println(di.Graph())
+		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
+		xerror.Exit(dix.Dix(&cfg))
+		xerror.Exit(dix.Dix(&test1{h: &cfg}))
+		fmt.Println(dix.Graph())
 		time.Sleep(time.Second)
 		i++
 	}
