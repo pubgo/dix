@@ -93,7 +93,7 @@ func (x *dix) dixFunc(data interface{}) error {
 			}
 
 			x.setProvider(unWrapType(inTye.Key()), _default, nd)
-		case reflect.Ptr:
+		case reflect.Ptr, reflect.Interface:
 			x.setProvider(unWrapType(inTye), _default, nd)
 		case reflect.Struct:
 			for i := 0; i < inTye.NumField(); i++ {
@@ -230,8 +230,8 @@ func (x *dix) graph() string {
 
 	fPrintln(b, "values: {")
 	for k, v := range x.values {
-		for _, v1 := range v {
-			fPrintln(b, "\t", k, "->", v, "->", v1.String())
+		for k1, v1 := range v {
+			fPrintln(b, "\t", k, "->", k1, "->", v1.String())
 		}
 	}
 	fPrintln(b, "}")

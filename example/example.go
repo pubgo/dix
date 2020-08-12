@@ -7,6 +7,7 @@ import (
 	"github.com/pubgo/xerror"
 	"log"
 	"os"
+	"reflect"
 	"time"
 )
 
@@ -30,6 +31,9 @@ func init() {
 	xerror.Exit(dix.Dix(func(h *test1) {
 		h.h.Hello()
 	}))
+	xerror.Exit(dix.Dix(func(h Hello) {
+		h.Hello()
+	}))
 	xerror.Exit(dix.Dix(func(cfg *Config) (*log.Logger, error) {
 		return log.New(os.Stdout, cfg.Prefix, log.Llongfile), nil
 	}))
@@ -38,13 +42,19 @@ func init() {
 	}))
 }
 
+func H(hello interface{}) Hello{
+	return hello.(Hello)
+}
+
 func main() {
 	i := 0
 	for {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
 		xerror.Exit(dix.Dix(&cfg))
-		xerror.Exit(dix.Dix(&test1{h: &cfg}))
+		//xerror.Exit(dix.Dix(&test1{h: &cfg}))
+		fmt.Println(reflect.ValueOf(H(&cfg)).Type())
+		xerror.Exit(dix.Dix(H(&cfg).(Hello)))
 		fmt.Println(dix.Graph())
 		time.Sleep(time.Second)
 		i++
