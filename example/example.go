@@ -7,7 +7,6 @@ import (
 	"github.com/pubgo/xerror"
 	"log"
 	"os"
-	"reflect"
 	"time"
 )
 
@@ -16,7 +15,11 @@ type Hello interface {
 }
 
 type test1 struct {
-	h Hello
+	i int
+}
+
+func (t test1) Hello() {
+	fmt.Println("config test1")
 }
 
 type Config struct {
@@ -24,12 +27,12 @@ type Config struct {
 }
 
 func (Config) Hello() {
-	fmt.Println("config Hello")
+	fmt.Println("Hello Config")
 }
 
 func init() {
 	xerror.Exit(dix.Dix(func(h *test1) {
-		h.h.Hello()
+		fmt.Println("h *test1")
 	}))
 	xerror.Exit(dix.Dix(func(h Hello) {
 		h.Hello()
@@ -42,19 +45,16 @@ func init() {
 	}))
 }
 
-func H(hello interface{}) Hello{
-	return hello.(Hello)
-}
-
 func main() {
 	i := 0
 	for {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
 		xerror.Exit(dix.Dix(&cfg))
-		//xerror.Exit(dix.Dix(&test1{h: &cfg}))
-		fmt.Println(reflect.ValueOf(H(&cfg)).Type())
-		xerror.Exit(dix.Dix(H(&cfg).(Hello)))
+		fmt.Println(dix.Graph())
+		fmt.Print("==================================================================================\n")
+		time.Sleep(time.Second)
+		xerror.Exit(dix.Dix(&test1{i:i}))
 		fmt.Println(dix.Graph())
 		time.Sleep(time.Second)
 		i++

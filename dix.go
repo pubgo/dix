@@ -2,13 +2,15 @@ package dix
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/pubgo/xerror"
 	"math/rand"
 	"reflect"
+	"strings"
 )
 
 const (
-	_default = ns("_dix_default")
+	_default = ns("dix_default")
 	_tagName = "dix"
 )
 
@@ -22,7 +24,9 @@ type (
 
 type dix struct {
 	providers       map[key]map[ns][]*node
+	abcProviders    map[key]map[ns][]*node
 	values          map[key]map[ns]reflect.Value
+	abcValues       map[key]map[ns]key
 	rand            *rand.Rand
 	invokerFn       invokerFn
 	nilValueAllowed bool
@@ -32,14 +36,31 @@ func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 	return fn.Call(args)
 }
 
+func (x *dix) each(fn func(tye key, _default ns, val value) bool) {
+	for k, v := range x.values {
+		for k1, v1 := range v {
+			if fn(k, k1, v1) {
+				return
+			}
+		}
+	}
+}
+
 func (x *dix) getValue(tye key, _default ns) reflect.Value {
 	if x.values[tye] == nil {
-		return reflect.Value{}
+		return reflect.ValueOf((*error)(nil))
 	}
 	return x.values[tye][_default]
 }
 
-func (x *dix) getNodeValue(tye key, _default ns) []*node {
+func (x *dix) getAbcValue(tye key, name ns) reflect.Value {
+	if x.abcValues[tye] == nil {
+		return reflect.ValueOf((*error)(nil))
+	}
+	return x.values[x.abcValues[tye][name]][name]
+}
+
+func (x *dix) getNodes(tye key, _default ns) []*node {
 	if x.providers[tye] == nil || x.providers[tye][_default] == nil {
 		return nil
 	}
@@ -54,6 +75,15 @@ func (x *dix) isNil(v reflect.Value) bool {
 	return false
 }
 
+func (x *dix) checkAbcImplement(p reflect.Type) reflect.Type {
+	for k := range x.abcProviders {
+		if p.Implements(k) {
+			return k
+		}
+	}
+	return nil
+}
+
 func (x *dix) dixPtr(values map[ns][]reflect.Type, data interface{}) error {
 	val := reflect.ValueOf(data)
 	if x.isNil(val) {
@@ -61,6 +91,10 @@ func (x *dix) dixPtr(values map[ns][]reflect.Type, data interface{}) error {
 	}
 
 	tye := unWrapType(val.Type())
+	if ttk := x.checkAbcImplement(tye); ttk != nil {
+		x.setAbcValue(ttk, _default, tye)
+	}
+
 	x.setValue(tye, _default, val)
 	values[_default] = append(values[_default], val.Type())
 	return nil
@@ -84,31 +118,39 @@ func (x *dix) dixFunc(data interface{}) error {
 		}
 	}
 
-	nd := newNode(x, data)
 	for i := 0; i < tye.NumIn(); i++ {
 		switch inTye := tye.In(i); inTye.Kind() {
-		case reflect.Map:
-			if inTye.Key().Kind() != reflect.Ptr {
-				return xerror.New("the map key should be Ptr type")
-			}
-
-			x.setProvider(unWrapType(inTye.Key()), _default, nd)
-		case reflect.Ptr, reflect.Interface:
+		case reflect.Interface:
+			nd, err := newNode(x, data)
+			xerror.Panic(err)
+			x.setAbcProvider(unWrapType(inTye), _default, nd)
+		case reflect.Ptr:
+			nd, err := newNode(x, data)
+			xerror.Panic(err)
 			x.setProvider(unWrapType(inTye), _default, nd)
 		case reflect.Struct:
 			for i := 0; i < inTye.NumField(); i++ {
 				feTye := inTye.Field(i)
+
+				if unWrapType(feTye.Type).Kind() == reflect.Interface {
+					nd, err := newNode(x, data)
+					xerror.Panic(err)
+					x.setAbcProvider(unWrapType(feTye.Type), x.getNS(feTye), nd)
+					return nil
+				}
+
 				if feTye.Type.Kind() != reflect.Ptr {
 					return xerror.New("the struct field should be Ptr type")
 				}
 
-				x.setProvider(unWrapType(feTye.Type), x.getTagVal(feTye), nd)
+				nd, err := newNode(x, data)
+				xerror.Panic(err)
+				x.setProvider(unWrapType(feTye.Type), x.getNS(feTye), nd)
 			}
 		default:
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
 		}
 	}
-
 	return nil
 }
 
@@ -134,6 +176,10 @@ func (x *dix) dixMap(values map[ns][]reflect.Type, data interface{}) error {
 			return xerror.Fmt("map value is nil, key:%s", k)
 		}
 
+		if ttk := x.checkAbcImplement(unWrapType(iter.Value().Type())); ttk != nil {
+			x.setAbcValue(ttk, k, unWrapType(iter.Value().Type()))
+		}
+
 		x.setValue(unWrapType(iter.Value().Type()), k, iter.Value())
 		values[k] = append(values[k], iter.Value().Type())
 	}
@@ -154,8 +200,11 @@ func (x *dix) dixStruct(values map[ns][]reflect.Type, data interface{}) error {
 			return xerror.New("struct field data is nil")
 		}
 
-		x.setValue(unWrapType(tye.Field(i).Type), x.getTagVal(tye.Field(i)), val.Field(i))
-		values[x.getTagVal(tye.Field(i))] = append(values[x.getTagVal(tye.Field(i))], val.Field(i).Type())
+		if ttk := x.checkAbcImplement(unWrapType(tye.Field(i).Type)); ttk != nil {
+			x.setAbcValue(ttk, x.getNS(tye.Field(i)), unWrapType(tye.Field(i).Type))
+		}
+		x.setValue(unWrapType(tye.Field(i).Type), x.getNS(tye.Field(i)), val.Field(i))
+		values[x.getNS(tye.Field(i))] = append(values[x.getNS(tye.Field(i))], val.Field(i).Type())
 	}
 
 	return nil
@@ -210,6 +259,17 @@ func (x *dix) dix(data ...interface{}) (err error) {
 					return xerror.Wrap(err)
 				}
 			}
+			// interface
+			for t, mapNodes := range x.abcProviders {
+				if !unWrapType(vas[i]).Implements(t) {
+					continue
+				}
+				for _, n := range mapNodes[name] {
+					if err := n.call(); err != nil {
+						return xerror.Wrap(err)
+					}
+				}
+			}
 		}
 	}
 
@@ -218,22 +278,52 @@ func (x *dix) dix(data ...interface{}) (err error) {
 
 func (x *dix) graph() string {
 	b := &bytes.Buffer{}
-	fPrintln(b, "nodes: {")
+	fPrintln(b, "digraph G {")
+	fPrintln(b, "subgraph cluster_0 {")
+	fPrintln(b, "	label=nodes")
 	for k, vs := range x.providers {
 		for k1, v1 := range vs {
 			for i := range v1 {
-				fPrintln(b, "\t", k, "->", k1, "->", v1[i].fn.String())
+				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1[i].fn.String()))
+				for _, v2 := range v1[i].outputType {
+					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(),v2))
+				}
 			}
 		}
 	}
 	fPrintln(b, "}")
 
-	fPrintln(b, "values: {")
+	fPrintln(b, "subgraph cluster_1 {")
+	fPrintln(b, "	label=values")
 	for k, v := range x.values {
 		for k1, v1 := range v {
-			fPrintln(b, "\t", k, "->", k1, "->", v1.String())
+			fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1.String()))
 		}
 	}
+	fPrintln(b, "}")
+
+	fPrintln(b, "subgraph cluster_2 {")
+	fPrintln(b, "	label=abc_nodes")
+	for k, vs := range x.abcProviders {
+		for k1, v1 := range vs {
+			for i := range v1 {
+				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1[i].fn.String()))
+				for _, v2 := range v1[i].outputType {
+					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(),v2))
+				}
+			}
+		}
+	}
+	fPrintln(b, "}")
+
+	fPrintln(b, "subgraph cluster_3 {")
+	fPrintln(b, "	label=abc_values")
+	for k, v := range x.abcValues {
+		for k1, v1 := range v {
+			fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1.String()))
+		}
+	}
+	fPrintln(b, "}")
 	fPrintln(b, "}")
 
 	return b.String()
@@ -247,11 +337,27 @@ func (x *dix) setValue(k key, name ns, v value) {
 	}
 }
 
-func (x *dix) getTagVal(field reflect.StructField) string {
-	if tag := field.Tag.Get(_tagName); tag != "" {
+func (x *dix) setAbcValue(k key, name ns, v key) {
+	if x.abcValues[k] == nil {
+		x.abcValues[k] = map[ns]key{name: v}
+	} else {
+		x.abcValues[k][name] = v
+	}
+}
+
+func (x *dix) getNS(field reflect.StructField) string {
+	if tag := strings.TrimSpace(field.Tag.Get(_tagName)); tag != "" {
 		return tag
 	}
-	return _default
+	return strings.ToLower(field.Name)
+}
+
+func (x *dix) setAbcProvider(k key, name ns, nd *node) {
+	if x.abcProviders[k] == nil {
+		x.abcProviders[k] = map[ns][]*node{name: {nd}}
+	} else {
+		x.abcProviders[k][name] = append(x.abcProviders[k][name], nd)
+	}
 }
 
 func (x *dix) setProvider(k key, name ns, nd *node) {

@@ -13,11 +13,40 @@ type node struct {
 	outputType map[ns]key
 }
 
-func newNode(c *dix, data interface{}) *node {
-	return &node{fn: reflect.ValueOf(data), c: c}
+func newNode(c *dix, data interface{}) (nd *node, err error) {
+	nd = &node{fn: reflect.ValueOf(data), c: c, outputType: make(map[ns]key)}
+	nd.outputType, err = nd.returnedType()
+	return
 }
 
-func (n *node) handleCall(params []reflect.Value) error {
+func (n *node) returnedType() (map[ns]key, error) {
+	opts := make(map[ns]key)
+	v := n.fn
+	for i := 0; i < v.Type().NumOut(); i++ {
+		out := v.Type().Out(i)
+		switch out.Kind() {
+		case reflect.Ptr:
+			opts[_default] = unWrapType(out)
+		case reflect.Struct:
+			for j := 0; j < v.NumField(); j++ {
+				feTye := v.Type().Field(j)
+				if feTye.Type.Kind() != reflect.Ptr {
+					return nil, xerror.New("the struct field should be Ptr type")
+				}
+				opts[n.c.getNS(feTye)] = unWrapType(feTye.Type)
+			}
+		default:
+			if isError(out){
+				continue
+			}
+			return nil, xerror.Fmt("provide type kind error, (kind %v)", out.Kind())
+		}
+	}
+	return opts, nil
+}
+
+func (n *node) handleCall(params []reflect.Value) (err error) {
+	defer xerror.RespErr(&err)
 	values := n.c.invokerFn(n.fn, params[:])
 
 	if len(values) == 0 {
@@ -51,60 +80,49 @@ type sortValue struct {
 	Value reflect.Value
 }
 
-func (n *node) call() error {
+func (n *node) call() (err error) {
+	defer xerror.RespErr(&err)
+
 	var values []reflect.Value
 	var params []reflect.Value
 	var input []reflect.Value
 	for i := 0; i < n.fn.Type().NumIn(); i++ {
 		inType := n.fn.Type().In(i)
 		switch inType.Kind() {
+		case reflect.Interface:
+			val := n.c.getAbcValue(unWrapType(inType), _default)
+			if !n.isNil(val) {
+				params = append(params, val)
+				input = append(input, val)
+			}
 		case reflect.Ptr:
 			val := n.c.getValue(unWrapType(inType), _default)
-			if n.isNil(val) {
-				return nil
+			if !n.isNil(val) {
+				params = append(params, val)
+				input = append(input, val)
 			}
-
-			mt := reflect.New(unWrapType(inType))
-			mt.Elem().Set(val.Elem())
-			params = append(params, mt)
-			input = append(input, mt)
-		case reflect.Map:
-			tye := unWrapType(inType.Key())
-			mt := reflect.MakeMap(inType)
-
-			var sv []sortValue
-			for k, v := range n.c.values[tye] {
-				if n.isNil(v) {
-					return nil
-				}
-				values = append(values, v)
-				mt.SetMapIndex(v, reflect.ValueOf(k))
-				sv = append(sv, sortValue{
-					Key:   k,
-					Value: v,
-				})
-			}
-
-			sort.Slice(sv, func(i, j int) bool {
-				return sv[i].Key > sv[j].Key
-			})
-			for i := range sv {
-				input = append(input, sv[i].Value)
-			}
-			params = append(params, mt)
 		case reflect.Struct:
 			mt := reflect.New(inType)
 			var sv []sortValue
 			for i := 0; i < inType.NumField(); i++ {
-				val := n.c.getValue(unWrapType(inType.Field(i).Type), n.c.getTagVal(inType.Field(i)))
-				if n.isNil(val) {
-					return nil
+
+				var val reflect.Value
+				if unWrapType(inType.Field(i).Type).Kind() == reflect.Interface {
+					val = n.c.getAbcValue(unWrapType(inType.Field(i).Type), n.c.getNS(inType.Field(i)))
+					if !n.isNil(val) {
+						values = append(values, val)
+						mt.Field(i).Set(val)
+					}
+				} else {
+					val = n.c.getValue(unWrapType(inType.Field(i).Type), n.c.getNS(inType.Field(i)))
+					if !n.isNil(val) {
+						values = append(values, val)
+						mt.Field(i).Set(val)
+					}
 				}
-				values = append(values, val)
-				mt.Field(i).Set(val)
 
 				sv = append(sv, sortValue{
-					Key:   n.c.getTagVal(inType.Field(i)),
+					Key:   n.c.getNS(inType.Field(i)),
 					Value: val,
 				})
 			}
