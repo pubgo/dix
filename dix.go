@@ -252,7 +252,6 @@ func (x *dix) dix(data ...interface{}) (err error) {
 		}
 	}
 
-	fmt.Println(values)
 	for name, vas := range values {
 		for i := range vas {
 			for _, n := range x.providers[unWrapType(vas[i])][name] {
