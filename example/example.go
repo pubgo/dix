@@ -31,9 +31,9 @@ func (Config) Hello() {
 }
 
 func init() {
-	xerror.Exit(dix.Dix(func(h *test1) {
+	dix.Go(func(h *test1) {
 		fmt.Println("h *test1")
-	}))
+	})
 	xerror.Exit(dix.Dix(func(h Hello) {
 		h.Hello()
 	}))
@@ -50,11 +50,11 @@ func main() {
 	for {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
-		xerror.Exit(dix.Dix(&cfg))
+		dix.Go(&cfg)
 		fmt.Println(dix.Graph())
 		fmt.Print("==================================================================================\n")
 		time.Sleep(time.Second)
-		xerror.Exit(dix.Dix(&test1{i:i}))
+		xerror.Exit(dix.Dix(&test1{i: i}))
 		fmt.Println(dix.Graph())
 		time.Sleep(time.Second)
 		i++
