@@ -77,7 +77,7 @@ func (x *dix) isNil(v reflect.Value) bool {
 
 func (x *dix) checkAbcImplement(p reflect.Type) reflect.Type {
 	for k := range x.abcProviders {
-		if p.Implements(k) {
+		if reflect.New(p).Type().Implements(k) {
 			return k
 		}
 	}
@@ -252,6 +252,7 @@ func (x *dix) dix(data ...interface{}) (err error) {
 		}
 	}
 
+	fmt.Println(values)
 	for name, vas := range values {
 		for i := range vas {
 			for _, n := range x.providers[unWrapType(vas[i])][name] {
@@ -261,7 +262,7 @@ func (x *dix) dix(data ...interface{}) (err error) {
 			}
 			// interface
 			for t, mapNodes := range x.abcProviders {
-				if !unWrapType(vas[i]).Implements(t) {
+				if !reflect.New(unWrapType(vas[i])).Type().Implements(t) {
 					continue
 				}
 				for _, n := range mapNodes[name] {
@@ -286,7 +287,7 @@ func (x *dix) graph() string {
 			for i := range v1 {
 				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1[i].fn.String()))
 				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(),v2))
+					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(), v2))
 				}
 			}
 		}
@@ -309,7 +310,7 @@ func (x *dix) graph() string {
 			for i := range v1 {
 				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1[i].fn.String()))
 				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(),v2))
+					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(), v2))
 				}
 			}
 		}
