@@ -349,7 +349,7 @@ func (x *dix) getNS(field reflect.StructField) string {
 	if tag := strings.TrimSpace(field.Tag.Get(_tagName)); tag != "" {
 		return tag
 	}
-	return strings.ToLower(field.Name)
+	return _default
 }
 
 func (x *dix) setAbcProvider(k key, name ns, nd *node) {
