@@ -36,7 +36,7 @@ func (n *node) returnedType() (map[ns]key, error) {
 				opts[n.c.getNS(feTye)] = unWrapType(feTye.Type)
 			}
 		default:
-			if isError(out){
+			if isError(out) {
 				continue
 			}
 			return nil, xerror.Fmt("provide type kind error, (kind %v)", out.Kind())
@@ -47,7 +47,7 @@ func (n *node) returnedType() (map[ns]key, error) {
 
 func (n *node) handleCall(params []reflect.Value) (err error) {
 	defer xerror.RespErr(&err)
-	values := n.c.invokerFn(n.fn, params[:])
+	values := n.c.opts.invokerFn(n.fn, params[:])
 
 	if len(values) == 0 {
 		return nil
@@ -105,16 +105,23 @@ func (n *node) call() (err error) {
 			mt := reflect.New(inType)
 			var sv []sortValue
 			for i := 0; i < inType.NumField(); i++ {
+				field := inType.Field(i)
+
+				if n.c.opts.Strict {
+					if _, ok := field.Tag.Lookup(_tagName); !ok {
+						continue
+					}
+				}
 
 				var val reflect.Value
-				if unWrapType(inType.Field(i).Type).Kind() == reflect.Interface {
-					val = n.c.getAbcValue(unWrapType(inType.Field(i).Type), n.c.getNS(inType.Field(i)))
+				if unWrapType(field.Type).Kind() == reflect.Interface {
+					val = n.c.getAbcValue(unWrapType(field.Type), n.c.getNS(field))
 					if !n.isNil(val) {
 						values = append(values, val)
 						mt.Field(i).Set(val)
 					}
 				} else {
-					val = n.c.getValue(unWrapType(inType.Field(i).Type), n.c.getNS(inType.Field(i)))
+					val = n.c.getValue(unWrapType(field.Type), n.c.getNS(field))
 					if !n.isNil(val) {
 						values = append(values, val)
 						mt.Field(i).Set(val)
@@ -122,7 +129,7 @@ func (n *node) call() (err error) {
 				}
 
 				sv = append(sv, sortValue{
-					Key:   n.c.getNS(inType.Field(i)),
+					Key:   n.c.getNS(field),
 					Value: val,
 				})
 			}

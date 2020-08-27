@@ -4,6 +4,9 @@ import "github.com/pubgo/xerror"
 
 var defaultDix = New()
 
+// Init ...
+func Init(opts ...Option) error { return defaultDix.Init(opts...) }
+
 // Dix ...
 func Dix(data interface{}) error { return defaultDix.Dix(data) }
 

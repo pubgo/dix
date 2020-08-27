@@ -18,18 +18,23 @@ type (
 	ns        = string
 	key       = reflect.Type
 	value     = reflect.Value
-	Option    func(c *dix)
 	invokerFn = func(fn reflect.Value, args []reflect.Value) (results []reflect.Value)
 )
 
-type dix struct {
-	providers       map[key]map[ns][]*node
-	abcProviders    map[key]map[ns][]*node
-	values          map[key]map[ns]reflect.Value
-	abcValues       map[key]map[ns]key
+type Option func(c *Options)
+type Options struct {
 	rand            *rand.Rand
 	invokerFn       invokerFn
 	nilValueAllowed bool
+	Strict          bool
+}
+
+type dix struct {
+	opts         Options
+	providers    map[key]map[ns][]*node
+	abcProviders map[key]map[ns][]*node
+	values       map[key]map[ns]reflect.Value
+	abcValues    map[key]map[ns]key
 }
 
 func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
@@ -69,7 +74,7 @@ func (x *dix) getNodes(tye key, _default ns) []*node {
 
 // isNil check whether params contain nil value
 func (x *dix) isNil(v reflect.Value) bool {
-	if !x.nilValueAllowed {
+	if !x.opts.nilValueAllowed {
 		return v.IsNil()
 	}
 	return false
@@ -207,6 +212,17 @@ func (x *dix) dixStruct(values map[ns][]reflect.Type, data interface{}) error {
 		values[x.getNS(tye.Field(i))] = append(values[x.getNS(tye.Field(i))], val.Field(i).Type())
 	}
 
+	return nil
+}
+
+func (x *dix) init(opts ...Option) error {
+	var dixOpt = x.opts
+	for _, opt := range opts {
+		opt(&dixOpt)
+	}
+
+	// TODO check option
+	x.opts = dixOpt
 	return nil
 }
 
