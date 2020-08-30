@@ -23,9 +23,9 @@ type (
 
 type Option func(c *Options)
 type Options struct {
-	rand            *rand.Rand
-	invokerFn       invokerFn
-	nilValueAllowed bool
+	Rand            *rand.Rand
+	InvokerFn       invokerFn
+	NilValueAllowed bool
 	Strict          bool
 }
 
@@ -41,21 +41,11 @@ func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 	return fn.Call(args)
 }
 
-func (x *dix) each(fn func(tye key, _default ns, val value) bool) {
-	for k, v := range x.values {
-		for k1, v1 := range v {
-			if fn(k, k1, v1) {
-				return
-			}
-		}
-	}
-}
-
-func (x *dix) getValue(tye key, _default ns) reflect.Value {
+func (x *dix) getValue(tye key, name ns) reflect.Value {
 	if x.values[tye] == nil {
 		return reflect.ValueOf((*error)(nil))
 	}
-	return x.values[tye][_default]
+	return x.values[tye][name]
 }
 
 func (x *dix) getAbcValue(tye key, name ns) reflect.Value {
@@ -65,16 +55,16 @@ func (x *dix) getAbcValue(tye key, name ns) reflect.Value {
 	return x.values[x.abcValues[tye][name]][name]
 }
 
-func (x *dix) getNodes(tye key, _default ns) []*node {
-	if x.providers[tye] == nil || x.providers[tye][_default] == nil {
+func (x *dix) getNodes(tye key, name ns) []*node {
+	if x.providers[tye] == nil {
 		return nil
 	}
-	return x.providers[tye][_default]
+	return x.providers[tye][name]
 }
 
 // isNil check whether params contain nil value
 func (x *dix) isNil(v reflect.Value) bool {
-	if !x.opts.nilValueAllowed {
+	if !x.opts.NilValueAllowed {
 		return v.IsNil()
 	}
 	return false
@@ -105,12 +95,14 @@ func (x *dix) dixPtr(values map[ns][]reflect.Type, data interface{}) error {
 	return nil
 }
 
-func (x *dix) dixFunc(data interface{}) error {
+func (x *dix) dixFunc(data interface{}) (err error) {
+	defer xerror.RespErr(&err)
+
 	fnVal := reflect.ValueOf(data)
 	tye := fnVal.Type()
 
 	if tye.IsVariadic() {
-		return xerror.New("provide variable parameters are not allowed")
+		return xerror.New("the func of provide variable parameters are not allowed")
 	}
 
 	if tye.NumIn() == 0 {
@@ -230,7 +222,7 @@ func (x *dix) dix(data ...interface{}) (err error) {
 	defer xerror.RespErr(&err)
 
 	if len(data) == 0 {
-		return xerror.New("the num of dix input parameters should > 0")
+		return xerror.New("the num of dix input parameters should not be zero")
 	}
 
 	var values = make(map[ns][]reflect.Type)

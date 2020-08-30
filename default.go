@@ -8,10 +8,10 @@ var defaultDix = New()
 func Init(opts ...Option) error { return defaultDix.Init(opts...) }
 
 // Dix ...
-func Dix(data interface{}) error { return defaultDix.Dix(data) }
+func Dix(data... interface{}) error { return defaultDix.Dix(data...) }
 
 // Go the dix must be ok
-func Go(data interface{}) { xerror.Exit(defaultDix.Dix(data)) }
+func Go(data... interface{}) { xerror.Exit(defaultDix.Dix(data...)) }
 
 // Graph dix graph
 func Graph() string { return defaultDix.graph() }

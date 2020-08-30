@@ -4,19 +4,19 @@ import "math/rand"
 
 func WithRand(r *rand.Rand) Option {
 	return func(c *Options) {
-		c.rand = r
+		c.Rand = r
 	}
 }
 
 func WithInvoker(invoker invokerFn) Option {
 	return func(c *Options) {
-		c.invokerFn = invoker
+		c.InvokerFn = invoker
 	}
 }
 
 func WithAllowNil(nilValueAllowed bool) Option {
 	return func(c *Options) {
-		c.nilValueAllowed = nilValueAllowed
+		c.NilValueAllowed = nilValueAllowed
 	}
 }
 

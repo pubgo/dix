@@ -47,7 +47,7 @@ func (n *node) returnedType() (map[ns]key, error) {
 
 func (n *node) handleCall(params []reflect.Value) (err error) {
 	defer xerror.RespErr(&err)
-	values := n.c.opts.invokerFn(n.fn, params[:])
+	values := n.c.opts.InvokerFn(n.fn, params[:])
 
 	if len(values) == 0 {
 		return nil

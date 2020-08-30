@@ -13,9 +13,9 @@ func New(opts ...Option) *dix {
 		values:       make(map[key]map[ns]value),
 		abcValues:    make(map[key]map[ns]key),
 		opts: Options{
-			rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
-			invokerFn:       defaultInvoker,
-			nilValueAllowed: false,
+			Rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
+			InvokerFn:       defaultInvoker,
+			NilValueAllowed: false,
 		},
 	}
 
@@ -23,6 +23,6 @@ func New(opts ...Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data interface{}) error { return x.dix(data) }
-func (x *dix) Init(opts ...Option) error  { return x.init(opts...) }
-func (x *dix) Graph() string              { return x.graph() }
+func (x *dix) Dix(data ...interface{}) error { return x.dix(data...) }
+func (x *dix) Init(opts ...Option) error     { return x.init(opts...) }
+func (x *dix) Graph() string                 { return x.graph() }
