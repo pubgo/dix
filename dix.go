@@ -292,9 +292,10 @@ func (x *dix) graph() string {
 	for k, vs := range x.providers {
 		for k1, v1 := range vs {
 			for i := range v1 {
-				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1[i].fn.String()))
+				fn := callerWithFunc(v1[i].fn)
+				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, fn))
 				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(), v2))
+					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
 				}
 			}
 		}
@@ -315,9 +316,10 @@ func (x *dix) graph() string {
 	for k, vs := range x.abcProviders {
 		for k1, v1 := range vs {
 			for i := range v1 {
-				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1[i].fn.String()))
+				fn := callerWithFunc(v1[i].fn)
+				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, fn))
 				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, v1[i].fn.String(), v2))
+					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
 				}
 			}
 		}
