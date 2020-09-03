@@ -137,7 +137,7 @@ func (x *dix) dixFunc(data interface{}) (err error) {
 				}
 
 				if feTye.Type.Kind() != reflect.Ptr {
-					return xerror.New("the struct field should be Ptr type")
+					return xerror.New("the struct field should be Ptr or Interface type")
 				}
 
 				nd, err := newNode(x, data)

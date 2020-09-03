@@ -68,7 +68,7 @@ func (n *node) handleCall(params []reflect.Value) (err error) {
 		vas = append(vas, values[i].Interface())
 	}
 
-	return n.c.dix(vas...)
+	return xerror.Wrap(n.c.dix(vas...))
 }
 
 func (n *node) isNil(v reflect.Value) bool {
@@ -102,30 +102,32 @@ func (n *node) call() (err error) {
 				input = append(input, val)
 			}
 		case reflect.Struct:
-			mt := reflect.New(inType)
+			mt := reflect.New(inType).Elem()
 			var sv []sortValue
 			for i := 0; i < inType.NumField(); i++ {
 				field := inType.Field(i)
 
-				if n.c.opts.Strict {
-					if _, ok := field.Tag.Lookup(_tagName); !ok {
-						continue
-					}
+				if _, ok := field.Tag.Lookup(_tagName); n.c.opts.Strict && !ok {
+					continue
 				}
 
 				var val reflect.Value
 				if unWrapType(field.Type).Kind() == reflect.Interface {
 					val = n.c.getAbcValue(unWrapType(field.Type), n.c.getNS(field))
-					if !n.isNil(val) {
-						values = append(values, val)
-						mt.Field(i).Set(val)
+					if n.isNil(val) {
+						return nil
 					}
+
+					values = append(values, val)
+					mt.Field(i).Set(val)
 				} else {
 					val = n.c.getValue(unWrapType(field.Type), n.c.getNS(field))
-					if !n.isNil(val) {
-						values = append(values, val)
-						mt.Field(i).Set(val)
+					if n.isNil(val) {
+						return nil
 					}
+
+					values = append(values, val)
+					mt.Field(i).Set(val)
 				}
 
 				sv = append(sv, sortValue{
@@ -140,6 +142,7 @@ func (n *node) call() (err error) {
 			for i := range sv {
 				input = append(input, sv[i].Value)
 			}
+
 			params = append(params, mt)
 		default:
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inType.Kind())

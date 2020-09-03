@@ -43,6 +43,15 @@ func init() {
 	xerror.Exit(dix.Dix(func(l *log.Logger) {
 		l.Print("You've been invoked")
 	}))
+
+	type ll struct {
+		L *log.Logger
+		H Hello
+	}
+	xerror.Exit(dix.Dix(func(l ll) {
+		l.L.Print("You've been invoked")
+		l.H.Hello()
+	}))
 }
 
 func main() {
