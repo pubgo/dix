@@ -38,6 +38,7 @@ func init() {
 		h.Hello()
 	}))
 	xerror.Exit(dix.Dix(func(cfg *Config) (*log.Logger, error) {
+		fmt.Println("cfg *Config")
 		return log.New(os.Stdout, cfg.Prefix, log.Llongfile), nil
 	}))
 	xerror.Exit(dix.Dix(func(l *log.Logger) {

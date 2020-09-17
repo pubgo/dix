@@ -218,41 +218,41 @@ func (x *dix) init(opts ...Option) error {
 	return nil
 }
 
-func (x *dix) dix(data ...interface{}) (err error) {
+func (x *dix) dix(params ...interface{}) (err error) {
 	defer xerror.RespErr(&err)
 
-	if len(data) == 0 {
+	if len(params) == 0 {
 		return xerror.New("the num of dix input parameters should not be zero")
 	}
 
 	var values = make(map[ns][]reflect.Type)
-	for i := range data {
-		dat := data[i]
-		if dat == nil {
+	for i := range params {
+		param := params[i]
+		if param == nil {
 			return xerror.New("provide is nil")
 		}
 
-		typ := reflect.TypeOf(dat)
+		typ := reflect.TypeOf(param)
 		if typ == nil {
 			return xerror.New("provide type is nil")
 		}
 
 		switch typ.Kind() {
 		case reflect.Ptr:
-			if err := x.dixPtr(values, dat); err != nil {
+			if err := x.dixPtr(values, param); err != nil {
 				return xerror.Wrap(err)
 			}
 		case reflect.Func:
-			err := x.dixFunc(dat)
+			err := x.dixFunc(param)
 			if err != nil {
 				return xerror.Wrap(err)
 			}
 		case reflect.Map:
-			if err := x.dixMap(values, dat); err != nil {
+			if err := x.dixMap(values, param); err != nil {
 				return xerror.Wrap(err)
 			}
 		case reflect.Struct:
-			if err := x.dixStruct(values, dat); err != nil {
+			if err := x.dixStruct(values, param); err != nil {
 				return xerror.Wrap(err)
 			}
 		default:

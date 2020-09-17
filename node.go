@@ -20,20 +20,20 @@ func newNode(c *dix, data interface{}) (nd *node, err error) {
 }
 
 func (n *node) returnedType() (map[ns]key, error) {
-	opts := make(map[ns]key)
+	retType := make(map[ns]key)
 	v := n.fn
 	for i := 0; i < v.Type().NumOut(); i++ {
 		out := v.Type().Out(i)
 		switch out.Kind() {
 		case reflect.Ptr:
-			opts[_default] = unWrapType(out)
+			retType[_default] = unWrapType(out)
 		case reflect.Struct:
 			for j := 0; j < v.NumField(); j++ {
 				feTye := v.Type().Field(j)
 				if feTye.Type.Kind() != reflect.Ptr {
 					return nil, xerror.New("the struct field should be Ptr type")
 				}
-				opts[n.c.getNS(feTye)] = unWrapType(feTye.Type)
+				retType[n.c.getNS(feTye)] = unWrapType(feTye.Type)
 			}
 		default:
 			if isError(out) {
@@ -42,7 +42,7 @@ func (n *node) returnedType() (map[ns]key, error) {
 			return nil, xerror.Fmt("provide type kind error, (kind %v)", out.Kind())
 		}
 	}
-	return opts, nil
+	return retType, nil
 }
 
 func (n *node) handleCall(params []reflect.Value) (err error) {
@@ -54,20 +54,20 @@ func (n *node) handleCall(params []reflect.Value) (err error) {
 	}
 
 	// the returned value should be error
-	if len(values) == 1 {
-		if !isError(values[len(values)-1].Type()) {
-			return xerror.New("the last returned value should be error type")
+	if len(values) > 0 {
+		vErr := values[len(values)-1]
+		if !isError(vErr.Type()) {
+			return xerror.Fmt("the last returned value should be error type, got(%v)", vErr.Type())
 		}
 
-		err, _ := values[0].Interface().(error)
-		return xerror.Wrap(err)
+		err, _ := vErr.Interface().(error)
+		xerror.PanicF(err, "func error, func: %s, params: %s",callerWithFunc(n.fn), params)
 	}
 
 	var vas []interface{}
 	for i := range values[:len(values)-1] {
 		vas = append(vas, values[i].Interface())
 	}
-
 	return xerror.Wrap(n.c.dix(vas...))
 }
 

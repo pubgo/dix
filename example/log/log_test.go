@@ -67,9 +67,10 @@ func initCfgFromJsonDebug(name string) xlog.XLog {
         "initialFields": null
 }`
 
-	xx, err := xlog_config.NewFromJson(
-		[]byte(cfg),
-	)
-	xerror.Exit(err)
-	return xx.Named(name)
+	zl, err := xlog_config.NewZapLoggerFromJson([]byte(cfg))
+	if err != nil {
+		xerror.Exit(err)
+	}
+
+	return xlog.New(zl.WithOptions(xlog.AddCaller(), xlog.AddCallerSkip(1))).Named("dix")
 }
