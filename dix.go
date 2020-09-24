@@ -3,11 +3,12 @@ package dix
 import (
 	"bytes"
 	"fmt"
-	"github.com/pubgo/xerror"
 	"math/rand"
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/pubgo/xerror"
 )
 
 const (

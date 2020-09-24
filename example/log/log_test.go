@@ -2,12 +2,13 @@ package log_test
 
 import (
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/pubgo/dix"
 	"github.com/pubgo/xerror"
 	"github.com/pubgo/xlog"
 	"github.com/pubgo/xlog/xlog_config"
-	"testing"
-	"time"
 )
 
 var log = xlog.GetDevLog()

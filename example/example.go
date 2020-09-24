@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/pubgo/dix"
-	"github.com/pubgo/xerror"
 	"log"
 	"os"
 	"time"
+
+	"github.com/pubgo/dix"
+	"github.com/pubgo/xerror"
 )
 
 type Hello interface {

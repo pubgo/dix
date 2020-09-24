@@ -1,9 +1,10 @@
 package dix
 
 import (
-	"github.com/pubgo/xerror"
 	"reflect"
 	"sort"
+
+	"github.com/pubgo/xerror"
 )
 
 type node struct {
@@ -61,7 +62,7 @@ func (n *node) handleCall(params []reflect.Value) (err error) {
 		}
 
 		err, _ := vErr.Interface().(error)
-		xerror.PanicF(err, "func error, func: %s, params: %s",callerWithFunc(n.fn), params)
+		xerror.PanicF(err, "func error, func: %s, params: %s", callerWithFunc(n.fn), params)
 	}
 
 	var vas []interface{}
