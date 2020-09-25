@@ -20,4 +20,5 @@ func TestStart(t *testing.T) {
 		xerror.Exit(Start())
 		xerror.Exit(Stop())
 	}
+	fmt.Println(Graph())
 }

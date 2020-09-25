@@ -289,53 +289,53 @@ func (x *dix) dix(params ...interface{}) (err error) {
 func (x *dix) graph() string {
 	b := &bytes.Buffer{}
 	fPrintln(b, "digraph G {")
-	fPrintln(b, "subgraph cluster_0 {")
-	fPrintln(b, "	label=nodes")
+	fPrintln(b, "\tsubgraph cluster_0 {")
+	fPrintln(b, "\t\tlabel=nodes")
 	for k, vs := range x.providers {
 		for k1, v1 := range vs {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
-				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, fn))
+				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
 				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
+					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
 				}
 			}
 		}
 	}
-	fPrintln(b, "}")
+	fPrintln(b, "\t}")
 
-	fPrintln(b, "subgraph cluster_1 {")
-	fPrintln(b, "	label=values")
+	fPrintln(b, "\tsubgraph cluster_1 {")
+	fPrintln(b, "\t\tlabel=values")
 	for k, v := range x.values {
 		for k1, v1 := range v {
-			fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1.String()))
+			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, v1.String()))
 		}
 	}
-	fPrintln(b, "}")
+	fPrintln(b, "\t}")
 
-	fPrintln(b, "subgraph cluster_2 {")
-	fPrintln(b, "	label=abc_nodes")
+	fPrintln(b, "\tsubgraph cluster_2 {")
+	fPrintln(b, "\t\tlabel=abc_nodes")
 	for k, vs := range x.abcProviders {
 		for k1, v1 := range vs {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
-				fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, fn))
+				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
 				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
+					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
 				}
 			}
 		}
 	}
-	fPrintln(b, "}")
+	fPrintln(b, "\t}")
 
-	fPrintln(b, "subgraph cluster_3 {")
-	fPrintln(b, "	label=abc_values")
+	fPrintln(b, "\tsubgraph cluster_3 {")
+	fPrintln(b, "\t\tlabel=abc_values")
 	for k, v := range x.abcValues {
 		for k1, v1 := range v {
-			fPrintln(b, fmt.Sprintf(`	"%s" -> %s -> "%s"`, k, k1, v1.String()))
+			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, v1.String()))
 		}
 	}
-	fPrintln(b, "}")
+	fPrintln(b, "\t}")
 	fPrintln(b, "}")
 
 	return b.String()
