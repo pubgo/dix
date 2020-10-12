@@ -47,7 +47,7 @@ func callerWithFunc(fn reflect.Value) string {
 		file = strings.Join(files[len(files)-2:], "/")
 	}
 
-	buf.WriteString(fmt.Sprintf("%d ", fn.Pointer()))
+	//buf.WriteString(fmt.Sprintf("%d ", fn.Pointer()))
 	buf.WriteString(file)
 	buf.WriteString(":")
 	buf.WriteString(strconv.Itoa(line))
