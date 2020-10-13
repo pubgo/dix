@@ -69,6 +69,11 @@ func (n *node) handleCall(params []reflect.Value) (err error) {
 	for i := range values[:len(values)-1] {
 		vas = append(vas, values[i].Interface())
 	}
+
+	if len(vas) == 0 {
+		return
+	}
+
 	return xerror.Wrap(n.c.dix(vas...))
 }
 
