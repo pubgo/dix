@@ -23,3 +23,17 @@ func TestStart(t *testing.T) {
 	}
 	fmt.Println(Graph())
 }
+
+func TestData(t *testing.T) {
+	type testData struct {
+		Model
+	}
+
+	xerror.Exit(Dix(func(*testData) {
+		fmt.Println(time.Now())
+	}))
+
+	for i := 0; i < 5; i++ {
+		xerror.Exit(Dix(testData{}))
+	}
+}

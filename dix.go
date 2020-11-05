@@ -224,21 +224,26 @@ func (x *dix) dix(params ...interface{}) (err error) {
 	defer xerror.RespErr(&err)
 
 	if len(params) == 0 {
-		return xerror.New("the num of dix input parameters should not be zero")
+		return xerror.New("[params] should not be zero")
 	}
 
 	var values = make(map[ns][]reflect.Type)
-	for i := range params {
-		param := params[i]
-		if param == nil {
-			return xerror.New("provide is nil")
+	for _, param := range params {
+		vp := reflect.ValueOf(param)
+		if !vp.IsValid() {
+			return xerror.New("[params] should not be invalid")
 		}
 
-		typ := reflect.TypeOf(param)
-		if typ == nil {
-			return xerror.New("provide type is nil")
+		if vp.IsZero() {
+			if param1, ok := param.(dixData); ok {
+				param = checkDixDataType(param1)
+				vp = reflect.ValueOf(param)
+			} else {
+				return xerror.New("[params] should not be zero and nil")
+			}
 		}
 
+		typ := vp.Type()
 		switch typ.Kind() {
 		case reflect.Ptr:
 			if err := x.dixPtr(values, param); err != nil {

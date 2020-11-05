@@ -1,33 +1,42 @@
 package dix
 
-import "time"
+import (
+	"reflect"
+	"sync/atomic"
+	"time"
+	"unsafe"
+)
 
-type startCtx struct {
-	data time.Time
+type Model struct {
+	data unsafe.Pointer
 }
 
-type beforeStartCtx struct {
-	data time.Time
+func (t Model) Init() () {
+	var data = time.Now()
+	atomic.StorePointer(&t.data, unsafe.Pointer(&data))
 }
 
-type afterStartCtx struct {
-	data time.Time
+type dixData interface {
+	Init()
 }
 
-type stopCtx struct {
-	data time.Time
+// checkDixDataType
+// 检查是否实现dixData
+func checkDixDataType(data dixData) interface{} {
+	dt := reflect.New(unWrapType(reflect.TypeOf(data)))
+	dt.MethodByName("Init").Call([]reflect.Value{})
+	return dt.Interface()
 }
 
-type beforeStopCtx struct {
-	data time.Time
-}
-
-type afterStopCtx struct {
-	data time.Time
-}
+type startCtx struct{ Model }
+type beforeStartCtx struct{ Model }
+type afterStartCtx struct{ Model }
+type stopCtx struct{ Model }
+type beforeStopCtx struct{ Model }
+type afterStopCtx struct{ Model }
 
 func (x *dix) start() error {
-	return x.dix(&startCtx{time.Now()})
+	return x.dix(startCtx{})
 }
 
 func (x *dix) withStart(fn func()) error {
@@ -35,7 +44,7 @@ func (x *dix) withStart(fn func()) error {
 }
 
 func (x *dix) beforeStart() error {
-	return x.dix(&beforeStartCtx{time.Now()})
+	return x.dix(beforeStartCtx{})
 }
 
 func (x *dix) withBeforeStart(fn func()) error {
@@ -43,7 +52,7 @@ func (x *dix) withBeforeStart(fn func()) error {
 }
 
 func (x *dix) afterStart() error {
-	return x.dix(&afterStartCtx{time.Now()})
+	return x.dix(afterStartCtx{})
 }
 
 func (x *dix) withAfterStart(fn func()) error {
@@ -51,7 +60,7 @@ func (x *dix) withAfterStart(fn func()) error {
 }
 
 func (x *dix) stop() error {
-	return x.dix(&stopCtx{time.Now()})
+	return x.dix(stopCtx{})
 }
 
 func (x *dix) withStop(fn func()) error {
@@ -59,7 +68,7 @@ func (x *dix) withStop(fn func()) error {
 }
 
 func (x *dix) beforeStop() error {
-	return x.dix(&beforeStopCtx{time.Now()})
+	return x.dix(beforeStopCtx{})
 }
 
 func (x *dix) withBeforeStop(fn func()) error {
@@ -67,7 +76,7 @@ func (x *dix) withBeforeStop(fn func()) error {
 }
 
 func (x *dix) afterStop() error {
-	return x.dix(&afterStopCtx{time.Now()})
+	return x.dix(afterStopCtx{})
 }
 
 func (x *dix) withAfterStop(fn func()) error {
