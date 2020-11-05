@@ -3,18 +3,19 @@ package dix
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/pubgo/xerror"
 )
 
 func TestStart(t *testing.T) {
-	Go(func(ctx *StartCtx) {
-		fmt.Println("start", ctx.data)
-	})
+	xerror.Exit(WithStart(func() {
+		fmt.Println("start", time.Now())
+	}))
 
-	Go(func(ctx *StopCtx) {
-		fmt.Println("stop", ctx.data)
-	})
+	xerror.Exit(WithStop(func() {
+		fmt.Println("stop", time.Now())
+	}))
 
 	for i := 0; i < 5; i++ {
 		xerror.Exit(Start())
