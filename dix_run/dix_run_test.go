@@ -1,10 +1,11 @@
-package dix
+package dix_run
 
 import (
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/pubgo/dix"
 	"github.com/pubgo/xerror"
 )
 
@@ -21,19 +22,19 @@ func TestStart(t *testing.T) {
 		xerror.Exit(Start())
 		xerror.Exit(Stop())
 	}
-	fmt.Println(Graph())
+	fmt.Println(dix.Graph())
 }
 
 func TestData(t *testing.T) {
 	type testData struct {
-		Model
+		dix.Model
 	}
 
-	xerror.Exit(Dix(func(*testData) {
+	xerror.Exit(dix.Dix(func(*testData) {
 		fmt.Println(time.Now())
 	}))
 
 	for i := 0; i < 5; i++ {
-		xerror.Exit(Dix(testData{}))
+		xerror.Exit(dix.Dix(testData{}))
 	}
 }

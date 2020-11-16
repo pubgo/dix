@@ -6,7 +6,9 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
+	"unsafe"
 
 	"github.com/pubgo/xerror"
 )
@@ -37,6 +39,27 @@ type dix struct {
 	abcProviders map[key]map[ns][]*node
 	values       map[key]map[ns]reflect.Value
 	abcValues    map[key]map[ns]key
+}
+
+type Model struct {
+	data unsafe.Pointer
+}
+
+func (t Model) Init() {
+	var data = time.Now()
+	atomic.StorePointer(&t.data, unsafe.Pointer(&data))
+}
+
+type dixData interface {
+	Init()
+}
+
+// checkDixDataType
+// 检查是否实现dixData
+func checkDixDataType(data dixData) interface{} {
+	dt := reflect.New(unWrapType(reflect.TypeOf(data)))
+	dt.MethodByName("Init").Call([]reflect.Value{})
+	return dt.Interface()
 }
 
 func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
@@ -402,18 +425,6 @@ func New(opts ...Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data ...interface{}) error                      { return x.dix(data...) }
-func (x *dix) Init(opts ...Option) error                          { return x.init(opts...) }
-func (x *dix) Graph() string                                      { return x.graph() }
-func (x *dix) Start() error                                       { return x.start() }
-func (x *dix) WithStart(fn func(ctx *StartCtx)) error             { return x.withStart(fn) }
-func (x *dix) BeforeStart() error                                 { return x.beforeStart() }
-func (x *dix) WithBeforeStart(fn func(ctx *BeforeStartCtx)) error { return x.withBeforeStart(fn) }
-func (x *dix) AfterStart() error                                  { return x.afterStart() }
-func (x *dix) WithAfterStart(fn func(ctx *AfterStartCtx)) error   { return x.withAfterStart(fn) }
-func (x *dix) Stop() error                                        { return x.stop() }
-func (x *dix) WithStop(fn func(ctx *StopCtx)) error               { return x.withStop(fn) }
-func (x *dix) BeforeStop() error                                  { return x.beforeStop() }
-func (x *dix) WithBeforeStop(fn func(ctx *BeforeStopCtx)) error   { return x.withBeforeStop(fn) }
-func (x *dix) AfterStop() error                                   { return x.afterStop() }
-func (x *dix) WithAfterStop(fn func(ctx *AfterStopCtx)) error     { return x.withAfterStop(fn) }
+func (x *dix) Dix(data ...interface{}) error { return x.dix(data...) }
+func (x *dix) Init(opts ...Option) error     { return x.init(opts...) }
+func (x *dix) Graph() string                 { return x.graph() }
