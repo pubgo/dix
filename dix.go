@@ -402,18 +402,18 @@ func New(opts ...Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data ...interface{}) error   { return x.dix(data...) }
-func (x *dix) Init(opts ...Option) error       { return x.init(opts...) }
-func (x *dix) Graph() string                   { return x.graph() }
-func (x *dix) Start() error                    { return x.start() }
-func (x *dix) WithStart(fn func()) error       { return x.withStart(fn) }
-func (x *dix) BeforeStart() error              { return x.beforeStart() }
-func (x *dix) WithBeforeStart(fn func()) error { return x.withBeforeStart(fn) }
-func (x *dix) AfterStart() error               { return x.afterStart() }
-func (x *dix) WithAfterStart(fn func()) error  { return x.withAfterStart(fn) }
-func (x *dix) Stop() error                     { return x.stop() }
-func (x *dix) WithStop(fn func()) error        { return x.withStop(fn) }
-func (x *dix) BeforeStop() error               { return x.beforeStop() }
-func (x *dix) WithBeforeStop(fn func()) error  { return x.withBeforeStop(fn) }
-func (x *dix) AfterStop() error                { return x.afterStop() }
-func (x *dix) WithAfterStop(fn func()) error   { return x.withAfterStop(fn) }
+func (x *dix) Dix(data ...interface{}) error                      { return x.dix(data...) }
+func (x *dix) Init(opts ...Option) error                          { return x.init(opts...) }
+func (x *dix) Graph() string                                      { return x.graph() }
+func (x *dix) Start() error                                       { return x.start() }
+func (x *dix) WithStart(fn func(ctx *StartCtx)) error             { return x.withStart(fn) }
+func (x *dix) BeforeStart() error                                 { return x.beforeStart() }
+func (x *dix) WithBeforeStart(fn func(ctx *BeforeStartCtx)) error { return x.withBeforeStart(fn) }
+func (x *dix) AfterStart() error                                  { return x.afterStart() }
+func (x *dix) WithAfterStart(fn func(ctx *AfterStartCtx)) error   { return x.withAfterStart(fn) }
+func (x *dix) Stop() error                                        { return x.stop() }
+func (x *dix) WithStop(fn func(ctx *StopCtx)) error               { return x.withStop(fn) }
+func (x *dix) BeforeStop() error                                  { return x.beforeStop() }
+func (x *dix) WithBeforeStop(fn func(ctx *BeforeStopCtx)) error   { return x.withBeforeStop(fn) }
+func (x *dix) AfterStop() error                                   { return x.afterStop() }
+func (x *dix) WithAfterStop(fn func(ctx *AfterStopCtx)) error     { return x.withAfterStop(fn) }

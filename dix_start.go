@@ -11,7 +11,7 @@ type Model struct {
 	data unsafe.Pointer
 }
 
-func (t Model) Init() () {
+func (t Model) Init() {
 	var data = time.Now()
 	atomic.StorePointer(&t.data, unsafe.Pointer(&data))
 }
@@ -28,57 +28,57 @@ func checkDixDataType(data dixData) interface{} {
 	return dt.Interface()
 }
 
-type startCtx struct{ Model }
-type beforeStartCtx struct{ Model }
-type afterStartCtx struct{ Model }
-type stopCtx struct{ Model }
-type beforeStopCtx struct{ Model }
-type afterStopCtx struct{ Model }
+type StartCtx struct{ Model }
+type BeforeStartCtx struct{ Model }
+type AfterStartCtx struct{ Model }
+type StopCtx struct{ Model }
+type BeforeStopCtx struct{ Model }
+type AfterStopCtx struct{ Model }
 
 func (x *dix) start() error {
-	return x.dix(startCtx{})
+	return x.dix(StartCtx{})
 }
 
-func (x *dix) withStart(fn func()) error {
-	return x.dix(func(ctx *startCtx) { fn() })
+func (x *dix) withStart(fn func(ctx *StartCtx)) error {
+	return x.dix(fn)
 }
 
 func (x *dix) beforeStart() error {
-	return x.dix(beforeStartCtx{})
+	return x.dix(BeforeStartCtx{})
 }
 
-func (x *dix) withBeforeStart(fn func()) error {
-	return x.dix(func(ctx *beforeStartCtx) { fn() })
+func (x *dix) withBeforeStart(fn func(ctx *BeforeStartCtx)) error {
+	return x.dix(fn)
 }
 
 func (x *dix) afterStart() error {
-	return x.dix(afterStartCtx{})
+	return x.dix(AfterStartCtx{})
 }
 
-func (x *dix) withAfterStart(fn func()) error {
-	return x.dix(func(ctx *afterStartCtx) { fn() })
+func (x *dix) withAfterStart(fn func(ctx *AfterStartCtx)) error {
+	return x.dix(fn)
 }
 
 func (x *dix) stop() error {
-	return x.dix(stopCtx{})
+	return x.dix(StopCtx{})
 }
 
-func (x *dix) withStop(fn func()) error {
-	return x.dix(func(ctx *stopCtx) { fn() })
+func (x *dix) withStop(fn func(ctx *StopCtx)) error {
+	return x.dix(fn)
 }
 
 func (x *dix) beforeStop() error {
-	return x.dix(beforeStopCtx{})
+	return x.dix(BeforeStopCtx{})
 }
 
-func (x *dix) withBeforeStop(fn func()) error {
-	return x.dix(func(ctx *beforeStopCtx) { fn() })
+func (x *dix) withBeforeStop(fn func(ctx *BeforeStopCtx)) error {
+	return x.dix(fn)
 }
 
 func (x *dix) afterStop() error {
-	return x.dix(afterStopCtx{})
+	return x.dix(AfterStopCtx{})
 }
 
-func (x *dix) withAfterStop(fn func()) error {
-	return x.dix(func(ctx *afterStopCtx) { fn() })
+func (x *dix) withAfterStop(fn func(ctx *AfterStopCtx)) error {
+	return x.dix(fn)
 }

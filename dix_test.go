@@ -9,11 +9,11 @@ import (
 )
 
 func TestStart(t *testing.T) {
-	xerror.Exit(WithStart(func() {
+	xerror.Exit(WithStart(func(ctx *StartCtx) {
 		fmt.Println("start", time.Now())
 	}))
 
-	xerror.Exit(WithStop(func() {
+	xerror.Exit(WithStop(func(ctx *StopCtx) {
 		fmt.Println("stop", time.Now())
 	}))
 
