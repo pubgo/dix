@@ -17,7 +17,7 @@ func AfterStart() error                                  { return dix.Dix(AfterS
 func WithAfterStart(fn func(ctx *AfterStartCtx)) error   { return dix.Dix(fn) }
 func Stop() error                                        { return dix.Dix(StopCtx{}) }
 func WithStop(fn func(ctx *StopCtx)) error               { return dix.Dix(fn) }
-func BeforeStop() error                                  { return dix.Dix(BeforeStartCtx{}) }
+func BeforeStop() error                                  { return dix.Dix(BeforeStopCtx{}) }
 func WithBeforeStop(fn func(ctx *BeforeStopCtx)) error   { return dix.Dix(fn) }
 func AfterStop() error                                   { return dix.Dix(AfterStopCtx{}) }
 func WithAfterStop(fn func(ctx *AfterStopCtx)) error     { return dix.Dix(fn) }
