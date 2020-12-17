@@ -63,6 +63,7 @@ func checkDixDataType(data dixData) interface{} {
 }
 
 func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
+	defer xerror.RespRaise("caller: %s", callerWithFunc(fn))
 	return fn.Call(args)
 }
 
