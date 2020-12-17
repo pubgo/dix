@@ -1,4 +1,4 @@
-package dix_run
+package dix_trace
 
 import (
 	"expvar"
@@ -14,7 +14,7 @@ func Trace() error {
 	return dix.Dix(TraceCtx{})
 }
 
-func WithTrace(fn func(_ *TraceCtx)) {
+func With(fn func(_ *TraceCtx)) {
 	if dix_envs.IsTrace() {
 		return
 	}
@@ -23,5 +23,5 @@ func WithTrace(fn func(_ *TraceCtx)) {
 }
 
 func init() {
-	WithTrace(func(_ *TraceCtx) { expvar.NewString("dix").Set(dix.Graph()) })
+	With(func(_ *TraceCtx) { expvar.NewString("dix").Set(dix.Graph()) })
 }
