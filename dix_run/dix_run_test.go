@@ -1,6 +1,7 @@
 package dix_run
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -23,6 +24,9 @@ func TestStart(t *testing.T) {
 		xerror.Exit(Stop())
 	}
 	fmt.Println(dix.Graph())
+
+	dt,_:=json.MarshalIndent(dix.Json()," ","")
+	fmt.Println(string(dt))
 }
 
 func TestData(t *testing.T) {

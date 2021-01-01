@@ -370,6 +370,55 @@ func (x *dix) graph() string {
 	return b.String()
 }
 
+func (x *dix) json() map[string]interface{} {
+	var nodes []string
+	var values []string
+	var abcNodes []string
+	var abcValues []string
+	for k, vs := range x.providers {
+		for k1, v1 := range vs {
+			for i := range v1 {
+				fn := callerWithFunc(v1[i].fn)
+				nodes = append(nodes, fmt.Sprintf(`%s -- %s -- %s`, k, k1, fn))
+				for _, v2 := range v1[i].outputType {
+					nodes = append(nodes, fmt.Sprintf(`%s -- %s -- %s -- %s`, k, k1, fn, v2))
+				}
+			}
+		}
+	}
+
+	for k, v := range x.values {
+		for k1, v1 := range v {
+			values = append(values, fmt.Sprintf(`%s -- %s -- %s`, k, k1, v1.String()))
+		}
+	}
+
+	for k, vs := range x.abcProviders {
+		for k1, v1 := range vs {
+			for i := range v1 {
+				fn := callerWithFunc(v1[i].fn)
+				abcNodes = append(abcNodes, fmt.Sprintf(`%s -- %s -- %s`, k, k1, fn))
+				for _, v2 := range v1[i].outputType {
+					abcNodes = append(abcNodes, fmt.Sprintf(`%s -- %s -- %s -- %s`, k, k1, fn, v2))
+				}
+			}
+		}
+	}
+
+	for k, v := range x.abcValues {
+		for k1, v1 := range v {
+			abcValues = append(abcValues, fmt.Sprintf(`%s -- %s -- %s`, k, k1, v1.String()))
+		}
+	}
+
+	return map[string]interface{}{
+		"nodes":      nodes,
+		"values":     values,
+		"abc_Nodes":  abcNodes,
+		"abc_Values": abcValues,
+	}
+}
+
 func (x *dix) setValue(k key, name ns, v value) {
 	if x.values[k] == nil {
 		x.values[k] = map[ns]value{name: v}

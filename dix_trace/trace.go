@@ -8,24 +8,24 @@ import (
 	"github.com/pubgo/xerror"
 )
 
-type TraceCtx struct{ dix.Model }
+type Ctx struct{ dix.Model }
 type Var = expvar.Var
 
-func (t TraceCtx) Publish(name string, v expvar.Var)         { expvar.Publish(name, v) }
-func (t TraceCtx) String(name string, data string)           { expvar.NewString(name).Set(data) }
-func (t TraceCtx) Func(name string, data func() interface{}) { expvar.Publish(name, expvar.Func(data)) }
-func (t TraceCtx) Float(name string, data float64)           { expvar.NewFloat(name).Set(data) }
-func (t TraceCtx) Int(name string, data int64)               { expvar.NewInt(name).Set(data) }
+func (t Ctx) Publish(name string, v expvar.Var)         { expvar.Publish(name, v) }
+func (t Ctx) String(name string, data string)           { expvar.NewString(name).Set(data) }
+func (t Ctx) Func(name string, data func() interface{}) { expvar.Publish(name, expvar.Func(data)) }
+func (t Ctx) Float(name string, data float64)           { expvar.NewFloat(name).Set(data) }
+func (t Ctx) Int(name string, data int64)               { expvar.NewInt(name).Set(data) }
 
-func Trace() error {
-	if !dix_envs.IsTrace() {
+func Trigger() error {
+	if !dix_envs.Enabled() {
 		return nil
 	}
 
-	return xerror.Wrap(dix.Dix(TraceCtx{}))
+	return xerror.Wrap(dix.Dix(Ctx{}))
 }
-func With(fn func(ctx *TraceCtx)) { xerror.Next().Panic(dix.Dix(fn)) }
+func With(fn func(ctx *Ctx)) { xerror.Next().Panic(dix.Dix(fn)) }
 
 func init() {
-	With(func(ctx *TraceCtx) { ctx.String("dix", dix.Graph()) })
+	With(func(ctx *Ctx) { ctx.String("dix", dix.Graph()) })
 }

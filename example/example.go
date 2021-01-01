@@ -32,9 +32,9 @@ func (Config) Hello() {
 }
 
 func init() {
-	dix.Go(func(h *testHello) {
+	xerror.Panic(dix.Dix(func(h *testHello) {
 		fmt.Println("h *testHello")
-	})
+	}))
 
 	xerror.Exit(dix.Dix(func(h Hello) {
 		h.Hello()
@@ -64,7 +64,7 @@ func main() {
 	for {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
-		dix.Go(&cfg)
+		xerror.Panic(dix.Dix(&cfg))
 
 		fmt.Println(dix.Graph())
 		fmt.Print("==================================================================================\n")
