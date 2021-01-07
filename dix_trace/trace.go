@@ -4,7 +4,6 @@ import (
 	"expvar"
 
 	"github.com/pubgo/dix"
-	"github.com/pubgo/dix/dix_envs"
 	"github.com/pubgo/xerror"
 )
 
@@ -17,14 +16,7 @@ func (t Ctx) Func(name string, data func() interface{}) { expvar.Publish(name, e
 func (t Ctx) Float(name string, data float64)           { expvar.NewFloat(name).Set(data) }
 func (t Ctx) Int(name string, data int64)               { expvar.NewInt(name).Set(data) }
 
-func Trigger() error {
-	if !dix_envs.Enabled() {
-		return nil
-	}
-
-	return xerror.Wrap(dix.Dix(Ctx{}))
-}
-
+func Trigger() error         { return xerror.Wrap(dix.Dix(Ctx{})) }
 func With(fn func(ctx *Ctx)) { xerror.Next().Panic(dix.Dix(fn)) }
 
 func init() {

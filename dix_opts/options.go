@@ -1,16 +1,17 @@
-package dix
+package dix_opts
 
 import "math/rand"
+
+type Option func(c *Options)
+type Options struct {
+	NilValueAllowed bool
+	Strict          bool
+	Rand            *rand.Rand
+}
 
 func WithRand(r *rand.Rand) Option {
 	return func(c *Options) {
 		c.Rand = r
-	}
-}
-
-func WithInvoker(invoker invokerFn) Option {
-	return func(c *Options) {
-		c.InvokerFn = invoker
 	}
 }
 

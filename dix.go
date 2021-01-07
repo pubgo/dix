@@ -10,6 +10,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/pubgo/dix/dix_opts"
 	"github.com/pubgo/xerror"
 )
 
@@ -19,22 +20,13 @@ const (
 )
 
 type (
-	ns        = string
-	key       = reflect.Type
-	value     = reflect.Value
-	invokerFn = func(fn reflect.Value, args []reflect.Value) (results []reflect.Value)
+	ns    = string
+	key   = reflect.Type
+	value = reflect.Value
 )
 
-type Option func(c *Options)
-type Options struct {
-	Rand            *rand.Rand
-	InvokerFn       invokerFn
-	NilValueAllowed bool
-	Strict          bool
-}
-
 type dix struct {
-	opts         Options
+	opts         dix_opts.Options
 	providers    map[key]map[ns][]*node
 	abcProviders map[key]map[ns][]*node
 	values       map[key]map[ns]reflect.Value
@@ -45,20 +37,20 @@ type Model struct {
 	data unsafe.Pointer
 }
 
-func (t Model) Init() {
+func (t Model) init() {
 	var data = time.Now()
 	atomic.StorePointer(&t.data, unsafe.Pointer(&data))
 }
 
 type dixData interface {
-	Init()
+	init()
 }
 
 // checkDixDataType
 // 检查是否实现dixData
 func checkDixDataType(data dixData) interface{} {
 	dt := reflect.New(unWrapType(reflect.TypeOf(data)))
-	dt.MethodByName("Init").Call([]reflect.Value{})
+	dt.MethodByName("init").Call(nil)
 	return dt.Interface()
 }
 
@@ -233,7 +225,7 @@ func (x *dix) dixStruct(values map[ns][]reflect.Type, data interface{}) error {
 	return nil
 }
 
-func (x *dix) init(opts ...Option) error {
+func (x *dix) init(opts ...dix_opts.Option) error {
 	var dixOpt = x.opts
 	for _, opt := range opts {
 		opt(&dixOpt)
@@ -458,15 +450,14 @@ func (x *dix) setProvider(k key, name ns, nd *node) {
 	}
 }
 
-func New(opts ...Option) *dix {
+func newDix(opts ...dix_opts.Option) *dix {
 	c := &dix{
 		providers:    make(map[key]map[ns][]*node),
 		abcProviders: make(map[key]map[ns][]*node),
 		values:       make(map[key]map[ns]value),
 		abcValues:    make(map[key]map[ns]key),
-		opts: Options{
+		opts: dix_opts.Options{
 			Rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
-			InvokerFn:       defaultInvoker,
 			NilValueAllowed: false,
 		},
 	}
@@ -475,6 +466,7 @@ func New(opts ...Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data ...interface{}) error { return x.dix(data...) }
-func (x *dix) Init(opts ...Option) error     { return x.init(opts...) }
-func (x *dix) Graph() string                 { return x.graph() }
+func (x *dix) Dix(data ...interface{}) error      { return x.dix(data...) }
+func (x *dix) Init(opts ...dix_opts.Option) error { return x.init(opts...) }
+func (x *dix) Graph() string                      { return x.graph() }
+func (x *dix) Json() map[string]interface{}       { return x.json() }
