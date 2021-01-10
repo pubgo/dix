@@ -25,7 +25,7 @@ func TestStart(t *testing.T) {
 	}
 	fmt.Println(dix.Graph())
 
-	dt,_:=json.MarshalIndent(dix.Json()," ","")
+	dt, _ := json.MarshalIndent(dix.Json(), " ", "")
 	fmt.Println(string(dt))
 }
 

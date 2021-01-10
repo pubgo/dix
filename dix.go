@@ -6,9 +6,7 @@ import (
 	"math/rand"
 	"reflect"
 	"strings"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/pubgo/dix/dix_opts"
 	"github.com/pubgo/xerror"
@@ -34,13 +32,10 @@ type dix struct {
 }
 
 type Model struct {
-	data unsafe.Pointer
+	Data int64
 }
 
-func (t Model) init() {
-	var data = time.Now()
-	atomic.StorePointer(&t.data, unsafe.Pointer(&data))
-}
+func (t Model) init() {}
 
 type dixData interface {
 	init()
@@ -50,7 +45,7 @@ type dixData interface {
 // 检查是否实现dixData
 func checkDixDataType(data dixData) interface{} {
 	dt := reflect.New(unWrapType(reflect.TypeOf(data)))
-	dt.MethodByName("init").Call(nil)
+	dt.Elem().FieldByName("Data").Set(reflect.ValueOf(time.Now().UnixNano()))
 	return dt.Interface()
 }
 
