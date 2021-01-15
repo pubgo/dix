@@ -15,7 +15,7 @@ func isError(t reflect.Type) bool {
 	return t.Implements(_errType)
 }
 
-func unWrapType(tye reflect.Type) reflect.Type {
+func indirectType(tye reflect.Type) reflect.Type {
 	for isElem(tye) {
 		tye = tye.Elem()
 	}

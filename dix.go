@@ -44,7 +44,7 @@ type dixData interface {
 // checkDixDataType
 // 检查是否实现dixData
 func checkDixDataType(data dixData) interface{} {
-	dt := reflect.New(unWrapType(reflect.TypeOf(data)))
+	dt := reflect.New(indirectType(reflect.TypeOf(data)))
 	dt.Elem().FieldByName("Data").Set(reflect.ValueOf(time.Now().UnixNano()))
 	return dt.Interface()
 }
@@ -98,7 +98,7 @@ func (x *dix) dixPtr(values map[ns][]reflect.Type, data interface{}) error {
 		return xerror.New("data is nil")
 	}
 
-	tye := unWrapType(val.Type())
+	tye := indirectType(val.Type())
 	if ttk := x.checkAbcImplement(tye); ttk != nil {
 		x.setAbcValue(ttk, _default, tye)
 	}
@@ -133,19 +133,19 @@ func (x *dix) dixFunc(data interface{}) (err error) {
 		case reflect.Interface:
 			nd, err := newNode(x, data)
 			xerror.Panic(err)
-			x.setAbcProvider(unWrapType(inTye), _default, nd)
+			x.setAbcProvider(indirectType(inTye), _default, nd)
 		case reflect.Ptr:
 			nd, err := newNode(x, data)
 			xerror.Panic(err)
-			x.setProvider(unWrapType(inTye), _default, nd)
+			x.setProvider(indirectType(inTye), _default, nd)
 		case reflect.Struct:
 			for i := 0; i < inTye.NumField(); i++ {
 				feTye := inTye.Field(i)
 
-				if unWrapType(feTye.Type).Kind() == reflect.Interface {
+				if indirectType(feTye.Type).Kind() == reflect.Interface {
 					nd, err := newNode(x, data)
 					xerror.Panic(err)
-					x.setAbcProvider(unWrapType(feTye.Type), x.getNS(feTye), nd)
+					x.setAbcProvider(indirectType(feTye.Type), x.getNS(feTye), nd)
 					return nil
 				}
 
@@ -155,7 +155,7 @@ func (x *dix) dixFunc(data interface{}) (err error) {
 
 				nd, err := newNode(x, data)
 				xerror.Panic(err)
-				x.setProvider(unWrapType(feTye.Type), x.getNS(feTye), nd)
+				x.setProvider(indirectType(feTye.Type), x.getNS(feTye), nd)
 			}
 		default:
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
@@ -186,11 +186,11 @@ func (x *dix) dixMap(values map[ns][]reflect.Type, data interface{}) error {
 			return xerror.Fmt("map value is nil, key:%s", k)
 		}
 
-		if ttk := x.checkAbcImplement(unWrapType(iter.Value().Type())); ttk != nil {
-			x.setAbcValue(ttk, k, unWrapType(iter.Value().Type()))
+		if ttk := x.checkAbcImplement(indirectType(iter.Value().Type())); ttk != nil {
+			x.setAbcValue(ttk, k, indirectType(iter.Value().Type()))
 		}
 
-		x.setValue(unWrapType(iter.Value().Type()), k, iter.Value())
+		x.setValue(indirectType(iter.Value().Type()), k, iter.Value())
 		values[k] = append(values[k], iter.Value().Type())
 	}
 
@@ -210,10 +210,10 @@ func (x *dix) dixStruct(values map[ns][]reflect.Type, data interface{}) error {
 			return xerror.New("struct field data is nil")
 		}
 
-		if ttk := x.checkAbcImplement(unWrapType(tye.Field(i).Type)); ttk != nil {
-			x.setAbcValue(ttk, x.getNS(tye.Field(i)), unWrapType(tye.Field(i).Type))
+		if ttk := x.checkAbcImplement(indirectType(tye.Field(i).Type)); ttk != nil {
+			x.setAbcValue(ttk, x.getNS(tye.Field(i)), indirectType(tye.Field(i).Type))
 		}
-		x.setValue(unWrapType(tye.Field(i).Type), x.getNS(tye.Field(i)), val.Field(i))
+		x.setValue(indirectType(tye.Field(i).Type), x.getNS(tye.Field(i)), val.Field(i))
 		values[x.getNS(tye.Field(i))] = append(values[x.getNS(tye.Field(i))], val.Field(i).Type())
 	}
 
@@ -280,14 +280,14 @@ func (x *dix) dix(params ...interface{}) (err error) {
 
 	for name, vas := range values {
 		for i := range vas {
-			for _, n := range x.providers[unWrapType(vas[i])][name] {
+			for _, n := range x.providers[indirectType(vas[i])][name] {
 				if err := n.call(); err != nil {
 					return xerror.Wrap(err)
 				}
 			}
 			// interface
 			for t, mapNodes := range x.abcProviders {
-				if !reflect.New(unWrapType(vas[i])).Type().Implements(t) {
+				if !reflect.New(indirectType(vas[i])).Type().Implements(t) {
 					continue
 				}
 				for _, n := range mapNodes[name] {

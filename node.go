@@ -27,14 +27,14 @@ func (n *node) returnedType() (map[ns]key, error) {
 		out := v.Type().Out(i)
 		switch out.Kind() {
 		case reflect.Ptr:
-			retType[_default] = unWrapType(out)
+			retType[_default] = indirectType(out)
 		case reflect.Struct:
 			for j := 0; j < v.NumField(); j++ {
 				feTye := v.Type().Field(j)
 				if feTye.Type.Kind() != reflect.Ptr {
 					return nil, xerror.New("the struct field should be Ptr type")
 				}
-				retType[n.c.getNS(feTye)] = unWrapType(feTye.Type)
+				retType[n.c.getNS(feTye)] = indirectType(feTye.Type)
 			}
 		default:
 			if isError(out) {
@@ -96,13 +96,13 @@ func (n *node) call() (err error) {
 		inType := n.fn.Type().In(i)
 		switch inType.Kind() {
 		case reflect.Interface:
-			val := n.c.getAbcValue(unWrapType(inType), _default)
+			val := n.c.getAbcValue(indirectType(inType), _default)
 			if !n.isNil(val) {
 				params = append(params, val)
 				input = append(input, val)
 			}
 		case reflect.Ptr:
-			val := n.c.getValue(unWrapType(inType), _default)
+			val := n.c.getValue(indirectType(inType), _default)
 			if !n.isNil(val) {
 				params = append(params, val)
 				input = append(input, val)
@@ -117,9 +117,11 @@ func (n *node) call() (err error) {
 					continue
 				}
 
+				// 结构体里面所有的属性值全部有值, 且不为nil
 				var val reflect.Value
-				if unWrapType(field.Type).Kind() == reflect.Interface {
-					val = n.c.getAbcValue(unWrapType(field.Type), n.c.getNS(field))
+				if indirectType(field.Type).Kind() == reflect.Interface {
+					// 如果value为nil, 就不触发初始化
+					val = n.c.getAbcValue(indirectType(field.Type), n.c.getNS(field))
 					if n.isNil(val) {
 						return nil
 					}
@@ -127,7 +129,8 @@ func (n *node) call() (err error) {
 					values = append(values, val)
 					mt.Field(i).Set(val)
 				} else {
-					val = n.c.getValue(unWrapType(field.Type), n.c.getNS(field))
+					// 如果value为nil, 就不触发初始化
+					val = n.c.getValue(indirectType(field.Type), n.c.getNS(field))
 					if n.isNil(val) {
 						return nil
 					}
@@ -136,15 +139,10 @@ func (n *node) call() (err error) {
 					mt.Field(i).Set(val)
 				}
 
-				sv = append(sv, sortValue{
-					Key:   n.c.getNS(field),
-					Value: val,
-				})
+				sv = append(sv, sortValue{Key: n.c.getNS(field), Value: val})
 			}
 
-			sort.Slice(sv, func(i, j int) bool {
-				return sv[i].Key > sv[j].Key
-			})
+			sort.Slice(sv, func(i, j int) bool { return sv[i].Key > sv[j].Key })
 			for i := range sv {
 				input = append(input, sv[i].Value)
 			}
