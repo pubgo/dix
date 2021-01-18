@@ -423,9 +423,17 @@ func (x *dix) setAbcValue(k key, name ns, v key) {
 }
 
 func (x *dix) getNS(field reflect.StructField) string {
-	if tag := strings.TrimSpace(field.Tag.Get(_tagName)); tag != "" {
-		return tag
+	val, ok := field.Tag.Lookup(_tagName)
+	val = strings.TrimSpace(val)
+
+	if ok {
+		if val == "" {
+			return "default"
+		}
+
+		return val
 	}
+
 	return _default
 }
 
