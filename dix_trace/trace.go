@@ -17,7 +17,7 @@ func (t Ctx) Float(name string, data float64)           { expvar.NewFloat(name).
 func (t Ctx) Int(name string, data int64)               { expvar.NewInt(name).Set(data) }
 
 func Trigger() error         { return xerror.Wrap(dix.Dix(Ctx{})) }
-func With(fn func(ctx *Ctx)) { xerror.Next().Panic(dix.Dix(fn)) }
+func With(fn func(ctx *Ctx)) { xerror.Panic(dix.Dix(fn)) }
 
 func init() {
 	With(func(ctx *Ctx) { ctx.Func("dix", func() interface{} { return dix.Json() }) })

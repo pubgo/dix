@@ -1,2 +1,4 @@
 github.com/pubgo/xerror v0.3.10 h1:ezU/xNXtKNTlUQbAYiV4ZUQZmdeUny2PR6VDofrwj/4=
 github.com/pubgo/xerror v0.3.10/go.mod h1:mH9VLp7gamZt025tetPFAiKwY2ggNRp6/OV8PGAvnp4=
+github.com/pubgo/xerror v0.3.23 h1:uuV1Egqg3H/FRz/9yw7m2fJbkWgczbnumHXES6aNzD0=
+github.com/pubgo/xerror v0.3.23/go.mod h1:mH9VLp7gamZt025tetPFAiKwY2ggNRp6/OV8PGAvnp4=
