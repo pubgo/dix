@@ -13,36 +13,35 @@ import (
 )
 
 const (
-	_default = ns("dix_default")
+	_default = group("default")
 	_tagName = "dix"
 )
 
 type (
-	ns    = string
+	group = string
 	key   = reflect.Type
+	abc   = reflect.Type
 	value = reflect.Value
 )
 
 type dix struct {
-	opts         dix_opts.Options
-	providers    map[key]map[ns][]*node
-	abcProviders map[key]map[ns][]*node
-	values       map[key]map[ns]value
-	abcValues    map[key]map[ns]key
-}
+	opts dix_opts.Options
 
-type Model struct{ Data int64 }
+	// providers中保存的是, 类型对应的providers
+	// provider的返回值是具体的值
+	providers map[key]map[group][]*node
 
-func (t Model) init() {}
+	// abcProviders中保存的是, 类型对应的providers
+	// provider的返回值是接口的实现
+	// 可以有多provider的返回值是接口的实现
+	abcProviders map[key]map[group][]*node
 
-type dixData interface{ init() }
+	// values中保存的是, 类型对应的各个group的具体的value
+	values map[key]map[group]value
 
-// checkDixDataType
-// 检查是否实现dixData
-func checkDixDataType(data dixData) interface{} {
-	dt := reflect.New(indirectType(reflect.TypeOf(data)))
-	dt.Elem().FieldByName("Data").Set(reflect.ValueOf(time.Now().UnixNano()))
-	return dt.Interface()
+	// abcValues中保存的是, 接口类型对应实现的各个group的value的type
+	// 通过type去dix.values中获取具体的value
+	abcValues map[abc]map[group]key
 }
 
 func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
@@ -50,21 +49,21 @@ func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 	return fn.Call(args)
 }
 
-func (x *dix) getValue(tye key, name ns) reflect.Value {
+func (x *dix) getValue(tye key, name group) reflect.Value {
 	if x.values[tye] == nil {
 		return reflect.ValueOf((*error)(nil))
 	}
 	return x.values[tye][name]
 }
 
-func (x *dix) getAbcValue(tye key, name ns) reflect.Value {
+func (x *dix) getAbcValue(tye key, name group) reflect.Value {
 	if x.abcValues[tye] == nil {
 		return reflect.ValueOf((*error)(nil))
 	}
 	return x.values[x.abcValues[tye][name]][name]
 }
 
-func (x *dix) getNodes(tye key, name ns) []*node {
+func (x *dix) getNodes(tye key, name group) []*node {
 	if x.providers[tye] == nil {
 		return nil
 	}
@@ -73,13 +72,14 @@ func (x *dix) getNodes(tye key, name ns) []*node {
 
 // isNil check whether params contain nil value
 func (x *dix) isNil(v reflect.Value) bool {
-	if !x.opts.NilValueAllowed {
+	if !x.opts.NilAllowed {
 		return v.IsNil()
 	}
 	return false
 }
 
-func (x *dix) checkAbcImplement(p reflect.Type) reflect.Type {
+// 检测是否是否个接口的实现
+func (x *dix) getAbcType(p reflect.Type) reflect.Type {
 	for k := range x.abcProviders {
 		if reflect.New(p).Type().Implements(k) {
 			return k
@@ -113,19 +113,19 @@ func (x *dix) dixFunc(data interface{}) (err error) {
 		case reflect.Interface:
 			nd, err := newNode(x, data)
 			xerror.Panic(err)
-			x.setAbcProvider(indirectType(inTye), _default, nd)
+			x.setAbcProvider(getIndirectType(inTye), _default, nd)
 		case reflect.Ptr:
 			nd, err := newNode(x, data)
 			xerror.Panic(err)
-			x.setProvider(indirectType(inTye), _default, nd)
+			x.setProvider(getIndirectType(inTye), _default, nd)
 		case reflect.Struct:
 			for i := 0; i < inTye.NumField(); i++ {
 				feTye := inTye.Field(i)
 
-				if indirectType(feTye.Type).Kind() == reflect.Interface {
+				if getIndirectType(feTye.Type).Kind() == reflect.Interface {
 					nd, err := newNode(x, data)
 					xerror.Panic(err)
-					x.setAbcProvider(indirectType(feTye.Type), x.getNS(feTye), nd)
+					x.setAbcProvider(getIndirectType(feTye.Type), x.getNS(feTye), nd)
 					return nil
 				}
 
@@ -135,7 +135,7 @@ func (x *dix) dixFunc(data interface{}) (err error) {
 
 				nd, err := newNode(x, data)
 				xerror.Panic(err)
-				x.setProvider(indirectType(feTye.Type), x.getNS(feTye), nd)
+				x.setProvider(getIndirectType(feTye.Type), x.getNS(feTye), nd)
 			}
 		default:
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
@@ -162,7 +162,7 @@ func (x *dix) dix(params ...interface{}) (err error) {
 		return xerror.New("[params] should not be zero")
 	}
 
-	var values = make(map[ns][]reflect.Type)
+	var values = make(map[group][]reflect.Type)
 	for _, param := range params {
 		vp := reflect.ValueOf(param)
 		if !vp.IsValid() {
@@ -204,14 +204,14 @@ func (x *dix) dix(params ...interface{}) (err error) {
 
 	for name, vas := range values {
 		for i := range vas {
-			for _, n := range x.providers[indirectType(vas[i])][name] {
+			for _, n := range x.providers[getIndirectType(vas[i])][name] {
 				if err := n.call(); err != nil {
 					return xerror.Wrap(err)
 				}
 			}
 			// interface
 			for t, mapNodes := range x.abcProviders {
-				if !reflect.New(indirectType(vas[i])).Type().Implements(t) {
+				if !reflect.New(getIndirectType(vas[i])).Type().Implements(t) {
 					continue
 				}
 				for _, n := range mapNodes[name] {
@@ -330,29 +330,33 @@ func (x *dix) json() map[string]interface{} {
 	}
 }
 
-func (x *dix) setValue(k key, name ns, v value) {
+// 非接口类型map中保存值
+func (x *dix) setValue(k key, name group, v value) {
 	if x.values[k] == nil {
-		x.values[k] = map[ns]value{name: v}
+		x.values[k] = map[group]value{name: v}
 	} else {
 		x.values[k][name] = v
 	}
 }
 
-func (x *dix) setAbcValue(k key, name ns, v key) {
+// 在接口类型map中保存值
+func (x *dix) setAbcValue(k key, name group, v key) {
 	if x.abcValues[k] == nil {
-		x.abcValues[k] = map[ns]key{name: v}
+		x.abcValues[k] = map[group]key{name: v}
 	} else {
 		x.abcValues[k][name] = v
 	}
 }
 
+// 获取数据的分组或者namespace
 func (x *dix) getNS(field reflect.StructField) string {
+	// 如果结构体属性存在tag, 那么就获取tag
+	// 不存在tag或者tag为空, 那么tag默认为default
 	val, ok := field.Tag.Lookup(_tagName)
-	val = strings.TrimSpace(val)
-
 	if ok {
+		val = strings.TrimSpace(val)
 		if val == "" {
-			return "default"
+			return _default
 		}
 
 		return val
@@ -361,17 +365,17 @@ func (x *dix) getNS(field reflect.StructField) string {
 	return _default
 }
 
-func (x *dix) setAbcProvider(k key, name ns, nd *node) {
+func (x *dix) setAbcProvider(k key, name group, nd *node) {
 	if x.abcProviders[k] == nil {
-		x.abcProviders[k] = map[ns][]*node{name: {nd}}
+		x.abcProviders[k] = map[group][]*node{name: {nd}}
 	} else {
 		x.abcProviders[k][name] = append(x.abcProviders[k][name], nd)
 	}
 }
 
-func (x *dix) setProvider(k key, name ns, nd *node) {
+func (x *dix) setProvider(k key, name group, nd *node) {
 	if x.providers[k] == nil {
-		x.providers[k] = map[ns][]*node{name: {nd}}
+		x.providers[k] = map[group][]*node{name: {nd}}
 	} else {
 		x.providers[k][name] = append(x.providers[k][name], nd)
 	}
@@ -379,13 +383,13 @@ func (x *dix) setProvider(k key, name ns, nd *node) {
 
 func newDix(opts ...dix_opts.Option) *dix {
 	c := &dix{
-		providers:    make(map[key]map[ns][]*node),
-		abcProviders: make(map[key]map[ns][]*node),
-		values:       make(map[key]map[ns]value),
-		abcValues:    make(map[key]map[ns]key),
+		providers:    make(map[key]map[group][]*node),
+		abcProviders: make(map[key]map[group][]*node),
+		values:       make(map[key]map[group]value),
+		abcValues:    make(map[key]map[group]key),
 		opts: dix_opts.Options{
-			Rand:            rand.New(rand.NewSource(time.Now().UnixNano())),
-			NilValueAllowed: false,
+			Rand:       rand.New(rand.NewSource(time.Now().UnixNano())),
+			NilAllowed: false,
 		},
 	}
 

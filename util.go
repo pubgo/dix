@@ -9,16 +9,24 @@ import (
 	"strings"
 )
 
-var _errType = reflect.TypeOf((*error)(nil)).Elem()
+var errType = reflect.TypeOf((*error)(nil)).Elem()
 
 func isError(t reflect.Type) bool {
-	return t.Implements(_errType)
+	return t.Implements(errType)
 }
 
-func indirectType(tye reflect.Type) reflect.Type {
+func isDoublePtr(tpy reflect.Type) bool {
+	if isElem(tpy) {
+		return isElem(tpy.Elem())
+	}
+	return false
+}
+
+func getIndirectType(tye reflect.Type) reflect.Type {
 	for isElem(tye) {
 		tye = tye.Elem()
 	}
+
 	return tye
 }
 
@@ -47,7 +55,6 @@ func callerWithFunc(fn reflect.Value) string {
 		file = strings.Join(files[len(files)-2:], "/")
 	}
 
-	//buf.WriteString(fmt.Sprintf("%d ", fn.Pointer()))
 	buf.WriteString(file)
 	buf.WriteString(":")
 	buf.WriteString(strconv.Itoa(line))

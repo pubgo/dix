@@ -4,9 +4,12 @@ import "math/rand"
 
 type Option func(c *Options)
 type Options struct {
-	NilValueAllowed bool
-	Strict          bool
-	Rand            *rand.Rand
+	// 只要满足一个条件就可以
+	OneIsOk bool
+	// 允许nil值
+	NilAllowed bool
+	Strict     bool
+	Rand       *rand.Rand
 }
 
 func WithRand(r *rand.Rand) Option {
@@ -17,7 +20,7 @@ func WithRand(r *rand.Rand) Option {
 
 func WithAllowNil(nilValueAllowed bool) Option {
 	return func(c *Options) {
-		c.NilValueAllowed = nilValueAllowed
+		c.NilAllowed = nilValueAllowed
 	}
 }
 

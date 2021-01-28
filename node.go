@@ -11,30 +11,30 @@ type node struct {
 	c          *dix
 	fn         reflect.Value
 	input      []value
-	outputType map[ns]key
+	outputType map[group]key
 }
 
 func newNode(c *dix, data interface{}) (nd *node, err error) {
-	nd = &node{fn: reflect.ValueOf(data), c: c, outputType: make(map[ns]key)}
+	nd = &node{fn: reflect.ValueOf(data), c: c, outputType: make(map[group]key)}
 	nd.outputType, err = nd.returnedType()
 	return
 }
 
-func (n *node) returnedType() (map[ns]key, error) {
-	retType := make(map[ns]key)
+func (n *node) returnedType() (map[group]key, error) {
+	retType := make(map[group]key)
 	v := n.fn
 	for i := 0; i < v.Type().NumOut(); i++ {
 		out := v.Type().Out(i)
 		switch out.Kind() {
 		case reflect.Ptr:
-			retType[_default] = indirectType(out)
+			retType[_default] = getIndirectType(out)
 		case reflect.Struct:
 			for j := 0; j < v.NumField(); j++ {
 				feTye := v.Type().Field(j)
 				if feTye.Type.Kind() != reflect.Ptr {
 					return nil, xerror.New("the struct field should be Ptr type")
 				}
-				retType[n.c.getNS(feTye)] = indirectType(feTye.Type)
+				retType[n.c.getNS(feTye)] = getIndirectType(feTye.Type)
 			}
 		default:
 			if isError(out) {
@@ -96,13 +96,13 @@ func (n *node) call() (err error) {
 		inType := n.fn.Type().In(i)
 		switch inType.Kind() {
 		case reflect.Interface:
-			val := n.c.getAbcValue(indirectType(inType), _default)
+			val := n.c.getAbcValue(getIndirectType(inType), _default)
 			if !n.isNil(val) {
 				params = append(params, val)
 				input = append(input, val)
 			}
 		case reflect.Ptr:
-			val := n.c.getValue(indirectType(inType), _default)
+			val := n.c.getValue(getIndirectType(inType), _default)
 			if !n.isNil(val) {
 				params = append(params, val)
 				input = append(input, val)
@@ -119,9 +119,9 @@ func (n *node) call() (err error) {
 
 				// 结构体里面所有的属性值全部有值, 且不为nil
 				var val reflect.Value
-				if indirectType(field.Type).Kind() == reflect.Interface {
+				if getIndirectType(field.Type).Kind() == reflect.Interface {
 					// 如果value为nil, 就不触发初始化
-					val = n.c.getAbcValue(indirectType(field.Type), n.c.getNS(field))
+					val = n.c.getAbcValue(getIndirectType(field.Type), n.c.getNS(field))
 					if n.isNil(val) {
 						return nil
 					}
@@ -130,7 +130,7 @@ func (n *node) call() (err error) {
 					mt.Field(i).Set(val)
 				} else {
 					// 如果value为nil, 就不触发初始化
-					val = n.c.getValue(indirectType(field.Type), n.c.getNS(field))
+					val = n.c.getValue(getIndirectType(field.Type), n.c.getNS(field))
 					if n.isNil(val) {
 						return nil
 					}
