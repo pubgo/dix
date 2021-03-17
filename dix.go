@@ -27,6 +27,9 @@ type (
 type dix struct {
 	opts dix_opts.Options
 
+	consumers    map[key]map[group][]*node
+	abcConsumers map[key]map[group][]*node
+
 	// providers中保存的是, 类型对应的providers
 	// provider的返回值是具体的值
 	providers map[key]map[group][]*node
@@ -365,19 +368,19 @@ func (x *dix) getNS(field reflect.StructField) string {
 	return _default
 }
 
-func (x *dix) setAbcProvider(k key, name group, nd *node) {
-	if x.abcProviders[k] == nil {
-		x.abcProviders[k] = map[group][]*node{name: {nd}}
-	} else {
-		x.abcProviders[k][name] = append(x.abcProviders[k][name], nd)
-	}
-}
-
 func (x *dix) setProvider(k key, name group, nd *node) {
 	if x.providers[k] == nil {
 		x.providers[k] = map[group][]*node{name: {nd}}
 	} else {
 		x.providers[k][name] = append(x.providers[k][name], nd)
+	}
+}
+
+func (x *dix) setAbcProvider(k key, name group, nd *node) {
+	if x.abcProviders[k] == nil {
+		x.abcProviders[k] = map[group][]*node{name: {nd}}
+	} else {
+		x.abcProviders[k][name] = append(x.abcProviders[k][name], nd)
 	}
 }
 

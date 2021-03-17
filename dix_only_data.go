@@ -7,10 +7,13 @@ import (
 	"github.com/pubgo/xerror"
 )
 
+// handleStruct
 // dix(struct)
 // 输入参数是struct类型, 结构体类型中的每一个属性都要是指针类型
 func (x *dix) handleStruct(data interface{}) (values map[group][]key, gErr error) {
-	defer xerror.Resp(func(err xerror.XErr) { gErr = err.WrapF("[dix] unknown error, data:%#v", data) })
+	defer xerror.Resp(func(err xerror.XErr) {
+		gErr = err.WrapF("[dix] unknown error, data:%#v", data)
+	})
 
 	values = make(map[group][]key)
 
@@ -27,28 +30,23 @@ func (x *dix) handleStruct(data interface{}) (values map[group][]key, gErr error
 		ftInfo := func() string { return fmt.Sprintf("the struct[%s] field[%s]", sTyp.Name(), fTyp.Name) }
 
 		// 检查类型是否是指针类型
-		if fVal.Kind() != reflect.Ptr {
-			return nil, xerror.WrapF(Err, "%s should be Ptr type", ftInfo())
-		}
+		xerror.Assert(fVal.Kind() != reflect.Ptr, "%s should be Ptr type", ftInfo())
 
 		// 检查是否是指针的指针类型`**ptr`
-		if isDoublePtr(fVal.Type()) {
-			return nil, xerror.WrapF(Err, "%s should not be double Ptr type", ftInfo())
-		}
+		xerror.Assert(isDoublePtr(fVal.Type()), "%s should not be double Ptr type", ftInfo())
 
 		// 检查是否是空指针
-		if x.isNil(fVal) {
-			return nil, xerror.WrapF(Err, "%s should not be nil", ftInfo())
-		}
+		xerror.Assert(x.isNil(fVal), "%s should not be nil", ftInfo())
 
 		// 检查类型是否某个接口的实现
 		ft := getIndirectType(fVal.Type())
+		var ns = x.getNS(fTyp)
 		if ttk := x.getAbcType(ft); ttk != nil {
-			x.setAbcValue(ttk, x.getNS(fTyp), ft)
+			x.setAbcValue(ttk, ns, ft)
 		}
 
-		x.setValue(ft, x.getNS(fTyp), fVal)
-		values[x.getNS(fTyp)] = append(values[x.getNS(fTyp)], fVal.Type())
+		x.setValue(ft, ns, fVal)
+		values[ns] = append(values[ns], fVal.Type())
 	}
 
 	return values, nil
@@ -57,38 +55,34 @@ func (x *dix) handleStruct(data interface{}) (values map[group][]key, gErr error
 // dix(map)
 // 输入参数是map类型, map类型中的每一个key都是group, value都是ptr value
 func (x *dix) handleMap(data interface{}) (values map[group][]key, gErr error) {
-	defer xerror.Resp(func(err xerror.XErr) { gErr = err.WrapF("[dix] unknown error, data:%#v", data) })
+	defer xerror.Resp(func(err xerror.XErr) {
+		gErr = err.WrapF("[dix] unknown error, data:%#v", data)
+	})
 
 	values = make(map[group][]key)
 
 	sVal := reflect.ValueOf(data)
 	sTyp := sVal.Type()
 
+	// 结构体类型检查
+	xerror.Assert(sTyp.Kind() != reflect.Map, "[data] %s should be map type", sTyp.Name())
+
 	iter := sVal.MapRange()
 	for iter.Next() {
 		k := iter.Key().String()
-		if k == "" {
-			return nil, xerror.New("map key is null")
+		xerror.Assert(k == "", "map key is null")
+		xerror.Assert(iter.Value().Type().Kind() != reflect.Ptr,
+			"key %v should be Ptr type", iter.Key().Interface())
+		xerror.Assert(x.isNil(iter.Value()), "map value is nil, key:%s", k)
+
+		typ := getIndirectType(iter.Value().Type())
+		if ttk := x.getAbcType(typ); ttk != nil {
+			x.setAbcValue(ttk, k, typ)
 		}
 
-		if iter.Value().Type().Kind() != reflect.Ptr {
-			return nil, xerror.WrapF(Err, "key %v should be Ptr type", iter.Key().Interface())
-		}
-
-		if x.isNil(iter.Value()) {
-			return nil, xerror.Fmt("map value is nil, key:%s", k)
-		}
-
-		if ttk := x.getAbcType(getIndirectType(iter.Value().Type())); ttk != nil {
-			x.setAbcValue(ttk, k, getIndirectType(iter.Value().Type()))
-		}
-
-		x.setValue(getIndirectType(iter.Value().Type()), k, iter.Value())
+		x.setValue(typ, k, iter.Value())
 		values[k] = append(values[k], iter.Value().Type())
 	}
-
-	// 结构体类型检查
-	xerror.Assert(sTyp.Kind() != reflect.Map, "[data] %s should be map type", sTyp.Name())
 
 	return values, nil
 }
@@ -104,6 +98,15 @@ func (x *dix) handlePtr(data interface{}) (values map[group][]key, gErr error) {
 
 	// 结构体类型检查
 	xerror.Assert(sTyp.Kind() != reflect.Ptr, "[data] %s should be ptr type", sTyp.Name())
+	xerror.Assert(x.isNil(sVal), "[dix] value is nil")
+
+	typ := getIndirectType(sTyp)
+	if ttk := x.getAbcType(typ); ttk != nil {
+		x.setAbcValue(ttk, _default, typ)
+	}
+
+	x.setValue(typ, _default, sVal)
+	values[_default] = append(values[_default], sTyp)
 
 	return values, nil
 }
