@@ -124,9 +124,7 @@ func (x *dix) dixFunc(data reflect.Value) (err error) {
 					return nil
 				}
 
-				if feTye.Type.Kind() != reflect.Ptr {
-					return xerror.New("the struct field should be Ptr or Interface type")
-				}
+				xerror.Assert(feTye.Type.Kind() != reflect.Ptr, "the struct field should be Ptr or Interface type")
 
 				nd, err := newNode(x, data)
 				xerror.Panic(err)
