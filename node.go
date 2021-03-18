@@ -14,8 +14,8 @@ type node struct {
 	outputType map[group]key
 }
 
-func newNode(c *dix, data interface{}) (nd *node, err error) {
-	nd = &node{fn: reflect.ValueOf(data), c: c, outputType: make(map[group]key)}
+func newNode(c *dix, data reflect.Value) (nd *node, err error) {
+	nd = &node{fn: data, c: c, outputType: make(map[group]key)}
 	nd.outputType, err = nd.returnedType()
 	return
 }
@@ -31,9 +31,8 @@ func (n *node) returnedType() (map[group]key, error) {
 		case reflect.Struct:
 			for j := 0; j < v.NumField(); j++ {
 				feTye := v.Type().Field(j)
-				if feTye.Type.Kind() != reflect.Ptr {
-					return nil, xerror.New("the struct field should be Ptr type")
-				}
+				xerror.Assert(feTye.Type.Kind() != reflect.Ptr,
+					"the struct field[%s] should be Ptr type", feTye.Type.Kind())
 				retType[n.c.getNS(feTye)] = getIndirectType(feTye.Type)
 			}
 		default:
@@ -48,6 +47,7 @@ func (n *node) returnedType() (map[group]key, error) {
 
 func (n *node) handleCall(params []reflect.Value) (err error) {
 	defer xerror.RespErr(&err)
+
 	values := defaultInvoker(n.fn, params[:])
 
 	if len(values) == 0 {
@@ -55,14 +55,11 @@ func (n *node) handleCall(params []reflect.Value) (err error) {
 	}
 
 	// the returned value should be error
-	if len(values) > 0 {
-		vErr := values[len(values)-1]
-		if !isError(vErr.Type()) {
-			return xerror.Fmt("the last returned value should be error type, got(%v)", vErr.Type())
-		}
+	vErr := values[len(values)-1]
+	xerror.Assert(!isError(vErr.Type()), "the last returned value should be error type, got(%v)", vErr.Type())
 
-		err, _ := vErr.Interface().(error)
-		xerror.PanicF(err, "func error, func: %s, params: %s", callerWithFunc(n.fn), params)
+	if vErr.IsValid() && !vErr.IsNil() {
+		xerror.PanicF(vErr.Interface().(error), "func error, func: %s, params: %s", callerWithFunc(n.fn), params)
 	}
 
 	var vas []interface{}
@@ -153,13 +150,14 @@ func (n *node) call() (err error) {
 		}
 	}
 
-	if reflect.DeepEqual(n.input, input) {
+	if equal(n.input, input) {
 		return nil
 	}
 
 	if err := n.handleCall(params); err != nil {
 		return xerror.Wrap(err)
 	}
+
 	n.input = input
 	return nil
 }

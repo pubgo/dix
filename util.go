@@ -22,14 +22,6 @@ func isDoublePtr(tpy reflect.Type) bool {
 	return false
 }
 
-func getIndirectType(tye reflect.Type) reflect.Type {
-	for isElem(tye) {
-		tye = tye.Elem()
-	}
-
-	return tye
-}
-
 func isElem(tye reflect.Type) bool {
 	switch tye.Kind() {
 	case reflect.Chan, reflect.Map, reflect.Ptr, reflect.Array, reflect.Slice:
@@ -37,6 +29,13 @@ func isElem(tye reflect.Type) bool {
 	default:
 		return false
 	}
+}
+
+func getIndirectType(tye reflect.Type) reflect.Type {
+	for isElem(tye) {
+		tye = tye.Elem()
+	}
+	return tye
 }
 
 func fPrintln(w io.Writer, a ...interface{}) {
@@ -62,4 +61,21 @@ func callerWithFunc(fn reflect.Value) string {
 
 	buf.WriteString(fn.String())
 	return buf.String()
+}
+
+func equal(x, y []reflect.Value) bool {
+	if len(x) != len(y) {
+		return false
+	}
+
+	for i := range x {
+		if x[i].IsNil() || y[i].IsNil() {
+			return false
+		}
+
+		if x[i].Pointer() != y[i].Pointer() {
+			return false
+		}
+	}
+	return true
 }

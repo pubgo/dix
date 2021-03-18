@@ -2,10 +2,7 @@ package dix
 
 import (
 	"github.com/pubgo/dix/dix_opts"
-	"github.com/pubgo/xerror"
 )
-
-var Err = xerror.New("dix")
 
 var defaultDix = New()
 

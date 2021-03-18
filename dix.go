@@ -27,9 +27,6 @@ type (
 type dix struct {
 	opts dix_opts.Options
 
-	consumers    map[key]map[group][]*node
-	abcConsumers map[key]map[group][]*node
-
 	// providers中保存的是, 类型对应的providers
 	// provider的返回值是具体的值
 	providers map[key]map[group][]*node
@@ -49,6 +46,9 @@ type dix struct {
 
 func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 	defer xerror.RespRaise(func(err xerror.XErr) error { return xerror.WrapF(err, "caller: %s", callerWithFunc(fn)) })
+
+	xerror.Assert(fn.IsZero(), "[fn] is nil")
+
 	return fn.Call(args)
 }
 
@@ -56,6 +56,7 @@ func (x *dix) getValue(tye key, name group) reflect.Value {
 	if x.values[tye] == nil {
 		return reflect.ValueOf((*error)(nil))
 	}
+
 	return x.values[tye][name]
 }
 
@@ -63,6 +64,7 @@ func (x *dix) getAbcValue(tye key, name group) reflect.Value {
 	if x.abcValues[tye] == nil {
 		return reflect.ValueOf((*error)(nil))
 	}
+
 	return x.values[x.abcValues[tye][name]][name]
 }
 
@@ -91,25 +93,15 @@ func (x *dix) getAbcType(p reflect.Type) reflect.Type {
 	return nil
 }
 
-func (x *dix) dixFunc(data interface{}) (err error) {
+func (x *dix) dixFunc(data reflect.Value) (err error) {
 	defer xerror.RespErr(&err)
 
-	fnVal := reflect.ValueOf(data)
+	fnVal := data
 	tye := fnVal.Type()
 
-	if tye.IsVariadic() {
-		return xerror.New("the func of provide variable parameters are not allowed")
-	}
-
-	if tye.NumIn() == 0 {
-		return xerror.New("the number of parameters should not be 0")
-	}
-
-	if tye.NumOut() > 0 {
-		if !isError(tye.Out(tye.NumOut() - 1)) {
-			return xerror.New("the last returned value should be error type")
-		}
-	}
+	xerror.Assert(tye.IsVariadic(), "the func of provider variable parameters are not allowed")
+	xerror.Assert(tye.NumIn() == 0, "the number of parameters should not be 0")
+	xerror.Assert(tye.NumOut() > 0 && !isError(tye.Out(tye.NumOut()-1)), "the last returned value should be error type")
 
 	for i := 0; i < tye.NumIn(); i++ {
 		switch inTye := tye.In(i); inTye.Kind() {
@@ -161,65 +153,43 @@ func (x *dix) init(opts ...dix_opts.Option) error {
 func (x *dix) dix(params ...interface{}) (err error) {
 	defer xerror.RespErr(&err)
 
-	if len(params) == 0 {
-		return xerror.New("[params] should not be zero")
-	}
+	xerror.Assert(len(params) == 0, "[params] should not be zero")
 
-	var values = make(map[group][]reflect.Type)
 	for _, param := range params {
 		vp := reflect.ValueOf(param)
-		if !vp.IsValid() {
-			return xerror.New("[params] should not be invalid")
-		}
+		xerror.Assert(!vp.IsValid() || vp.IsZero(), "[params] should not be invalid or nil")
 
-		if vp.IsZero() {
-			if param1, ok := param.(dixData); ok {
-				param = checkDixDataType(param1)
-				vp = reflect.ValueOf(param)
-			} else {
-				return xerror.New("[params] should not be zero and nil")
-			}
-		}
+		var values = make(map[group][]reflect.Type)
 
 		typ := vp.Type()
 		switch typ.Kind() {
 		case reflect.Ptr:
-			if err := x.dixPtr(values, param); err != nil {
-				return xerror.Wrap(err)
-			}
+			xerror.Panic(x.dixPtr(values, vp))
 		case reflect.Func:
-			err := x.dixFunc(param)
-			if err != nil {
-				return xerror.Wrap(err)
-			}
+			xerror.Panic(x.dixFunc(vp))
 		case reflect.Map:
-			if err := x.dixMap(values, param); err != nil {
-				return xerror.Wrap(err)
-			}
+			xerror.Panic(x.dixMap(values, param))
 		case reflect.Struct:
-			if err := x.dixStruct(values, param); err != nil {
-				return xerror.Wrap(err)
-			}
+			xerror.Panic(x.dixStruct(values, param))
 		default:
 			return xerror.Fmt("provide type kind error, (kind %v)", typ.Kind())
 		}
-	}
 
-	for name, vas := range values {
-		for i := range vas {
-			for _, n := range x.providers[getIndirectType(vas[i])][name] {
-				if err := n.call(); err != nil {
-					return xerror.Wrap(err)
+		for gup, vas := range values {
+			for i := range vas {
+				getTy := getIndirectType(vas[i])
+				for _, n := range x.providers[getTy][gup] {
+					xerror.Panic(n.call())
 				}
-			}
-			// interface
-			for t, mapNodes := range x.abcProviders {
-				if !reflect.New(getIndirectType(vas[i])).Type().Implements(t) {
-					continue
-				}
-				for _, n := range mapNodes[name] {
-					if err := n.call(); err != nil {
-						return xerror.Wrap(err)
+
+				// interface
+				for t, mapNodes := range x.abcProviders {
+					if !reflect.New(getTy).Type().Implements(t) {
+						continue
+					}
+
+					for _, n := range mapNodes[gup] {
+						xerror.Panic(n.call())
 					}
 				}
 			}

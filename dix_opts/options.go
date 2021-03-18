@@ -11,21 +11,3 @@ type Options struct {
 	Strict     bool
 	Rand       *rand.Rand
 }
-
-func WithRand(r *rand.Rand) Option {
-	return func(c *Options) {
-		c.Rand = r
-	}
-}
-
-func WithAllowNil(nilValueAllowed bool) Option {
-	return func(c *Options) {
-		c.NilAllowed = nilValueAllowed
-	}
-}
-
-func WithStrict(strict bool) Option {
-	return func(c *Options) {
-		c.Strict = strict
-	}
-}
