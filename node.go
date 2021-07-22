@@ -110,11 +110,11 @@ func (n *node) call() (err error) {
 			for i := 0; i < inType.NumField(); i++ {
 				field := inType.Field(i)
 
-				if _, ok := field.Tag.Lookup(_tagName); n.c.opts.Strict && !ok {
+				if !n.c.hasNS(field) {
 					continue
 				}
 
-				if field.Type.Kind() != reflect.Interface && field.Type.Kind() != reflect.Ptr {
+				if kind := field.Type.Kind(); kind != reflect.Interface && kind != reflect.Ptr {
 					continue
 				}
 

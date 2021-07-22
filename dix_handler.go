@@ -90,7 +90,10 @@ func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
 
 	for i := 0; i < tye.NumField(); i++ {
 		var kind = tye.Field(i).Type.Kind()
-		if kind != reflect.Ptr && kind != reflect.Interface {
+
+		// 结构体tag:dix, 类型为interface,ptr
+		if !x.hasNS(tye.Field(i)) ||
+			kind != reflect.Ptr && kind != reflect.Interface {
 			continue
 		}
 

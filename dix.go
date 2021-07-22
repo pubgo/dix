@@ -346,6 +346,11 @@ func (x *dix) setAbcValue(k key, name group, v key) {
 	}
 }
 
+func (x *dix) hasNS(field reflect.StructField) bool {
+	_, ok := field.Tag.Lookup(_tagName)
+	return ok
+}
+
 // 获取数据的分组或者namespace
 func (x *dix) getNS(field reflect.StructField) string {
 	// 如果结构体属性存在tag, 那么就获取tag
