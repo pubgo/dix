@@ -91,11 +91,13 @@ func main() {
 		xerror.Panic(dix.Invoke(&cfg1, "test"))
 		fmt.Printf("cfg1: %#v\n", cfg1)
 
-		var struct1 struct {
+		var struct1 = new(struct {
 			Cfg *Config `dix:"test"`
-		}
+			Abc string
+		})
+		struct1.Abc = "hello"
 
-		xerror.Panic(dix.Invoke(&struct1))
+		xerror.Panic(dix.Invoke(struct1))
 		fmt.Printf("struct1: %#v\n", struct1)
 		fmt.Printf("struct1: %#v\n", struct1.Cfg)
 		i++

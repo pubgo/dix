@@ -86,8 +86,6 @@ func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
 
 	tye := val.Elem().Type()
 
-	mt := reflect.New(tye)
-
 	for i := 0; i < tye.NumField(); i++ {
 		var kind = tye.Field(i).Type.Kind()
 		if kind != reflect.Ptr && kind != reflect.Interface {
@@ -103,15 +101,9 @@ func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
 			retVal = x.getAbcValue(getIndirectType(tye.Field(i).Type), ns)
 		}
 
-		if !val.Elem().Field(i).CanSet() {
-			val.Elem().Field(i)
-		}
-
 		xerror.Assert(!retVal.IsValid() || retVal.IsZero(), "value is nil, namespace:%s, field:%s", ns, tye.Field(i).Name)
-		mt.Elem().Field(i).Set(retVal)
+		val.Elem().Field(i).Set(retVal)
 	}
-
-	val.Elem().Set(mt.Elem())
 
 	return nil
 }
