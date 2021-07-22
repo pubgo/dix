@@ -53,16 +53,13 @@ func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 }
 
 func (x *dix) getValue(tye key, name group) reflect.Value {
-	if x.values[tye] == nil {
-		return reflect.ValueOf((*error)(nil))
-	}
-
+	xerror.Assert(x.values[tye] == nil, "type %s not found", tye.Name())
 	return x.values[tye][name]
 }
 
 func (x *dix) getAbcValue(tye key, name group) reflect.Value {
 	if x.abcValues[tye] == nil {
-		return reflect.ValueOf((*error)(nil))
+		return reflect.Value{}
 	}
 
 	return x.values[x.abcValues[tye][name]][name]
@@ -145,6 +142,32 @@ func (x *dix) init(opts ...dix_opts.Option) error {
 
 	// TODO check option
 	x.opts = dixOpt
+	return nil
+}
+
+func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
+	defer xerror.RespErr(&err)
+
+	var ns = _default
+	if len(namespaces) > 0 {
+		ns = namespaces[0]
+	}
+
+	vp := reflect.ValueOf(params)
+
+	typ := vp.Type()
+	switch typ.Kind() {
+	case reflect.Ptr:
+		tye := getIndirectType(vp.Type())
+		var vv = x.getValue(tye, ns)
+		xerror.Assert(!vv.IsValid() || vv.IsNil(), "namespace: %s not found", ns)
+		vp.Elem().Set(x.getValue(tye, ns))
+	//case reflect.Struct:
+	//	xerror.Panic(x.dixStructInvoke(vp))
+	default:
+		return xerror.Fmt("invoke type kind error, (kind %v)", typ.Kind())
+	}
+
 	return nil
 }
 
@@ -368,7 +391,10 @@ func newDix(opts ...dix_opts.Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data ...interface{}) error      { return x.dix(data...) }
+func (x *dix) Dix(data ...interface{}) error { return x.dix(data...) }
+func (x *dix) Invoke(data interface{}, namespaces ...string) error {
+	return x.invoke(data, namespaces...)
+}
 func (x *dix) Init(opts ...dix_opts.Option) error { return x.init(opts...) }
 func (x *dix) Graph() string                      { return x.graph() }
 func (x *dix) Json() map[string]interface{}       { return x.json() }

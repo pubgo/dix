@@ -73,13 +73,21 @@ func main() {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
 		xerror.Panic(dix.Dix(map[string]*Config{"test": &cfg}))
+		fmt.Printf("cfg: %#v\n", cfg)
 
 		fmt.Println(dix.Graph())
 		fmt.Print("==================================================================================\n")
 		time.Sleep(time.Second)
 		//xerror.Exit(dix.Dix(&testHello{i: i}))
 		//fmt.Println(dix.Graph())
-		time.Sleep(time.Second)
+		//time.Sleep(time.Second)
+		var log1 *log.Logger
+		xerror.Panic(dix.Invoke(&log1))
+		fmt.Printf("log1: %#v\n", log1)
+
+		var cfg1 *Config
+		xerror.Panic(dix.Invoke(&cfg1, "test"))
+		fmt.Printf("cfg1: %#v\n", cfg1)
 		i++
 	}
 }
