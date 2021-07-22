@@ -11,6 +11,17 @@ import (
 	"github.com/pubgo/xerror"
 )
 
+type m11 struct {
+}
+
+func (t *m11) Hello1() {
+	fmt.Println("Hello1")
+}
+
+type M1 interface {
+	Hello1()
+}
+
 type Hello interface {
 	Hello()
 }
@@ -101,10 +112,21 @@ func main() {
 
 		type nn struct {
 			Struct1 Hello `dix:""`
+			MM      string
 		}
-		var struct1 nn
-		xerror.Panic(dix.Invoke(&struct1))
+		var struct1 = &nn{MM: "ssss"}
+		xerror.Panic(dix.Invoke(struct1))
 		struct1.Struct1.Hello()
+		fmt.Println(struct1.MM)
+
+		xerror.Panic(dix.Dix(&m11{}))
+		fmt.Println(dix.Graph())
+
+		var mmm struct {
+			M1 M1 `dix:""`
+		}
+		xerror.Panic(dix.Invoke(&mmm))
+		mmm.M1.Hello1()
 		i++
 	}
 }

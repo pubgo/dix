@@ -61,11 +61,17 @@ func (x *dix) getValue(tye key, name group) reflect.Value {
 }
 
 func (x *dix) getAbcValue(tye key, name group) reflect.Value {
-	if x.abcValues[tye] == nil {
-		return reflect.Value{}
+	if x.abcValues[tye] != nil {
+		return x.values[x.abcValues[tye][name]][name]
 	}
 
-	return x.values[x.abcValues[tye][name]][name]
+	for k := range x.values {
+		if reflect.New(k).Type().Implements(tye) {
+			return x.values[k][name]
+		}
+	}
+
+	return reflect.Value{}
 }
 
 func (x *dix) getNodes(tye key, name group) []*node {
