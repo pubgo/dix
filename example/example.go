@@ -61,8 +61,8 @@ func init() {
 	}))
 
 	type ll struct {
-		L *log.Logger
-		H Hello `dix:"test"`
+		L *log.Logger `dix:""`
+		H Hello       `dix:"test"`
 	}
 
 	xerror.Exit(dix.Dix(func(l ll) {
@@ -97,9 +97,14 @@ func main() {
 		fmt.Printf("cfg1: %#v\n", cfg1)
 
 		// 接口类型
-		var struct1 Hello = &MM{Abc: "hello MM"}
-		xerror.Panic(dix.Invoke(struct1))
-		fmt.Printf("struct1: %#v\n", struct1)
+		//= &MM{Abc: "hello MM"}
+
+		type nn struct {
+			Struct1 Hello `dix:""`
+		}
+		var struct1 nn
+		xerror.Panic(dix.Invoke(&struct1))
+		struct1.Struct1.Hello()
 		i++
 	}
 }

@@ -168,6 +168,8 @@ func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
 		xerror.PanicF(x.dixPtrInvoke(vp, ns), "type: [%s] [%s]", typ.Name(), typ.String())
 	case reflect.Struct:
 		xerror.Panic(x.dixStructInvoke(vp))
+	case reflect.Interface:
+		xerror.Panic(x.dixInterfaceInvoke(vp, ns))
 	default:
 		return xerror.Fmt("invoke type kind error, (kind %v)", typ.Kind())
 	}
