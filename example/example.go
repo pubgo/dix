@@ -68,6 +68,8 @@ func init() {
 }
 
 func main() {
+	defer xerror.RespExit()
+
 	i := 0
 	for {
 		var cfg Config
@@ -88,6 +90,14 @@ func main() {
 		var cfg1 *Config
 		xerror.Panic(dix.Invoke(&cfg1, "test"))
 		fmt.Printf("cfg1: %#v\n", cfg1)
+
+		var struct1 struct {
+			Cfg *Config `dix:"test"`
+		}
+
+		xerror.Panic(dix.Invoke(&struct1))
+		fmt.Printf("struct1: %#v\n", struct1)
+		fmt.Printf("struct1: %#v\n", struct1.Cfg)
 		i++
 	}
 }

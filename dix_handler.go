@@ -1,7 +1,6 @@
 package dix
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/pubgo/xerror"
@@ -74,15 +73,20 @@ func (x *dix) dixPtr(values map[group][]reflect.Type, val reflect.Value) error {
 	return nil
 }
 
-func (x *dix) dixPtrInvoke(val reflect.Value) error {
+func (x *dix) dixPtrInvoke(val reflect.Value, ns string) error {
 	tye := getIndirectType(val.Type())
-	x.getValue(tye, _default)
-	val.Elem().Set(x.getValue(tye, _default))
+	var vv = x.getValue(tye, ns)
+	xerror.Assert(!vv.IsValid() || vv.IsNil(), "namespace: %s not found", ns)
+	val.Elem().Set(vv)
 	return nil
 }
 
-func (x *dix) dixStructInvoke(val reflect.Value) error {
-	tye := val.Type()
+func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
+	defer xerror.RespExit()
+
+	tye := val.Elem().Type()
+
+	mt := reflect.New(tye)
 
 	for i := 0; i < tye.NumField(); i++ {
 		var kind = tye.Field(i).Type.Kind()
@@ -99,12 +103,15 @@ func (x *dix) dixStructInvoke(val reflect.Value) error {
 			retVal = x.getAbcValue(getIndirectType(tye.Field(i).Type), ns)
 		}
 
-		if !retVal.IsValid() || retVal.IsZero() {
-			return fmt.Errorf("error")
+		if !val.Elem().Field(i).CanSet() {
+			val.Elem().Field(i)
 		}
 
-		val.Field(i).Elem().Set(retVal)
+		xerror.Assert(!retVal.IsValid() || retVal.IsZero(), "value is nil, namespace:%s, field:%s", ns, tye.Field(i).Name)
+		mt.Elem().Field(i).Set(retVal)
 	}
+
+	val.Elem().Set(mt.Elem())
 
 	return nil
 }

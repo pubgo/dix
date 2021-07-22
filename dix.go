@@ -53,7 +53,7 @@ func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 }
 
 func (x *dix) getValue(tye key, name group) reflect.Value {
-	xerror.Assert(x.values[tye] == nil, "type %s not found", tye.Name())
+	xerror.Assert(x.values[tye] == nil, "type %s %s not found", tye.Name(), tye.String())
 	return x.values[tye][name]
 }
 
@@ -155,15 +155,14 @@ func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
 
 	vp := reflect.ValueOf(params)
 
-	typ := vp.Type()
+	xerror.Assert(vp.Type().Kind() != reflect.Ptr, "params(%#v) should be ptr type", params)
+
+	typ := vp.Elem().Type()
 	switch typ.Kind() {
 	case reflect.Ptr:
-		tye := getIndirectType(vp.Type())
-		var vv = x.getValue(tye, ns)
-		xerror.Assert(!vv.IsValid() || vv.IsNil(), "namespace: %s not found", ns)
-		vp.Elem().Set(x.getValue(tye, ns))
-	//case reflect.Struct:
-	//	xerror.Panic(x.dixStructInvoke(vp))
+		xerror.Panic(x.dixPtrInvoke(vp, ns))
+	case reflect.Struct:
+		xerror.Panic(x.dixStructInvoke(vp))
 	default:
 		return xerror.Fmt("invoke type kind error, (kind %v)", typ.Kind())
 	}
@@ -347,12 +346,8 @@ func (x *dix) getNS(field reflect.StructField) string {
 	// 如果结构体属性存在tag, 那么就获取tag
 	// 不存在tag或者tag为空, 那么tag默认为default
 	val, ok := field.Tag.Lookup(_tagName)
-	if ok {
-		val = strings.TrimSpace(val)
-		if val == "" {
-			return _default
-		}
-
+	val = strings.TrimSpace(val)
+	if ok && val != "" {
 		return val
 	}
 
