@@ -33,6 +33,11 @@ func (Config) Hello() {
 
 type MM struct {
 	Cfg *Config `dix:"test"`
+	Abc string
+}
+
+func (MM) Hello() {
+	fmt.Println("Hello MM")
 }
 
 func init() {
@@ -80,8 +85,8 @@ func main() {
 		fmt.Println(dix.Graph())
 		fmt.Print("==================================================================================\n")
 		time.Sleep(time.Second)
-		//xerror.Exit(dix.Dix(&testHello{i: i}))
-		//fmt.Println(dix.Graph())
+		xerror.Exit(dix.Dix(&testHello{i: i}))
+		fmt.Println(dix.Graph())
 		//time.Sleep(time.Second)
 		var log1 *log.Logger
 		xerror.Panic(dix.Invoke(&log1))
@@ -91,15 +96,10 @@ func main() {
 		xerror.Panic(dix.Invoke(&cfg1, "test"))
 		fmt.Printf("cfg1: %#v\n", cfg1)
 
-		var struct1 = new(struct {
-			Cfg *Config `dix:"test"`
-			Abc string
-		})
-		struct1.Abc = "hello"
-
+		// 接口类型
+		var struct1 Hello = &MM{Abc: "hello MM"}
 		xerror.Panic(dix.Invoke(struct1))
 		fmt.Printf("struct1: %#v\n", struct1)
-		fmt.Printf("struct1: %#v\n", struct1.Cfg)
 		i++
 	}
 }

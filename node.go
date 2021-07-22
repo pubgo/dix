@@ -114,6 +114,10 @@ func (n *node) call() (err error) {
 					continue
 				}
 
+				if field.Type.Kind() != reflect.Interface && field.Type.Kind() != reflect.Ptr {
+					continue
+				}
+
 				// 结构体里面所有的属性值全部有值, 且不为nil
 				var val reflect.Value
 				if getIndirectType(field.Type).Kind() == reflect.Interface {

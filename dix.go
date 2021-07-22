@@ -53,7 +53,10 @@ func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
 }
 
 func (x *dix) getValue(tye key, name group) reflect.Value {
-	xerror.Assert(x.values[tye] == nil, "type %s %s not found", tye.Name(), tye.String())
+	if x.values[tye] == nil {
+		return reflect.ValueOf((*error)(nil))
+	}
+
 	return x.values[tye][name]
 }
 
@@ -118,10 +121,12 @@ func (x *dix) dixFunc(data reflect.Value) (err error) {
 					nd, err := newNode(x, data)
 					xerror.Panic(err)
 					x.setAbcProvider(getIndirectType(feTye.Type), x.getNS(feTye), nd)
-					return nil
+					continue
 				}
 
-				xerror.Assert(feTye.Type.Kind() != reflect.Ptr, "the struct field should be Ptr or Interface type")
+				if feTye.Type.Kind() != reflect.Ptr && feTye.Type.Kind() != reflect.Interface {
+					continue
+				}
 
 				nd, err := newNode(x, data)
 				xerror.Panic(err)
@@ -160,7 +165,7 @@ func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
 	typ := vp.Elem().Type()
 	switch typ.Kind() {
 	case reflect.Ptr:
-		xerror.Panic(x.dixPtrInvoke(vp, ns))
+		xerror.PanicF(x.dixPtrInvoke(vp, ns), "type: [%s] [%s]", typ.Name(), typ.String())
 	case reflect.Struct:
 		xerror.Panic(x.dixStructInvoke(vp))
 	default:

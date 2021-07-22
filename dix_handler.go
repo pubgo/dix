@@ -73,7 +73,9 @@ func (x *dix) dixPtr(values map[group][]reflect.Type, val reflect.Value) error {
 	return nil
 }
 
-func (x *dix) dixPtrInvoke(val reflect.Value, ns string) error {
+func (x *dix) dixPtrInvoke(val reflect.Value, ns string) (err error) {
+	defer xerror.RespErr(&err)
+
 	tye := getIndirectType(val.Type())
 	var vv = x.getValue(tye, ns)
 	xerror.Assert(!vv.IsValid() || vv.IsNil(), "namespace: %s not found", ns)
