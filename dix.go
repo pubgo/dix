@@ -44,12 +44,14 @@ type dix struct {
 	abcValues map[abc]map[group]key
 }
 
-func defaultInvoker(fn reflect.Value, args []reflect.Value) []reflect.Value {
-	defer xerror.RespRaise(func(err xerror.XErr) error { return xerror.WrapF(err, "caller: %s", callerWithFunc(fn)) })
+func defaultInvoker(fn reflect.Value, args []reflect.Value) (_ []reflect.Value, gErr error) {
+	defer xerror.Resp(func(err xerror.XErr) {
+		gErr = err.WrapF("caller: %s args: %v", callerWithFunc(fn), args)
+	})
 
-	xerror.Assert(fn.IsZero(), "[fn] is nil")
+	xerror.Assert(fn.IsNil(), "[fn] is nil")
 
-	return fn.Call(args)
+	return fn.Call(args), nil
 }
 
 func (x *dix) getValue(tye key, name group) reflect.Value {
@@ -123,20 +125,25 @@ func (x *dix) dixFunc(data reflect.Value) (err error) {
 			for i := 0; i < inTye.NumField(); i++ {
 				feTye := inTye.Field(i)
 
-				if getIndirectType(feTye.Type).Kind() == reflect.Interface {
-					nd, err := newNode(x, data)
-					xerror.Panic(err)
-					x.setAbcProvider(getIndirectType(feTye.Type), x.getNS(feTye), nd)
+				if !x.hasNS(feTye) {
 					continue
 				}
 
-				if feTye.Type.Kind() != reflect.Ptr && feTye.Type.Kind() != reflect.Interface {
+				var kind = feTye.Type.Kind()
+				if kind != reflect.Ptr && kind != reflect.Interface {
 					continue
 				}
+
+				var ns = x.getNS(feTye)
 
 				nd, err := newNode(x, data)
 				xerror.Panic(err)
-				x.setProvider(getIndirectType(feTye.Type), x.getNS(feTye), nd)
+
+				if kind == reflect.Interface {
+					x.setAbcProvider(getIndirectType(feTye.Type), ns, nd)
+				} else {
+					x.setProvider(getIndirectType(feTye.Type), ns, nd)
+				}
 			}
 		default:
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
@@ -190,12 +197,14 @@ func (x *dix) dix(params ...interface{}) (err error) {
 
 	for _, param := range params {
 		vp := reflect.ValueOf(param)
-		xerror.Assert(!vp.IsValid() || vp.IsZero(), "[params] should not be invalid or nil")
+		xerror.Assert(!vp.IsValid() || vp.IsZero(), "[params] [%#v] should not be invalid or nil", param)
 
 		var values = make(map[group][]reflect.Type)
 
 		typ := vp.Type()
 		switch typ.Kind() {
+		case reflect.Interface:
+			xerror.Panic(x.dixInterface(values, vp))
 		case reflect.Ptr:
 			xerror.Panic(x.dixPtr(values, vp))
 		case reflect.Func:
@@ -211,18 +220,37 @@ func (x *dix) dix(params ...interface{}) (err error) {
 		for gup, vas := range values {
 			for i := range vas {
 				getTy := getIndirectType(vas[i])
-				for _, n := range x.providers[getTy][gup] {
-					xerror.Panic(n.call())
+
+				for k, gNodes := range x.providers {
+					// 类型相同
+					if k == getTy && gNodes != nil {
+						for _, v1 := range gNodes[gup] {
+							xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+						}
+					}
+
+					// 实现接口
+					if getTy.Kind() == reflect.Interface && !reflect.New(k).Type().Implements(getTy) {
+						for _, v1 := range gNodes[gup] {
+							xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+						}
+					}
 				}
 
 				// interface
-				for t, mapNodes := range x.abcProviders {
-					if !reflect.New(getTy).Type().Implements(t) {
-						continue
+				for k, gNodes := range x.abcProviders {
+					// 类型相同
+					if k == getTy && gNodes != nil {
+						for _, v1 := range gNodes[gup] {
+							xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+						}
 					}
 
-					for _, n := range mapNodes[gup] {
-						xerror.Panic(n.call())
+					// 实现接口
+					if getTy.Kind() == reflect.Interface && reflect.New(getTy).Type().Implements(k) {
+						for _, v1 := range gNodes[gup] {
+							xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+						}
 					}
 				}
 			}
@@ -236,8 +264,23 @@ func (x *dix) graph() string {
 	b := &bytes.Buffer{}
 	fPrintln(b, "digraph G {")
 	fPrintln(b, "\tsubgraph cluster_0 {")
-	fPrintln(b, "\t\tlabel=nodes")
+	fPrintln(b, "\t\tlabel=providers")
 	for k, vs := range x.providers {
+		for k1, v1 := range vs {
+			for i := range v1 {
+				fn := callerWithFunc(v1[i].fn)
+				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
+				for _, v2 := range v1[i].outputType {
+					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
+				}
+			}
+		}
+	}
+	fPrintln(b, "\t}")
+
+	fPrintln(b, "\tsubgraph cluster_2 {")
+	fPrintln(b, "\t\tlabel=abc_providers")
+	for k, vs := range x.abcProviders {
 		for k1, v1 := range vs {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
@@ -255,21 +298,6 @@ func (x *dix) graph() string {
 	for k, v := range x.values {
 		for k1, v1 := range v {
 			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, v1.String()))
-		}
-	}
-	fPrintln(b, "\t}")
-
-	fPrintln(b, "\tsubgraph cluster_2 {")
-	fPrintln(b, "\t\tlabel=abc_nodes")
-	for k, vs := range x.abcProviders {
-		for k1, v1 := range vs {
-			for i := range v1 {
-				fn := callerWithFunc(v1[i].fn)
-				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
-				}
-			}
 		}
 	}
 	fPrintln(b, "\t}")

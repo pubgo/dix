@@ -13,27 +13,34 @@ func (x *dix) dixMap(values map[group][]reflect.Type, data interface{}) error {
 		return xerror.New("the map key should be string type")
 	}
 
-	iter := val.MapRange()
-	for iter.Next() {
-		if iter.Value().Type().Kind() != reflect.Ptr {
-			return xerror.New("the map value should be Ptr type")
+	next := val.MapRange()
+	for next.Next() {
+		var kind = next.Value().Type().Kind()
+		if kind != reflect.Ptr && kind != reflect.Interface {
+			return xerror.New("the map value should be Ptr or Interface type")
 		}
 
-		k := iter.Key().String()
+		k := next.Key().String()
 		if k == "" {
 			return xerror.New("map key is null")
 		}
 
-		if x.isNil(iter.Value()) {
+		if x.isNil(next.Value()) {
 			return xerror.Fmt("map value is nil, key:%s", k)
 		}
 
-		if ttk := x.getAbcType(getIndirectType(iter.Value().Type())); ttk != nil {
-			x.setAbcValue(ttk, k, getIndirectType(iter.Value().Type()))
+		var tye = getIndirectType(next.Value().Type())
+
+		if kind == reflect.Ptr {
+			if ttk := x.getAbcType(tye); ttk != nil {
+				x.setAbcValue(ttk, k, tye)
+			}
+		} else {
+			x.setAbcValue(tye, k, tye)
 		}
 
-		x.setValue(getIndirectType(iter.Value().Type()), k, iter.Value())
-		values[k] = append(values[k], iter.Value().Type())
+		x.setValue(tye, k, next.Value())
+		values[k] = append(values[k], next.Value().Type())
 	}
 
 	return nil
@@ -44,21 +51,38 @@ func (x *dix) dixStruct(values map[group][]reflect.Type, data interface{}) error
 	tye := val.Type()
 
 	for i := 0; i < tye.NumField(); i++ {
-		if tye.Field(i).Type.Kind() != reflect.Ptr {
-			return xerror.New("the struct field should be Ptr type")
+		kind := tye.Field(i).Type.Kind()
+		if kind != reflect.Ptr && kind != reflect.Interface {
+			return xerror.New("the struct field should be Ptr or Interface type")
 		}
 
 		if x.isNil(val.Field(i)) {
 			return xerror.New("struct field data is nil")
 		}
 
-		if ttk := x.getAbcType(getIndirectType(tye.Field(i).Type)); ttk != nil {
-			x.setAbcValue(ttk, x.getNS(tye.Field(i)), getIndirectType(tye.Field(i).Type))
+		ty := getIndirectType(tye.Field(i).Type)
+
+		if kind == reflect.Ptr {
+			if ttk := x.getAbcType(ty); ttk != nil {
+				x.setAbcValue(ttk, x.getNS(tye.Field(i)), ty)
+			}
+		} else {
+			x.setAbcValue(ty, x.getNS(tye.Field(i)), ty)
 		}
-		x.setValue(getIndirectType(tye.Field(i).Type), x.getNS(tye.Field(i)), val.Field(i))
+
+		x.setValue(ty, x.getNS(tye.Field(i)), val.Field(i))
+
 		values[x.getNS(tye.Field(i))] = append(values[x.getNS(tye.Field(i))], val.Field(i).Type())
 	}
 
+	return nil
+}
+
+func (x *dix) dixInterface(values map[group][]reflect.Type, val reflect.Value) error {
+	tye := getIndirectType(val.Type())
+	x.setAbcValue(tye, _default, tye)
+	x.setValue(tye, _default, val)
+	values[_default] = append(values[_default], val.Type())
 	return nil
 }
 

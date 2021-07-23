@@ -73,7 +73,7 @@ func equal(x, y []reflect.Value) bool {
 			return false
 		}
 
-		if x[i].Pointer() != y[i].Pointer() {
+		if x[i] != y[i] {
 			return false
 		}
 	}

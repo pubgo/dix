@@ -83,6 +83,38 @@ func init() {
 	}))
 }
 
+type M2 interface {
+	A()
+}
+
+type m22 struct {
+	l *log.Logger
+}
+
+func (t *m22) A() {
+	t.l.Println("AAA")
+}
+
+func NewM22(l *log.Logger) M2 {
+	return &m22{l: l}
+}
+
+func init() {
+	xerror.Exit(dix.Dix(func(l *log.Logger) (map[string]M2, error) {
+		l.Println("m22 start")
+		return map[string]M2{"hello": NewM22(l)}, nil
+	}))
+
+	type nss struct {
+		M2 M2 `dix:"hello"`
+	}
+
+	xerror.Exit(dix.Dix(func(l nss) {
+		log.Println("nss start")
+		l.M2.A()
+	}))
+}
+
 func main() {
 	defer xerror.RespExit()
 
