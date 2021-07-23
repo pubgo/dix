@@ -11,8 +11,7 @@ import (
 	"github.com/pubgo/xerror"
 )
 
-type m11 struct {
-}
+type m11 struct{}
 
 func (t *m11) Hello1() {
 	fmt.Println("Hello1")
@@ -52,21 +51,21 @@ func (MM) Hello() {
 }
 
 func init() {
-	xerror.Panic(dix.Dix(func(h *testHello) {
+	xerror.Panic(dix.Provider(func(h *testHello) {
 		fmt.Println("h *testHello")
 	}))
 
-	xerror.Exit(dix.Dix(func(h Hello) {
+	xerror.Exit(dix.Provider(func(h Hello) {
 		h.Hello()
 	}))
 
-	xerror.Exit(dix.Dix(func(cfg MM) (*log.Logger, error) {
+	xerror.Exit(dix.Provider(func(cfg MM) (*log.Logger, error) {
 		fmt.Println("cfg *Config")
 		fmt.Println(cfg.Cfg)
 		return log.New(os.Stdout, cfg.Cfg.Prefix, log.Llongfile), nil
 	}))
 
-	xerror.Exit(dix.Dix(func(l *log.Logger) {
+	xerror.Exit(dix.Provider(func(l *log.Logger) {
 		fmt.Println(l)
 		l.Print("You've been invoked1")
 	}))
@@ -76,7 +75,7 @@ func init() {
 		H Hello       `dix:"test"`
 	}
 
-	xerror.Exit(dix.Dix(func(l ll) {
+	xerror.Exit(dix.Provider(func(l ll) {
 		fmt.Println(l)
 		l.L.Print("You've been invoked2")
 		l.H.Hello()
@@ -100,7 +99,7 @@ func NewM22(l *log.Logger) M2 {
 }
 
 func init() {
-	xerror.Exit(dix.Dix(func(l *log.Logger) (map[string]M2, error) {
+	xerror.Exit(dix.Provider(func(l *log.Logger) (map[string]M2, error) {
 		l.Println("m22 start")
 		return map[string]M2{"hello": NewM22(l)}, nil
 	}))
@@ -109,9 +108,13 @@ func init() {
 		M2 M2 `dix:"hello"`
 	}
 
-	xerror.Exit(dix.Dix(func(l nss) {
+	xerror.Exit(dix.Provider(func(l nss) {
 		log.Println("nss start")
 		l.M2.A()
+	}))
+
+	xerror.Exit(dix.Provider(func(*dix.Go) {
+		log.Println("go go go")
 	}))
 }
 
@@ -122,13 +125,13 @@ func main() {
 	for {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
-		xerror.Panic(dix.Dix(map[string]*Config{"test": &cfg}))
+		xerror.Panic(dix.Provider(map[string]*Config{"test": &cfg}))
 		fmt.Printf("cfg: %#v\n", cfg)
 
 		fmt.Println(dix.Graph())
 		fmt.Print("==================================================================================\n")
 		time.Sleep(time.Second)
-		xerror.Exit(dix.Dix(&testHello{i: i}))
+		xerror.Exit(dix.Provider(&testHello{i: i}))
 		fmt.Println(dix.Graph())
 		//time.Sleep(time.Second)
 		var log1 *log.Logger
@@ -151,7 +154,7 @@ func main() {
 		struct1.Struct1.Hello()
 		fmt.Println(struct1.MM)
 
-		xerror.Panic(dix.Dix(&m11{}))
+		xerror.Panic(dix.Provider(&m11{}))
 		fmt.Println(dix.Graph())
 
 		var mmm struct {
@@ -159,6 +162,8 @@ func main() {
 		}
 		xerror.Panic(dix.Invoke(&mmm))
 		mmm.M1.Hello1()
+
+		xerror.Panic(dix.Start())
 		i++
 	}
 }
