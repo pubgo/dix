@@ -247,7 +247,7 @@ func (x *dix) dix(params ...interface{}) (err error) {
 					}
 
 					// 实现接口
-					if getTy.Kind() == reflect.Interface && reflect.New(getTy).Type().Implements(k) {
+					if reflect.New(getTy).Type().Implements(k) {
 						for _, v1 := range gNodes[gup] {
 							xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
 						}
