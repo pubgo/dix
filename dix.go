@@ -184,7 +184,7 @@ func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
 	case reflect.Interface:
 		xerror.Panic(x.dixInterfaceInvoke(vp, ns))
 	default:
-		return xerror.Fmt("invoke type kind error, (kind %v)", typ.Kind())
+		return xerror.Fmt("invoke type kind(%v) error", typ.Kind())
 	}
 
 	return nil

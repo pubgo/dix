@@ -15,16 +15,9 @@ func isError(t reflect.Type) bool {
 	return t.Implements(errType)
 }
 
-func isDoublePtr(tpy reflect.Type) bool {
-	if isElem(tpy) {
-		return isElem(tpy.Elem())
-	}
-	return false
-}
-
 func isElem(tye reflect.Type) bool {
 	switch tye.Kind() {
-	case reflect.Chan, reflect.Map, reflect.Ptr, reflect.Array, reflect.Slice:
+	case reflect.Ptr:
 		return true
 	default:
 		return false

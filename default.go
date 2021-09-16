@@ -27,6 +27,13 @@ func Json() map[string]interface{} { return _dix.json() }
 // New dix new
 func New(opts ...dix_opts.Option) *dix { return newDix(opts...) }
 
-type Go struct{}
+type Resource struct{}
 
-func Start() error { return Provider(&Go{}) }
+func FireResource() error { return _dix.Dix(&Resource{}) }
+func ProviderResource(data ...func(_ *Resource) (interface{}, error)) error {
+	var dataList []interface{}
+	for i := range data {
+		dataList = append(dataList, data[i])
+	}
+	return _dix.Dix(dataList...)
+}

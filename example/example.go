@@ -113,7 +113,7 @@ func init() {
 		l.M2.A()
 	}))
 
-	xerror.Exit(dix.Provider(func(*dix.Go) {
+	xerror.Exit(dix.Provider(func(*dix.Resource) {
 		log.Println("go go go")
 	}))
 }
@@ -163,7 +163,7 @@ func main() {
 		xerror.Panic(dix.Invoke(&mmm))
 		mmm.M1.Hello1()
 
-		xerror.Panic(dix.Start())
+		xerror.Panic(dix.FireResource())
 		i++
 	}
 }
