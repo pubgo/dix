@@ -432,8 +432,12 @@ func newDix(opts ...dix_opts.Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data ...interface{}) error { return x.dix(data...) }
+func (x *dix) Dix(data ...interface{}) error      { return x.dix(data...) }
+func (x *dix) Provider(data ...interface{}) error { return x.dix(data...) }
 func (x *dix) Invoke(data interface{}, namespaces ...string) error {
+	return x.invoke(data, namespaces...)
+}
+func (x *dix) Inject(data interface{}, namespaces ...string) error {
 	return x.invoke(data, namespaces...)
 }
 func (x *dix) Init(opts ...dix_opts.Option) error { return x.init(opts...) }

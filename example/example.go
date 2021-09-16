@@ -135,11 +135,11 @@ func main() {
 		fmt.Println(dix.Graph())
 		//time.Sleep(time.Second)
 		var log1 *log.Logger
-		xerror.Panic(dix.Invoke(&log1))
+		xerror.Panic(dix.Inject(&log1))
 		fmt.Printf("log1: %#v\n", log1)
 
 		var cfg1 *Config
-		xerror.Panic(dix.Invoke(&cfg1, "test"))
+		xerror.Panic(dix.Inject(&cfg1, "test"))
 		fmt.Printf("cfg1: %#v\n", cfg1)
 
 		// 接口类型
@@ -150,7 +150,7 @@ func main() {
 			MM      string
 		}
 		var struct1 = &nn{MM: "ssss"}
-		xerror.Panic(dix.Invoke(struct1))
+		xerror.Panic(dix.Inject(struct1))
 		struct1.Struct1.Hello()
 		fmt.Println(struct1.MM)
 
@@ -160,7 +160,7 @@ func main() {
 		var mmm struct {
 			M1 M1 `dix:""`
 		}
-		xerror.Panic(dix.Invoke(&mmm))
+		xerror.Panic(dix.Inject(&mmm))
 		mmm.M1.Hello1()
 
 		xerror.Panic(dix.FireResource())
