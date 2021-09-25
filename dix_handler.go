@@ -118,7 +118,7 @@ func (x *dix) dixPtrInvoke(val reflect.Value, ns string) (err error) {
 }
 
 func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
-	defer xerror.RespExit()
+	defer xerror.RespErr(&err)
 
 	tye := val.Elem().Type()
 

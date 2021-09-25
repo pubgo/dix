@@ -428,7 +428,7 @@ func newDix(opts ...dix_opts.Option) *dix {
 		},
 	}
 
-	xerror.Exit(c.init(opts...))
+	xerror.Panic(c.init(opts...))
 	return c
 }
 
