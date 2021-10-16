@@ -190,6 +190,66 @@ func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
 	return nil
 }
 
+func (x *dix) dixNs(name string, param interface{}) (err error) {
+	defer xerror.RespErr(&err)
+
+	vp := reflect.ValueOf(param)
+	xerror.Assert(!vp.IsValid() || vp.IsZero(), "[params] [%#v] should not be invalid or nil", param)
+
+	var values = make(map[group][]reflect.Type)
+
+	typ := vp.Type()
+	switch typ.Kind() {
+	case reflect.Interface:
+		xerror.Panic(x.dixInterface(values, vp, name))
+	case reflect.Ptr:
+		xerror.Panic(x.dixPtr(values, vp))
+	default:
+		return xerror.Fmt("provide type kind error, (kind %v)", typ.Kind())
+	}
+
+	for gup, vas := range values {
+		for i := range vas {
+			getTy := getIndirectType(vas[i])
+
+			for k, gNodes := range x.providers {
+				// 类型相同
+				if k == getTy && gNodes != nil {
+					for _, v1 := range gNodes[gup] {
+						xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+					}
+				}
+
+				// 实现接口
+				if getTy.Kind() == reflect.Interface && !reflect.New(k).Type().Implements(getTy) {
+					for _, v1 := range gNodes[gup] {
+						xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+					}
+				}
+			}
+
+			// interface
+			for k, gNodes := range x.abcProviders {
+				// 类型相同
+				if k == getTy && gNodes != nil {
+					for _, v1 := range gNodes[gup] {
+						xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+					}
+				}
+
+				// 实现接口
+				if reflect.New(getTy).Type().Implements(k) {
+					for _, v1 := range gNodes[gup] {
+						xerror.ExitF(v1.call(), "fn:%s", callerWithFunc(v1.fn))
+					}
+				}
+			}
+		}
+	}
+
+	return
+}
+
 func (x *dix) dix(params ...interface{}) (err error) {
 	defer xerror.RespErr(&err)
 
@@ -432,8 +492,9 @@ func newDix(opts ...dix_opts.Option) *dix {
 	return c
 }
 
-func (x *dix) Dix(data ...interface{}) error      { return x.dix(data...) }
-func (x *dix) Provider(data ...interface{}) error { return x.dix(data...) }
+func (x *dix) Dix(data ...interface{}) error                  { return x.dix(data...) }
+func (x *dix) Provider(data ...interface{}) error             { return x.dix(data...) }
+func (x *dix) ProviderNs(name string, data interface{}) error { return x.dixNs(name, data) }
 func (x *dix) Invoke(data interface{}, namespaces ...string) error {
 	return x.invoke(data, namespaces...)
 }

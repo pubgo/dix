@@ -16,6 +16,9 @@ func Dix(data ...interface{}) error { return _dix.Dix(data...) }
 // Provider ...
 func Provider(data ...interface{}) error { return _dix.Provider(data...) }
 
+// ProviderNs ...
+func ProviderNs(name string, data interface{}) error { return _dix.ProviderNs(name, data) }
+
 // Invoke 注入对象
 // ns: namespace
 // Deprecated: use Inject instead

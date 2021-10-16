@@ -86,6 +86,14 @@ type M2 interface {
 	A()
 }
 
+type m222 struct {
+	l *log.Logger
+}
+
+func (t *m222) A() {
+	t.l.Println("AAA")
+}
+
 type m22 struct {
 	l *log.Logger
 }
@@ -122,15 +130,15 @@ func main() {
 	defer xerror.RespExit()
 
 	i := 0
-	for {
+	for range time.Tick(time.Second) {
 		var cfg Config
 		xerror.Exit(json.Unmarshal([]byte(fmt.Sprintf(`{"prefix": "[foo%d] "}`, i)), &cfg))
 		xerror.Panic(dix.Provider(map[string]*Config{"test": &cfg}))
 		fmt.Printf("cfg: %#v\n", cfg)
 
+		xerror.Exit(dix.ProviderNs("ss", &m222{}))
 		fmt.Println(dix.Graph())
 		fmt.Print("==================================================================================\n")
-		time.Sleep(time.Second)
 		xerror.Exit(dix.Provider(&testHello{i: i}))
 		fmt.Println(dix.Graph())
 		//time.Sleep(time.Second)

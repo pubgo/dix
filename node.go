@@ -136,7 +136,7 @@ func (n *node) call() (err error) {
 					return nil
 				}
 
-				xerror.TryThrow(func() { mt.Field(i).Set(val) }, "field: ", inType.Name(),".", field.Name)
+				xerror.TryThrow(func() { mt.Field(i).Set(val) }, "field: ", inType.Name(), ".", field.Name)
 
 				input = append(input, val)
 			}

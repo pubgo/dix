@@ -78,22 +78,32 @@ func (x *dix) dixStruct(values map[group][]reflect.Type, data interface{}) error
 	return nil
 }
 
-func (x *dix) dixInterface(values map[group][]reflect.Type, val reflect.Value) error {
+func (x *dix) dixInterface(values map[group][]reflect.Type, val reflect.Value, name ...string) error {
 	tye := getIndirectType(val.Type())
-	x.setAbcValue(tye, _default, tye)
-	x.setValue(tye, _default, val)
-	values[_default] = append(values[_default], val.Type())
+	var ns = _default
+	if len(name) > 0 && name[0] != "" {
+		ns = name[0]
+	}
+
+	x.setAbcValue(tye, ns, tye)
+	x.setValue(tye, ns, val)
+	values[ns] = append(values[ns], val.Type())
 	return nil
 }
 
-func (x *dix) dixPtr(values map[group][]reflect.Type, val reflect.Value) error {
-	tye := getIndirectType(val.Type())
-	if abcTy := x.getAbcType(tye); abcTy != nil {
-		x.setAbcValue(abcTy, _default, tye)
+func (x *dix) dixPtr(values map[group][]reflect.Type, val reflect.Value, name ...string) error {
+	var ns = _default
+	if len(name) > 0 && name[0] != "" {
+		ns = name[0]
 	}
 
-	x.setValue(tye, _default, val)
-	values[_default] = append(values[_default], val.Type())
+	tye := getIndirectType(val.Type())
+	if abcTy := x.getAbcType(tye); abcTy != nil {
+		x.setAbcValue(abcTy, ns, tye)
+	}
+
+	x.setValue(tye, ns, val)
+	values[ns] = append(values[ns], val.Type())
 	return nil
 }
 
