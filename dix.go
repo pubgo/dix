@@ -203,7 +203,7 @@ func (x *dix) dixNs(name string, param interface{}) (err error) {
 	case reflect.Interface:
 		xerror.Panic(x.dixInterface(values, vp, name))
 	case reflect.Ptr:
-		xerror.Panic(x.dixPtr(values, vp))
+		xerror.Panic(x.dixPtr(values, vp, name))
 	default:
 		return xerror.Fmt("provide type kind error, (kind %v)", typ.Kind())
 	}
