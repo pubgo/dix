@@ -109,36 +109,42 @@ func (x *dix) dixPtr(values map[group][]reflect.Type, val reflect.Value, name ..
 
 func (x *dix) dixInterfaceInvoke(val reflect.Value, ns string) (err error) {
 	defer xerror.RespErr(&err)
-
 	tye := getIndirectType(val.Type())
 	var vv = x.getAbcValue(tye, ns)
 	xerror.Assert(!vv.IsValid() || vv.IsNil(), "namespace: %s not found", ns)
-	val.Elem().Set(vv)
+	val.Set(vv)
 	return nil
 }
 
 func (x *dix) dixPtrInvoke(val reflect.Value, ns string) (err error) {
 	defer xerror.RespErr(&err)
-
 	tye := getIndirectType(val.Type())
 	var vv = x.getValue(tye, ns)
 	xerror.Assert(!vv.IsValid() || vv.IsNil(), "namespace: %s not found", ns)
-	val.Elem().Set(vv)
+	val.Set(vv)
 	return nil
 }
 
 func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
 	defer xerror.RespErr(&err)
 
-	tye := val.Elem().Type()
-
+	tye := val.Type()
 	for i := 0; i < tye.NumField(); i++ {
-		var kind = tye.Field(i).Type.Kind()
-
-		// 结构体tag:dix, 类型为interface,ptr
-		if !x.hasNS(tye.Field(i)) ||
-			kind != reflect.Ptr && kind != reflect.Interface {
+		field := val.Field(i)
+		if !field.CanSet() {
 			continue
+		}
+
+		var kind = field.Type().Kind()
+
+		// 结构体tag:dix, 类型为interface,ptr,struct
+		if !x.hasNS(tye.Field(i)) ||
+			kind != reflect.Ptr && kind != reflect.Interface && kind != reflect.Struct {
+			continue
+		}
+
+		if kind == reflect.Struct {
+			return x.dixStructInvoke(field)
 		}
 
 		var ns = x.getNS(tye.Field(i))
@@ -150,8 +156,8 @@ func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
 			retVal = x.getAbcValue(getIndirectType(tye.Field(i).Type), ns)
 		}
 
-		xerror.Assert(!retVal.IsValid() || retVal.IsZero(), "value is nil, namespace:%s, field:%s", ns, tye.Field(i).Name)
-		val.Elem().Field(i).Set(retVal)
+		xerror.Assert(!retVal.IsValid() || retVal.IsNil(), "value is nil, namespace:%s, field:%s", ns, tye.Field(i).Name)
+		field.Set(retVal)
 	}
 
 	return nil

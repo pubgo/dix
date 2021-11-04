@@ -163,19 +163,19 @@ func (x *dix) init(opts ...dix_opts.Option) error {
 	return nil
 }
 
-func (x *dix) invoke(params interface{}, namespaces ...string) (err error) {
+func (x *dix) invoke(param interface{}, namespaces ...string) (err error) {
 	defer xerror.RespErr(&err)
 
+	vp := reflect.ValueOf(param)
+	xerror.Assert(vp.Kind() != reflect.Ptr, "param(%#v) should be ptr type", param)
+	vp = vp.Elem()
+
 	var ns = _default
-	if len(namespaces) > 0 {
+	if len(namespaces) > 0 && namespaces[0] != "" {
 		ns = namespaces[0]
 	}
 
-	vp := reflect.ValueOf(params)
-
-	xerror.Assert(vp.Type().Kind() != reflect.Ptr, "params(%#v) should be ptr type", params)
-
-	typ := vp.Elem().Type()
+	typ := vp.Type()
 	switch typ.Kind() {
 	case reflect.Ptr:
 		xerror.PanicF(x.dixPtrInvoke(vp, ns), "type: [%s] [%s]", typ.Name(), typ.String())

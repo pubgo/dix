@@ -24,6 +24,13 @@ func isElem(tye reflect.Type) bool {
 	}
 }
 
+func indirect(v reflect.Value) reflect.Value {
+	for v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	return v
+}
+
 func getIndirectType(tye reflect.Type) reflect.Type {
 	for isElem(tye) {
 		tye = tye.Elem()

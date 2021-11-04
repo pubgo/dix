@@ -120,10 +120,6 @@ func init() {
 		log.Println("nss start")
 		l.M2.A()
 	}))
-
-	xerror.Exit(dix.Provider(func(*dix.Resource) {
-		log.Println("go go go")
-	}))
 }
 
 func main() {
@@ -151,7 +147,7 @@ func main() {
 		fmt.Printf("cfg1: %#v\n", cfg1)
 
 		// 接口类型
-		//= &MM{Abc: "hello MM"}
+		// &MM{Abc: "hello MM"}
 
 		type nn struct {
 			Struct1 Hello `dix:""`
@@ -170,8 +166,6 @@ func main() {
 		}
 		xerror.Panic(dix.Inject(&mmm))
 		mmm.M1.Hello1()
-
-		xerror.Panic(dix.FireResource())
 		i++
 	}
 }
