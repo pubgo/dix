@@ -1,6 +1,7 @@
 package dix
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/pubgo/xerror"
@@ -30,6 +31,7 @@ func (n *node) returnedType() (map[group]key, error) {
 		case reflect.Ptr:
 			retType[_default] = getIndirectType(out)
 		case reflect.Map:
+			panic(fmt.Errorf("provider return type error, type=>%s kind=>%s", out.Name(), out.Kind().String()))
 			//next := v.MapRange()
 			//for next.Next() {
 			//	feTye := v.Type().Field(j)

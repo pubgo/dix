@@ -16,6 +16,7 @@ type Client struct {
 }
 
 type Handler struct {
+	// 如果是结构体，且tag为dix，那么，会检查结构体内部有指针或者接口属性，然后进行对象注入
 	Cli Client `dix:""`
 }
 
@@ -24,5 +25,5 @@ func main() {
 
 	var h Handler
 	xerror.Exit(dix.Inject(&h))
-	fmt.Println(h.Cli.Name)
+	fmt.Println(h.Cli.Name) // hello
 }
