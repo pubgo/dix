@@ -1,13 +1,6 @@
 package dix
 
-import (
-	"github.com/pubgo/dix/dix_opts"
-)
-
 var _dix = New()
-
-// Init ...
-func Init(opts ...dix_opts.Option) error { return _dix.Init(opts...) }
 
 // Dix ...
 // Deprecated: use Provider instead
@@ -35,4 +28,4 @@ func Graph() string { return _dix.graph() }
 func Json() map[string]interface{} { return _dix.json() }
 
 // New dix new
-func New(opts ...dix_opts.Option) *dix { return newDix(opts...) }
+func New(opts ...Option) *dix { return newDix(opts...) }

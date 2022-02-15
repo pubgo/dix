@@ -8,9 +8,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pubgo/dix/dix_opts"
 	"github.com/pubgo/xerror"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 const (
 	_default = group("default")
@@ -24,9 +27,10 @@ type (
 	value = reflect.Value
 )
 
-type dix struct {
-	opts dix_opts.Options
+type Option func(*Options)
+type Options struct{}
 
+type dix struct {
 	// providers中保存的是, 类型对应的providers
 	// provider的返回值是具体的值
 	providers map[key]map[group][]*node
@@ -85,10 +89,7 @@ func (x *dix) getNodes(tye key, name group) []*node {
 
 // isNil check whether params contain nil value
 func (x *dix) isNil(v reflect.Value) bool {
-	if !x.opts.NilAllowed {
-		return v.IsNil()
-	}
-	return false
+	return v.IsNil()
 }
 
 // 检测是否是否个接口的实现
@@ -149,17 +150,6 @@ func (x *dix) dixFunc(data reflect.Value) (err error) {
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
 		}
 	}
-	return nil
-}
-
-func (x *dix) init(opts ...dix_opts.Option) error {
-	var dixOpt = x.opts
-	for _, opt := range opts {
-		opt(&dixOpt)
-	}
-
-	// TODO check option
-	x.opts = dixOpt
 	return nil
 }
 
@@ -476,19 +466,13 @@ func (x *dix) setAbcProvider(k key, name group, nd *node) {
 	}
 }
 
-func newDix(opts ...dix_opts.Option) *dix {
+func newDix(opts ...Option) *dix {
 	c := &dix{
 		providers:    make(map[key]map[group][]*node),
 		abcProviders: make(map[key]map[group][]*node),
 		values:       make(map[key]map[group]value),
 		abcValues:    make(map[key]map[group]key),
-		opts: dix_opts.Options{
-			Rand:       rand.New(rand.NewSource(time.Now().UnixNano())),
-			NilAllowed: false,
-		},
 	}
-
-	xerror.Panic(c.init(opts...))
 	return c
 }
 
@@ -501,6 +485,5 @@ func (x *dix) Invoke(data interface{}, namespaces ...string) error {
 func (x *dix) Inject(data interface{}, namespaces ...string) error {
 	return x.invoke(data, namespaces...)
 }
-func (x *dix) Init(opts ...dix_opts.Option) error { return x.init(opts...) }
-func (x *dix) Graph() string                      { return x.graph() }
-func (x *dix) Json() map[string]interface{}       { return x.json() }
+func (x *dix) Graph() string                { return x.graph() }
+func (x *dix) Json() map[string]interface{} { return x.json() }
