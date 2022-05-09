@@ -1,9 +1,9 @@
 package dix
 
 import (
-	"bytes"
 	"fmt"
 	"math/rand"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -310,110 +310,6 @@ func (x *dix) dix(params ...interface{}) (err error) {
 	return nil
 }
 
-func (x *dix) graph() string {
-	b := &bytes.Buffer{}
-	fPrintln(b, "digraph G {")
-	fPrintln(b, "\tsubgraph cluster_0 {")
-	fPrintln(b, "\t\tlabel=providers")
-	for k, vs := range x.providers {
-		for k1, v1 := range vs {
-			for i := range v1 {
-				fn := callerWithFunc(v1[i].fn)
-				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
-				}
-			}
-		}
-	}
-	fPrintln(b, "\t}")
-
-	fPrintln(b, "\tsubgraph cluster_2 {")
-	fPrintln(b, "\t\tlabel=abc_providers")
-	for k, vs := range x.abcProviders {
-		for k1, v1 := range vs {
-			for i := range v1 {
-				fn := callerWithFunc(v1[i].fn)
-				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
-					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
-				}
-			}
-		}
-	}
-	fPrintln(b, "\t}")
-
-	fPrintln(b, "\tsubgraph cluster_1 {")
-	fPrintln(b, "\t\tlabel=values")
-	for k, v := range x.values {
-		for k1, v1 := range v {
-			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, v1.String()))
-		}
-	}
-	fPrintln(b, "\t}")
-
-	fPrintln(b, "\tsubgraph cluster_3 {")
-	fPrintln(b, "\t\tlabel=abc_values")
-	for k, v := range x.abcValues {
-		for k1, v1 := range v {
-			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, v1.String()))
-		}
-	}
-	fPrintln(b, "\t}")
-	fPrintln(b, "}")
-
-	return b.String()
-}
-
-func (x *dix) json() map[string]interface{} {
-	var nodes []string
-	var values []string
-	var abcNodes []string
-	var abcValues []string
-	for k, vs := range x.providers {
-		for k1, v1 := range vs {
-			for i := range v1 {
-				fn := callerWithFunc(v1[i].fn)
-				nodes = append(nodes, fmt.Sprintf(`%s -- %s -- %s`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
-					nodes = append(nodes, fmt.Sprintf(`%s -- %s -- %s -- %s`, k, k1, fn, v2))
-				}
-			}
-		}
-	}
-
-	for k, v := range x.values {
-		for k1, v1 := range v {
-			values = append(values, fmt.Sprintf(`%s -- %s -- %s`, k, k1, v1.String()))
-		}
-	}
-
-	for k, vs := range x.abcProviders {
-		for k1, v1 := range vs {
-			for i := range v1 {
-				fn := callerWithFunc(v1[i].fn)
-				abcNodes = append(abcNodes, fmt.Sprintf(`%s -- %s -- %s`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
-					abcNodes = append(abcNodes, fmt.Sprintf(`%s -- %s -- %s -- %s`, k, k1, fn, v2))
-				}
-			}
-		}
-	}
-
-	for k, v := range x.abcValues {
-		for k1, v1 := range v {
-			abcValues = append(abcValues, fmt.Sprintf(`%s -- %s -- %s`, k, k1, v1.String()))
-		}
-	}
-
-	return map[string]interface{}{
-		"nodes":      nodes,
-		"values":     values,
-		"abc_Nodes":  abcNodes,
-		"abc_Values": abcValues,
-	}
-}
-
 // 非接口类型map中保存值
 func (x *dix) setValue(k key, name group, v value) {
 	if x.values[k] == nil {
@@ -435,6 +331,24 @@ func (x *dix) setAbcValue(k key, name group, v key) {
 func (x *dix) hasNS(field reflect.StructField) bool {
 	_, ok := field.Tag.Lookup(_tagName)
 	return ok
+}
+
+func (x *dix) getWithVal(field reflect.StructField, val1 interface{}) string {
+	// 如果结构体属性存在tag, 那么就获取tag
+	// 不存在tag或者tag为空, 那么tag默认为default
+	val, ok := field.Tag.Lookup(_tagName)
+	val = strings.TrimSpace(val)
+	if ok && val != "" {
+		return os.Expand(val, func(s string) string {
+			if !strings.HasPrefix(s, ".") {
+				return os.Getenv(strings.ToUpper(s))
+			}
+
+			return templates(fmt.Sprintf("${%s}", s), val1)
+		})
+	}
+
+	return _default
 }
 
 // 获取数据的分组或者namespace

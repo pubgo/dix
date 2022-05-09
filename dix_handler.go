@@ -147,7 +147,7 @@ func (x *dix) dixStructInvoke(val reflect.Value) (err error) {
 			return x.dixStructInvoke(field)
 		}
 
-		var ns = x.getNS(tye.Field(i))
+		var ns = x.getWithVal(tye.Field(i), val.Interface())
 
 		var retVal reflect.Value
 		if kind == reflect.Ptr {

@@ -1,12 +1,16 @@
 package dix
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
+	"text/template"
+
+	"github.com/pubgo/xerror"
 )
 
 var errType = reflect.TypeOf((*error)(nil)).Elem()
@@ -71,4 +75,12 @@ func equal(x, y []reflect.Value) bool {
 		}
 	}
 	return true
+}
+
+func templates(s string, val interface{}) string {
+	tpl, err := template.New("main").Delims("${", "}").Parse(s)
+	xerror.Panic(err)
+	var buf = bytes.NewBuffer(nil)
+	xerror.Panic(tpl.Execute(buf, val))
+	return buf.String()
 }
