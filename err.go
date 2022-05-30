@@ -1,7 +1,13 @@
 package dix
 
+import "fmt"
+
 type Err struct {
 	Err    error
 	Msg    string
 	Detail string
+}
+
+func (e Err) Error() string {
+	return fmt.Sprintf("%s, err=%v detail=%s", e.Msg, e.Err, e.Detail)
 }

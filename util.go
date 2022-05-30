@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
-
-	"github.com/pubgo/xerror"
 )
 
 var errType = reflect.TypeOf((*error)(nil)).Elem()
@@ -60,29 +58,18 @@ func callerWithFunc(fn reflect.Value) string {
 	return buf.String()
 }
 
-func equal(x, y []reflect.Value) bool {
-	if len(x) != len(y) {
-		return false
-	}
-
-	for i := range x {
-		if x[i].IsNil() || y[i].IsNil() {
-			return false
-		}
-
-		if x[i] != y[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func templates(s string, val interface{}) string {
+func templates(s string, val interface{}) (string, error) {
 	tpl, err := template.New("main").Delims("${", "}").Parse(s)
-	xerror.Panic(err)
+	if err != nil {
+		return "", err
+	}
+
 	var buf = bytes.NewBuffer(nil)
-	xerror.Panic(tpl.Execute(buf, val))
-	return buf.String()
+	if err := tpl.Execute(buf, val); err != nil {
+		return "", err
+	}
+
+	return buf.String(), nil
 }
 
 func makeMap(data map[string]reflect.Value) reflect.Value {
