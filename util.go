@@ -84,3 +84,33 @@ func templates(s string, val interface{}) string {
 	xerror.Panic(tpl.Execute(buf, val))
 	return buf.String()
 }
+
+func MakeMap1(data interface{}) reflect.Value {
+	var v = reflect.ValueOf(data)
+	var kt = v.Type().Key()
+	var vt = v.Type().Elem()
+
+	var mapVal = reflect.MakeMap(reflect.MapOf(kt, vt))
+	for _, k := range v.MapKeys() {
+		mapVal.SetMapIndex(k, v.MapIndex(k))
+	}
+	return mapVal
+}
+
+func MakeMap(data map[string]reflect.Value) reflect.Value {
+	if len(data) == 0 {
+		return reflect.Value{}
+	}
+
+	var kt reflect.Type
+	for k := range data {
+		kt = data[k].Type()
+		break
+	}
+
+	var mapVal = reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), kt))
+	for k, v := range data {
+		mapVal.SetMapIndex(reflect.ValueOf(k), v)
+	}
+	return mapVal
+}

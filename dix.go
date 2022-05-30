@@ -31,11 +31,12 @@ type Option func(*Options)
 type Options struct{}
 
 type dix struct {
-	invokes []*node
+	invokes   []*node
+	providers map[reflect.Type][]*node
 
 	// providers中保存的是, 类型对应的providers
 	// provider的返回值是具体的值
-	providers map[key]map[group][]*node
+	providers1 map[key]map[group][]*node
 
 	// abcProviders中保存的是, 类型对应的providers
 	// provider的返回值是接口的实现
@@ -83,10 +84,10 @@ func (x *dix) getAbcValue(tye key, name group) reflect.Value {
 }
 
 func (x *dix) getNodes(tye key, name group) []*node {
-	if x.providers[tye] == nil {
+	if x.providers1[tye] == nil {
 		return nil
 	}
-	return x.providers[tye][name]
+	return x.providers1[tye][name]
 }
 
 // isNil check whether params contain nil value
@@ -158,8 +159,16 @@ func (x *dix) dixFunc(data reflect.Value) (err error) {
 func (x *dix) invoke1(param interface{}, options ...Option) (err error) {
 	defer xerror.RespErr(&err)
 
+	xerror.Assert(param == nil, "param is nil")
+
 	vp := reflect.ValueOf(param)
+	tp := vp.Type()
+
 	xerror.Assert(vp.Kind() != reflect.Func, "param(%#v) should be func type", param)
+	xerror.Assert(vp.IsNil(), "param is nil")
+
+	xerror.Assert(tp.NumOut() != 0, "func output num should be zero")
+	xerror.Assert(tp.NumIn() == 0, "func output num should be zero")
 	vp = vp.Elem()
 
 	var ns = _default
@@ -177,6 +186,46 @@ func (x *dix) invoke1(param interface{}, options ...Option) (err error) {
 	}
 
 	return nil
+}
+
+func (x *dix) inject(param interface{}) {
+	xerror.Assert(param == nil, "param is nil")
+
+	vp := reflect.ValueOf(param)
+	tp := vp.Type()
+	xerror.Assert(vp.Kind() != reflect.Ptr, "param(%#v) should be func type", param)
+	xerror.Assert(vp.IsNil(), "param is nil")
+
+	for i := 0; i < tp.NumField(); i++ {
+		field := vp.Field(i)
+		if !field.CanSet() {
+			continue
+		}
+
+		var kind = field.Type().Kind()
+
+		// 结构体tag:dix, 类型为interface,ptr,struct
+		if !x.hasNS(tp.Field(i)) ||
+			kind != reflect.Ptr && kind != reflect.Interface && kind != reflect.Struct {
+			continue
+		}
+
+		if kind == reflect.Struct {
+			return x.dixStructInvoke(field)
+		}
+
+		var ns = x.getWithVal(tye.Field(i), val.Interface())
+
+		var retVal reflect.Value
+		if kind == reflect.Ptr {
+			retVal = x.getValue(getIndirectType(tye.Field(i).Type), ns)
+		} else {
+			retVal = x.getAbcValue(getIndirectType(tye.Field(i).Type), ns)
+		}
+
+		xerror.Assert(!retVal.IsValid() || retVal.IsNil(), "value is nil, namespace:%s, field:%s", ns, tye.Field(i).Name)
+		field.Set(retVal)
+	}
 }
 
 func (x *dix) invoke(param interface{}, namespaces ...string) (err error) {
@@ -228,7 +277,7 @@ func (x *dix) dixNs(name string, param interface{}) (err error) {
 		for i := range vas {
 			getTy := getIndirectType(vas[i])
 
-			for k, gNodes := range x.providers {
+			for k, gNodes := range x.providers1 {
 				// 类型相同
 				if k == getTy && gNodes != nil {
 					for _, v1 := range gNodes[gup] {
@@ -266,10 +315,55 @@ func (x *dix) dixNs(name string, param interface{}) (err error) {
 	return
 }
 
-func (x *dix) dix(params ...interface{}) (err error) {
+func (x *dix) register(param interface{}) {
+	xerror.Assert(param == nil, "param is null")
+
+	fnVal := reflect.ValueOf(param)
+	xerror.Assert(!fnVal.IsValid() || fnVal.IsZero(), "[params] [%#v] should not be invalid or nil", param)
+	xerror.Assert(fnVal.Kind() != reflect.Func, "param should be a function")
+
+	typ := fnVal.Type()
+	xerror.Assert(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
+	xerror.Assert(typ.NumOut() == 0, "the number of parameters should not be 0")
+	//xerror.Assert(typ.NumOut() > 0 && !isError(typ.Out(typ.NumOut()-1)), "the last returned value should be error type")
+
+	var n = new(node)
+	if typ.NumOut() != 0 {
+		n.output = new(outType)
+		var retTyp = typ.Out(0)
+		switch retTyp.Kind() {
+		case reflect.Map:
+			n.output.isMap = true
+			n.output.typ = retTyp.Elem()
+		case reflect.Ptr:
+			n.output.typ = retTyp
+		default:
+			panic(&Err{Msg: "ret type error", Detail: fmt.Sprintf("retTyp=%s", retTyp)})
+		}
+
+		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
+	} else {
+		x.invokes = append(x.invokes, n)
+	}
+
+	for i := 0; i < typ.NumIn(); i++ {
+		switch inTye := typ.In(i); inTye.Kind() {
+		case reflect.Interface, reflect.Ptr:
+			n.input = append(n.input, &inType{typ: inTye})
+		case reflect.Map:
+			n.input = append(n.input, &inType{typ: inTye, isMap: true})
+		default:
+			panic(&Err{Msg: "incorrect input parameter type error", Detail: fmt.Sprintf("inTye=%s", inTye)})
+		}
+	}
+}
+
+func (x *dix) dix(param ...interface{}) (err error) {
 	defer xerror.RespErr(&err)
 
-	xerror.Assert(len(params) == 0, "[params] should not be zero")
+	vp := reflect.ValueOf(param)
+	xerror.Assert(!vp.IsValid() || vp.IsZero(), "[params] [%#v] should not be invalid or nil", param)
+	xerror.Assert(vp.Kind() != reflect.Func, "param should be a function")
 
 	for _, param := range params {
 		vp := reflect.ValueOf(param)
@@ -297,7 +391,7 @@ func (x *dix) dix(params ...interface{}) (err error) {
 			for i := range vas {
 				getTy := getIndirectType(vas[i])
 
-				for k, gNodes := range x.providers {
+				for k, gNodes := range x.providers1 {
 					// 类型相同
 					if k == getTy && gNodes != nil {
 						for _, v1 := range gNodes[gup] {
@@ -391,10 +485,10 @@ func (x *dix) getNS(field reflect.StructField) string {
 }
 
 func (x *dix) setProvider(k key, name group, nd *node) {
-	if x.providers[k] == nil {
-		x.providers[k] = map[group][]*node{name: {nd}}
+	if x.providers1[k] == nil {
+		x.providers1[k] = map[group][]*node{name: {nd}}
 	} else {
-		x.providers[k][name] = append(x.providers[k][name], nd)
+		x.providers1[k][name] = append(x.providers1[k][name], nd)
 	}
 }
 
@@ -408,7 +502,7 @@ func (x *dix) setAbcProvider(k key, name group, nd *node) {
 
 func newDix(opts ...Option) *dix {
 	c := &dix{
-		providers:    make(map[key]map[group][]*node),
+		providers1:   make(map[key]map[group][]*node),
 		abcProviders: make(map[key]map[group][]*node),
 		values:       make(map[key]map[group]value),
 		abcValues:    make(map[key]map[group]key),

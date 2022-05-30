@@ -7,16 +7,25 @@ import (
 	"github.com/pubgo/xerror"
 )
 
+type inType struct {
+	typ   reflect.Type
+	isMap bool
+}
+
+type outType struct {
+	typ   reflect.Type
+	isMap bool
+}
+
 type node struct {
-	c          *dix
-	fn         reflect.Value
-	input      []value
-	outputType map[group]key
+	fn     reflect.Value
+	input  []*inType
+	output *outType
 }
 
 func newNode(c *dix, data reflect.Value) (nd *node, err error) {
-	nd = &node{fn: data, c: c, outputType: make(map[group]key)}
-	nd.outputType, err = nd.returnedType()
+	nd = &node{fn: data, c: c, output: make(map[group]key)}
+	nd.output, err = nd.returnedType()
 	return
 }
 

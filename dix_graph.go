@@ -9,13 +9,13 @@ func (x *dix) graph() string {
 	b := &bytes.Buffer{}
 	fPrintln(b, "digraph G {")
 	fPrintln(b, "\tsubgraph cluster_0 {")
-	fPrintln(b, "\t\tlabel=providers")
-	for k, vs := range x.providers {
+	fPrintln(b, "\t\tlabel=providers1")
+	for k, vs := range x.providers1 {
 		for k1, v1 := range vs {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
 				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
+				for _, v2 := range v1[i].output {
 					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
 				}
 			}
@@ -30,7 +30,7 @@ func (x *dix) graph() string {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
 				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s"`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
+				for _, v2 := range v1[i].output {
 					fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> %s -> "%s" -> "%s"`, k, k1, fn, v2))
 				}
 			}
@@ -65,12 +65,12 @@ func (x *dix) json() map[string]interface{} {
 	var values []string
 	var abcNodes []string
 	var abcValues []string
-	for k, vs := range x.providers {
+	for k, vs := range x.providers1 {
 		for k1, v1 := range vs {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
 				nodes = append(nodes, fmt.Sprintf(`%s -- %s -- %s`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
+				for _, v2 := range v1[i].output {
 					nodes = append(nodes, fmt.Sprintf(`%s -- %s -- %s -- %s`, k, k1, fn, v2))
 				}
 			}
@@ -88,7 +88,7 @@ func (x *dix) json() map[string]interface{} {
 			for i := range v1 {
 				fn := callerWithFunc(v1[i].fn)
 				abcNodes = append(abcNodes, fmt.Sprintf(`%s -- %s -- %s`, k, k1, fn))
-				for _, v2 := range v1[i].outputType {
+				for _, v2 := range v1[i].output {
 					abcNodes = append(abcNodes, fmt.Sprintf(`%s -- %s -- %s -- %s`, k, k1, fn, v2))
 				}
 			}
