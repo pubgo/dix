@@ -31,6 +31,8 @@ type Option func(*Options)
 type Options struct{}
 
 type dix struct {
+	invokes []*node
+
 	// providers中保存的是, 类型对应的providers
 	// provider的返回值是具体的值
 	providers map[key]map[group][]*node
@@ -150,6 +152,30 @@ func (x *dix) dixFunc(data reflect.Value) (err error) {
 			return xerror.Fmt("incorrect input parameter type, got(%s)", inTye.Kind())
 		}
 	}
+	return nil
+}
+
+func (x *dix) invoke1(param interface{}, options ...Option) (err error) {
+	defer xerror.RespErr(&err)
+
+	vp := reflect.ValueOf(param)
+	xerror.Assert(vp.Kind() != reflect.Func, "param(%#v) should be func type", param)
+	vp = vp.Elem()
+
+	var ns = _default
+
+	typ := vp.Type()
+	switch typ.Kind() {
+	case reflect.Ptr:
+		xerror.PanicF(x.dixPtrInvoke(vp, ns), "type: [%s] [%s]", typ.Name(), typ.String())
+	case reflect.Struct:
+		xerror.Panic(x.dixStructInvoke(vp))
+	case reflect.Interface:
+		xerror.Panic(x.dixInterfaceInvoke(vp, ns))
+	default:
+		return xerror.Fmt("invoke type kind(%v) error", typ.Kind())
+	}
+
 	return nil
 }
 
