@@ -32,7 +32,8 @@ type Options struct{}
 
 type dix struct {
 	invokes   []*node
-	providers map[reflect.Type][]*node
+	providers map[key][]*node
+	objects   map[key]map[group]value
 
 	// providers中保存的是, 类型对应的providers
 	// provider的返回值是具体的值
@@ -188,6 +189,81 @@ func (x *dix) invoke1(param interface{}, options ...Option) (err error) {
 	return nil
 }
 
+func (x *dix) handleOutput(output []reflect.Value) map[group]value {
+	var rr = make(map[group]value)
+	var typ reflect.Type
+	switch output[0].Kind() {
+	case reflect.Map:
+		for _, k := range output[0].MapKeys() {
+			rr[k.String()] = output[0].MapIndex(k)
+		}
+		typ = output[0].Type().Elem()
+	default:
+		rr[_default] = output[0]
+		typ = output[0].Type()
+	}
+
+	for k, v := range rr {
+		if !v.IsValid() {
+			continue
+		}
+
+		if v.IsNil() {
+			continue
+		}
+
+		x.objects[typ][k] = v
+	}
+	return x.objects[typ]
+}
+
+func (x *dix) evalProvider(typ key) map[group]value {
+	switch typ.Kind() {
+	case reflect.Interface, reflect.Ptr:
+		if x.objects[typ] == nil {
+			x.objects[typ] = make(map[group]value)
+		}
+
+		if val := x.objects[typ]; val != nil {
+			return val
+		}
+
+		if len(x.providers[typ]) == 0 {
+			panic("typ providers not found")
+		}
+
+		var rr = make(map[group]value)
+		for _, n := range x.providers[typ] {
+			var input []reflect.Value
+			for i := range n.input {
+				valMap := x.evalProvider(n.input[i].typ)
+				if len(valMap) == 0 {
+					continue
+				}
+
+				if n.input[i].isMap {
+					input = append(input, makeMap(valMap))
+				} else {
+					input = append(input, valMap[_default])
+				}
+			}
+
+			for k, v := range x.handleOutput(n.fn.Call(input)) {
+				rr[k] = v
+			}
+		}
+
+		for k, v := range rr {
+			x.objects[typ][k] = v
+		}
+		return rr
+	case reflect.Map:
+		typ = typ.Elem()
+	default:
+		panic(&Err{Msg: "incorrect input parameter type error", Detail: fmt.Sprintf("inTye=%s", typ)})
+	}
+}
+
 func (x *dix) inject(param interface{}) {
 	xerror.Assert(param == nil, "param is nil")
 
@@ -202,29 +278,18 @@ func (x *dix) inject(param interface{}) {
 			continue
 		}
 
-		var kind = field.Type().Kind()
-
-		// 结构体tag:dix, 类型为interface,ptr,struct
-		if !x.hasNS(tp.Field(i)) ||
-			kind != reflect.Ptr && kind != reflect.Interface && kind != reflect.Struct {
-			continue
+		switch inTye := tp.In(i); inTye.Kind() {
+		case reflect.Interface, reflect.Ptr:
+			valMap := x.evalProvider(inTye)
+			if len(valMap) == 0 {
+				panic("inTye not found")
+			}
+			field.Set(valMap[_default])
+		case reflect.Map:
+			inTye = inTye.Elem()
+		default:
+			panic(&Err{Msg: "incorrect input parameter type error", Detail: fmt.Sprintf("inTye=%s", inTye)})
 		}
-
-		if kind == reflect.Struct {
-			return x.dixStructInvoke(field)
-		}
-
-		var ns = x.getWithVal(tye.Field(i), val.Interface())
-
-		var retVal reflect.Value
-		if kind == reflect.Ptr {
-			retVal = x.getValue(getIndirectType(tye.Field(i).Type), ns)
-		} else {
-			retVal = x.getAbcValue(getIndirectType(tye.Field(i).Type), ns)
-		}
-
-		xerror.Assert(!retVal.IsValid() || retVal.IsNil(), "value is nil, namespace:%s, field:%s", ns, tye.Field(i).Name)
-		field.Set(retVal)
 	}
 }
 

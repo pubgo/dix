@@ -7,7 +7,7 @@ import (
 )
 
 func TestMakeMap(t *testing.T) {
-	fmt.Println(MakeMap(map[string]reflect.Value{
+	fmt.Println(makeMap(map[string]reflect.Value{
 		"hello": reflect.ValueOf("sss"),
 	}).Interface())
 }
