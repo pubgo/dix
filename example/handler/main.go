@@ -6,6 +6,8 @@ import (
 	"os"
 
 	"github.com/pubgo/dix"
+
+	"github.com/pubgo/dix/internal/assert"
 )
 
 type Redis struct {
@@ -27,8 +29,14 @@ func main() {
 	dix.Register(func(l *log.Logger) map[string]*Redis {
 		l.Println("init redis")
 		return map[string]*Redis{
-			"default": &Redis{Name: "hello"},
-			"ns":      &Redis{Name: "hello1"},
+			"default": {Name: "hello"},
+		}
+	})
+
+	dix.Register(func(l *log.Logger) map[string]*Redis {
+		l.Println("init redis")
+		return map[string]*Redis{
+			"ns": {Name: "hello1"},
 		}
 	})
 
@@ -40,7 +48,8 @@ func main() {
 
 	var h = Handler{Name: "ns"}
 	dix.Inject(&h)
-	fmt.Println(h.Cli.Name)  // hello
-	fmt.Println(h.Cli1.Name) // hello
+	assert.Fmt(h.Cli.Name != "hello", "inject error")
+	assert.Fmt(h.Cli1.Name != "hello1", "inject error")
 	dix.Invoke()
+	fmt.Println(dix.Graph())
 }
