@@ -27,7 +27,7 @@ type dix struct {
 	objects   map[key]map[group]value
 }
 
-func (x *dix) isCycle() bool {
+func (x *dix) isCycle() (string, bool) {
 	var types = make(map[reflect.Type]map[reflect.Type]bool)
 	for _, nodes := range x.providers {
 		for _, n := range nodes {
@@ -66,7 +66,7 @@ func (x *dix) isCycle() bool {
 	}
 
 	if nodes.Len() == 0 {
-		return false
+		return "", false
 	}
 
 	var dep []string
@@ -75,8 +75,7 @@ func (x *dix) isCycle() bool {
 		nodes.Remove(nodes.Front())
 	}
 
-	fmt.Println(strings.Join(dep, " -> "))
-	return true
+	return strings.Join(dep, " -> "), true
 }
 
 func (x *dix) handleOutput(output []reflect.Value) map[group]value {
@@ -86,7 +85,11 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 	switch out.Kind() {
 	case reflect.Map:
 		for _, k := range out.MapKeys() {
-			rr[k.String()] = out.MapIndex(k)
+			var mapK = k.String()
+			if mapK == "" {
+				mapK = Default
+			}
+			rr[mapK] = out.MapIndex(k)
 		}
 		typ = out.Type().Elem()
 	default:
@@ -232,7 +235,7 @@ func (x *dix) inject(param interface{}) {
 			valMap := x.evalProvider(field.Type().Elem())
 			assert.Assert(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
-				Detail: fmt.Sprintf("type=%s", inTye),
+				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
 			field.Set(makeMap(valMap))
 		}
