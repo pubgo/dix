@@ -2,21 +2,20 @@ package dix
 
 var _dix = New()
 
-// Provider ...
-func Provider(data interface{}) error { return _dix.Provider(data) }
+// Register 注册provider和invoke
+func Register(data interface{}) { _dix.register(data) }
 
 // Inject 注入对象
-// ns: namespace
-func Inject(data interface{}, ns ...string) error { return _dix.Inject(data, ns...) }
+func Inject(data interface{}) { _dix.inject(data) }
 
-func Invoke(data interface{}) error     { return _dix.Inject(data) }
-func InvokeLazy(data interface{}) error { return _dix.Inject(data) }
+// Invoke 懒执行注册的invoke
+func Invoke() { _dix.invoke() }
 
 // Graph dix graph
-func Graph() string { return _dix.graph() }
+//func Graph() string { return _dix.Graph() }
 
 // Json dix json graph
-func Json() map[string]interface{} { return _dix.json() }
+//func Json() map[string]interface{} { return _dix.json() }
 
 // New dix new
 func New(opts ...Option) *dix { return newDix(opts...) }

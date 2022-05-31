@@ -2,22 +2,15 @@ package dix
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
 	"reflect"
 	"strings"
-	"time"
 
-	"github.com/pubgo/dix/dix_conf"
 	"github.com/pubgo/dix/internal/assert"
 )
 
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
-
 const (
-	_default = group("default")
+	Default = "default"
 )
 
 type (
@@ -26,10 +19,8 @@ type (
 	value = reflect.Value
 )
 
-type Option func(*Options)
-type Options struct{}
-
 type dix struct {
+	option    Options
 	invokes   []*node
 	providers map[key][]*node
 	objects   map[key]map[group]value
@@ -46,7 +37,7 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 		}
 		typ = out.Type().Elem()
 	default:
-		rr[_default] = out
+		rr[Default] = out
 		typ = out.Type()
 	}
 
@@ -77,7 +68,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		x.objects[typ] = make(map[group]value)
 	}
 
-	if val := x.objects[typ]; val != nil {
+	if val := x.objects[typ]; len(val) != 0 {
 		return val
 	}
 
@@ -98,7 +89,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 			if n.input[i].isMap {
 				input = append(input, makeMap(valMap))
 			} else {
-				input = append(input, valMap[_default])
+				input = append(input, valMap[Default])
 			}
 		}
 
@@ -126,6 +117,15 @@ func (x *dix) inject(param interface{}) {
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
+	for vp.Kind() == reflect.Ptr {
+		vp = vp.Elem()
+	}
+
+	assert.Assert(vp.Kind() != reflect.Struct, &Err{
+		Msg:    "param should be struct ptr type",
+		Detail: fmt.Sprintf("param=%#v", param),
+	})
+
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
 		field := vp.Field(i)
@@ -134,13 +134,13 @@ func (x *dix) inject(param interface{}) {
 		}
 
 		inTye := tp.Field(i)
-		tagVal, ok := inTye.Tag.Lookup(dix_conf.TagName)
+		tagVal, ok := inTye.Tag.Lookup(x.option.tagName)
 		if !ok {
 			continue
 		}
 
 		if tagVal == "" {
-			tagVal = _default
+			tagVal = Default
 		} else {
 			tagVal = os.Expand(tagVal, func(s string) string {
 				if !strings.HasPrefix(s, ".") {
@@ -164,7 +164,7 @@ func (x *dix) inject(param interface{}) {
 			valMap := x.evalProvider(field.Type())
 			assert.Assert(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
-				Detail: fmt.Sprintf("type=%s", inTye),
+				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
 
 			if _, ok := valMap[tagVal]; !ok {
@@ -199,7 +199,7 @@ func (x *dix) invoke() {
 			if in.isMap {
 				input = append(input, makeMap(valMap))
 			} else {
-				input = append(input, valMap[_default])
+				input = append(input, valMap[Default])
 			}
 		}
 		n.fn.Call(input)
@@ -222,7 +222,7 @@ func (x *dix) register(param interface{}) {
 	typ := fnVal.Type()
 	assert.Assertf(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
 
-	var n = new(node)
+	var n = &node{fn: fnVal}
 	if typ.NumOut() != 0 {
 		n.output = new(outType)
 		var retTyp = typ.Out(0)
@@ -254,12 +254,22 @@ func (x *dix) register(param interface{}) {
 }
 
 func newDix(opts ...Option) *dix {
+	var option = Options{
+		tagName: "inject",
+	}
+
+	for i := range opts {
+		opts[i](&option)
+	}
+
 	c := &dix{
 		providers: make(map[key][]*node),
 		objects:   make(map[key]map[group]value),
+		option:    option,
 	}
+
 	return c
 }
 
-func (x *dix) Graph() string                { return x.graph() }
-func (x *dix) Json() map[string]interface{} { return x.json() }
+//func (x *dix) Graph() string                { return x.graph() }
+//func (x *dix) Json() map[string]interface{} { return x.json() }
