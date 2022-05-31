@@ -1,7 +1,6 @@
 package dix
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -31,10 +30,7 @@ func TestCycle(t *testing.T) {
 		return new(C)
 	})
 
-	fmt.Println(c.isCycle())
-
 	c.register(func(*A) *C {
 		return new(C)
 	})
-	fmt.Println(c.isCycle())
 }

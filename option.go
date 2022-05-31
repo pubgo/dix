@@ -8,5 +8,5 @@ type Options struct {
 }
 
 func (o Options) Check() {
-	assert.Assertf(o.tagName == "", "tag name is null")
+	assert.Fmt(o.tagName == "", "tag name is null")
 }

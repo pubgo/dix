@@ -2,40 +2,12 @@ package dix
 
 import (
 	"bytes"
-	"fmt"
-	"io"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
 )
-
-var errType = reflect.TypeOf((*error)(nil)).Elem()
-
-func isError(t reflect.Type) bool {
-	return t.Implements(errType)
-}
-
-func isElem(tye reflect.Type) bool {
-	switch tye.Kind() {
-	case reflect.Ptr:
-		return true
-	default:
-		return false
-	}
-}
-
-func getIndirectType(tye reflect.Type) reflect.Type {
-	for isElem(tye) {
-		tye = tye.Elem()
-	}
-	return tye
-}
-
-func fPrintln(w io.Writer, a ...interface{}) {
-	_, _ = fmt.Fprintln(w, a...)
-}
 
 func callerWithFunc(fn reflect.Value) string {
 	var _e = runtime.FuncForPC(fn.Pointer())

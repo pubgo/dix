@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"log"
+	"os"
 
 	"github.com/pubgo/dix"
 )
@@ -18,15 +20,22 @@ type Handler struct {
 }
 
 func main() {
-	dix.Register(func() map[string]*Redis {
+	dix.Register(func() *log.Logger {
+		return log.New(os.Stderr, "", log.LstdFlags|log.Llongfile)
+	})
+
+	dix.Register(func(l *log.Logger) map[string]*Redis {
+		l.Println("init redis")
 		return map[string]*Redis{
 			"default": &Redis{Name: "hello"},
 			"ns":      &Redis{Name: "hello1"},
 		}
 	})
 
-	dix.Register(func(r *Redis) {
+	dix.Register(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
+		l.Println("invoke redis")
 		fmt.Println("invoke:", r.Name)
+		fmt.Println("invoke:", rr)
 	})
 
 	var h = Handler{Name: "ns"}

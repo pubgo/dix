@@ -79,7 +79,6 @@ func (x *dix) isCycle() (string, bool) {
 }
 
 func (x *dix) handleOutput(output []reflect.Value) map[group]value {
-	var typ reflect.Type
 	var out = output[0]
 	var rr = make(map[group]value)
 	switch out.Kind() {
@@ -91,35 +90,30 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 			}
 			rr[mapK] = out.MapIndex(k)
 		}
-		typ = out.Type().Elem()
 	default:
 		rr[Default] = out
-		typ = out.Type()
 	}
 
 	for k, v := range rr {
 		if !v.IsValid() {
+			delete(rr, k)
 			continue
 		}
 
 		if v.IsNil() {
+			delete(rr, k)
 			continue
 		}
-
-		if x.objects[typ] == nil {
-			x.objects[typ] = make(map[group]value)
-		}
-
-		if _, ok := x.objects[typ][k]; ok {
-			continue
-		}
-
-		x.objects[typ][k] = v
 	}
-	return x.objects[typ]
+	return rr
 }
 
 func (x *dix) evalProvider(typ key) map[group]value {
+	assert.Assert(len(x.providers[typ]) == 0, &Err{
+		Msg:    "provider not found",
+		Detail: fmt.Sprintf("type=%s", typ),
+	})
+
 	if x.objects[typ] == nil {
 		x.objects[typ] = make(map[group]value)
 	}
@@ -127,11 +121,6 @@ func (x *dix) evalProvider(typ key) map[group]value {
 	if val := x.objects[typ]; len(val) != 0 {
 		return val
 	}
-
-	assert.Assert(len(x.providers[typ]) == 0, &Err{
-		Msg:    "provider not found",
-		Detail: fmt.Sprintf("type=%s", typ),
-	})
 
 	var rr = make(map[group]value)
 	for _, n := range x.providers[typ] {
@@ -150,18 +139,18 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		}
 
 		for k, v := range x.handleOutput(n.fn.Call(input)) {
-			if _, ok := rr[k]; ok {
-				continue
-			}
-
 			rr[k] = v
 		}
+	}
+
+	for k, v := range rr {
+		x.objects[typ][k] = v
 	}
 	return rr
 }
 
 func (x *dix) inject(param interface{}) {
-	assert.Assertf(param == nil, "param is null")
+	assert.Fmt(param == nil, "param is null")
 
 	vp := reflect.ValueOf(param)
 	assert.Assert(!vp.IsValid() || vp.IsNil(), &Err{
@@ -204,7 +193,7 @@ func (x *dix) inject(param interface{}) {
 				}
 
 				var out, err = templates(fmt.Sprintf("${%s}", s), param)
-				assert.AssertFn(err != nil, func() error {
+				assert.Fn(err != nil, func() error {
 					return &Err{
 						Err:    err,
 						Msg:    "expr eval failed",
@@ -263,7 +252,7 @@ func (x *dix) invoke() {
 }
 
 func (x *dix) register(param interface{}) {
-	assert.Assertf(param == nil, "param is null")
+	assert.Fmt(param == nil, "param is null")
 
 	fnVal := reflect.ValueOf(param)
 	assert.Assert(!fnVal.IsValid() || fnVal.IsZero(), &Err{
@@ -276,7 +265,7 @@ func (x *dix) register(param interface{}) {
 	})
 
 	typ := fnVal.Type()
-	assert.Assertf(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
+	assert.Fmt(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
 
 	var n = &node{fn: fnVal}
 	if typ.NumOut() != 0 {
@@ -293,7 +282,7 @@ func (x *dix) register(param interface{}) {
 		}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	} else {
-		assert.Assertf(typ.NumIn() == 0, "the func of provider input num should not be zero")
+		assert.Fmt(typ.NumIn() == 0, "the func of provider input num should not be zero")
 		x.invokes = append(x.invokes, n)
 	}
 
@@ -307,6 +296,12 @@ func (x *dix) register(param interface{}) {
 			panic(&Err{Msg: "incorrect input type", Detail: fmt.Sprintf("inTye=%s", inTye)})
 		}
 	}
+
+	dep, ok := x.isCycle()
+	assert.Assert(ok, &Err{
+		Msg:    "provider circular dependency",
+		Detail: dep,
+	})
 }
 
 func newDix(opts ...Option) *dix {
