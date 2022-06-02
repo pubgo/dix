@@ -1,8 +1,6 @@
 package dix
 
-import (
-	"fmt"
-)
+import "fmt"
 
 type Err struct {
 	Err    error
@@ -12,6 +10,13 @@ type Err struct {
 
 func (e Err) Unwrap() error { return e.Err }
 
-func (e Err) Error() string {
+func (e Err) String() string {
 	return fmt.Sprintf("%s, err=%v detail=%s", e.Msg, e.Err, e.Detail)
+}
+
+func (e Err) Error() string {
+	if e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
 }
