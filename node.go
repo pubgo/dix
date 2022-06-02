@@ -2,6 +2,8 @@ package dix
 
 import (
 	"reflect"
+
+	"github.com/pubgo/xerror"
 )
 
 type inType struct {
@@ -21,11 +23,10 @@ type node struct {
 }
 
 func (n node) call(in []reflect.Value) []reflect.Value {
-	defer recovery(func(err *Err) {
-		logs.Println("provider call failed")
-		logs.Println("provider is", callerWithFunc(n.fn))
-		logs.Printf("provider input is %v\n", in)
-		panic(err)
+	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+		err = err.WrapF("provider call failed")
+		err = err.WrapF("provider is %s", callerWithFunc(n.fn))
+		return err.WrapF("provider input is %v\n", in)
 	})
 
 	return n.fn.Call(in)

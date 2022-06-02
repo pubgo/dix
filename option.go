@@ -1,6 +1,8 @@
 package dix
 
-import "github.com/pubgo/dix/internal/assert"
+import (
+	"github.com/pubgo/xerror"
+)
 
 type Option func(opts *Options)
 type Options struct {
@@ -8,7 +10,7 @@ type Options struct {
 }
 
 func (o Options) Check() {
-	assert.Msg(o.tagName == "", "tag name is null")
+	xerror.Assert(o.tagName == "", "tag name is null")
 }
 
 func WithTag(name string) Option {

@@ -1,51 +1,30 @@
 package dix
 
 import (
-	"fmt"
+	"github.com/pubgo/xerror"
 )
 
 func (x *dix) Register(param interface{}) {
-	defer recovery(func(err *Err) {
-		panic(&Err{
-			Err:    err,
-			Msg:    err.Error(),
-			Detail: fmt.Sprintf("param=%#v", param),
-		})
+	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+		return err.WrapF("param=%#v", param)
 	})
 
 	x.register(param)
 }
 
 func (x *dix) Inject(param interface{}) {
-	defer recovery(func(err *Err) {
-		panic(&Err{
-			Err:    err,
-			Msg:    err.Error(),
-			Detail: fmt.Sprintf("param=%#v", param),
-		})
+	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+		return err.WrapF("param=%#v", param)
 	})
 
 	x.inject(param)
 }
 
 func (x *dix) Invoke() {
-	defer recovery(func(err *Err) {
-		panic(&Err{
-			Err: err,
-			Msg: err.Error(),
-		})
-	})
 	x.invoke()
 }
 
 func (x *dix) Graph() map[string]string {
-	defer recovery(func(err *Err) {
-		panic(&Err{
-			Err: err,
-			Msg: err.Error(),
-		})
-	})
-
 	return map[string]string{
 		"objects":  x.objectGraph(),
 		"provider": x.providerGraph(),

@@ -6,8 +6,7 @@ import (
 	"os"
 
 	"github.com/pubgo/dix"
-
-	"github.com/pubgo/dix/internal/assert"
+	"github.com/pubgo/xerror"
 )
 
 type Redis struct {
@@ -22,6 +21,8 @@ type Handler struct {
 }
 
 func main() {
+	defer xerror.RecoverAndExit()
+
 	dix.Register(func() *log.Logger {
 		return log.New(os.Stderr, "", log.LstdFlags|log.Llongfile)
 	})
@@ -48,8 +49,8 @@ func main() {
 
 	var h = Handler{Name: "ns"}
 	dix.Inject(&h)
-	assert.Msg(h.Cli.Name != "hello", "inject error")
-	assert.Msg(h.Cli1.Name != "hello1", "inject error")
+	xerror.Assert(h.Cli.Name != "hello", "inject error")
+	xerror.Assert(h.Cli1.Name != "hello1", "inject error")
 	dix.Invoke()
 	fmt.Println(dix.Graph())
 }

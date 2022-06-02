@@ -8,7 +8,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/pubgo/dix/internal/assert"
+	"github.com/pubgo/xerror"
 )
 
 var logs = log.New(os.Stderr, "dix", log.LstdFlags|log.Llongfile)
@@ -112,7 +112,7 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 }
 
 func (x *dix) evalProvider(typ key) map[group]value {
-	assert.Err(len(x.providers[typ]) == 0, &Err{
+	xerror.AssertErr(len(x.providers[typ]) == 0, &Err{
 		Msg:    "provider dependency not found",
 		Detail: fmt.Sprintf("type=%s", typ),
 	})
@@ -150,7 +150,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		}
 	}
 
-	assert.Err(len(values) == 0, &Err{
+	xerror.AssertErr(len(values) == 0, &Err{
 		Msg:    "all provider value is zero",
 		Detail: fmt.Sprintf("type=%s", typ),
 	})
@@ -166,14 +166,14 @@ func (x *dix) evalProvider(typ key) map[group]value {
 }
 
 func (x *dix) inject(param interface{}) {
-	assert.Msg(param == nil, "param is null")
+	xerror.Assert(param == nil, "param is null")
 
 	vp := reflect.ValueOf(param)
-	assert.Err(!vp.IsValid() || vp.IsNil(), &Err{
+	xerror.AssertErr(!vp.IsValid() || vp.IsNil(), &Err{
 		Msg:    "param should not be invalid or nil",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
-	assert.Err(vp.Kind() != reflect.Ptr, &Err{
+	xerror.AssertErr(vp.Kind() != reflect.Ptr, &Err{
 		Msg:    "param should be ptr type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
@@ -182,7 +182,7 @@ func (x *dix) inject(param interface{}) {
 		vp = vp.Elem()
 	}
 
-	assert.Err(vp.Kind() != reflect.Struct, &Err{
+	xerror.AssertErr(vp.Kind() != reflect.Struct, &Err{
 		Msg:    "param should be struct ptr type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
@@ -209,7 +209,7 @@ func (x *dix) inject(param interface{}) {
 				}
 
 				var out, err = templates(fmt.Sprintf("${%s}", s), param)
-				assert.Func(err != nil, func() error {
+				xerror.AssertFn(err != nil, func() error {
 					return &Err{
 						Err:    err,
 						Msg:    "expr eval failed",
@@ -223,7 +223,7 @@ func (x *dix) inject(param interface{}) {
 		switch field.Kind() {
 		case reflect.Interface, reflect.Ptr:
 			valMap := x.evalProvider(field.Type())
-			assert.Err(len(valMap) == 0, &Err{
+			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
@@ -238,7 +238,7 @@ func (x *dix) inject(param interface{}) {
 			field.Set(valMap[tagVal])
 		case reflect.Map:
 			valMap := x.evalProvider(field.Type().Elem())
-			assert.Err(len(valMap) == 0, &Err{
+			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
@@ -252,7 +252,7 @@ func (x *dix) invoke() {
 		var input []reflect.Value
 		for _, in := range n.input {
 			valMap := x.evalProvider(in.typ)
-			assert.Err(len(valMap) == 0, &Err{
+			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value is null",
 				Detail: fmt.Sprintf("type=%s", in.typ),
 			})
@@ -268,20 +268,20 @@ func (x *dix) invoke() {
 }
 
 func (x *dix) register(param interface{}) {
-	assert.Msg(param == nil, "param is null")
+	xerror.Assert(param == nil, "param is null")
 
 	fnVal := reflect.ValueOf(param)
-	assert.Err(!fnVal.IsValid() || fnVal.IsZero(), &Err{
+	xerror.AssertErr(!fnVal.IsValid() || fnVal.IsZero(), &Err{
 		Msg:    "param should not be invalid or nil",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
-	assert.Err(fnVal.Kind() != reflect.Func, &Err{
+	xerror.AssertErr(fnVal.Kind() != reflect.Func, &Err{
 		Msg:    "param should be function type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
 	typ := fnVal.Type()
-	assert.Msg(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
+	xerror.Assert(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
 
 	var n = &node{fn: fnVal}
 	if typ.NumOut() != 0 {
@@ -298,7 +298,7 @@ func (x *dix) register(param interface{}) {
 		}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	} else {
-		assert.Msg(typ.NumIn() == 0, "the func of provider input num should not be zero")
+		xerror.Assert(typ.NumIn() == 0, "the func of provider input num should not be zero")
 		x.invokes = append(x.invokes, n)
 	}
 
@@ -314,7 +314,7 @@ func (x *dix) register(param interface{}) {
 	}
 
 	dep, ok := x.isCycle()
-	assert.Err(ok, &Err{
+	xerror.AssertErr(ok, &Err{
 		Msg:    "provider circular dependency",
 		Detail: dep,
 	})
@@ -322,9 +322,8 @@ func (x *dix) register(param interface{}) {
 
 func newDix(opts ...Option) *dix {
 	var option = Options{tagName: "inject"}
-
-	defer recovery(func(err *Err) {
-		panic(&Err{Err: err, Msg: err.Msg, Detail: fmt.Sprintf("%#v\n", option)})
+	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+		return err.WrapF("options=%#v\n", option)
 	})
 
 	for i := range opts {
