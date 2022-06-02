@@ -38,12 +38,16 @@ func (x *dix) Invoke() {
 	x.invoke()
 }
 
-func (x *dix) Graph() string {
+func (x *dix) Graph() map[string]string {
 	defer recovery(func(err *Err) {
 		panic(&Err{
 			Err: err,
 			Msg: err.Error(),
 		})
 	})
-	return x.graph()
+
+	return map[string]string{
+		"objects":  x.objectGraph(),
+		"provider": x.providerGraph(),
+	}
 }

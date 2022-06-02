@@ -10,7 +10,7 @@ func fPrintln(writer io.Writer, msg string) {
 	_, _ = fmt.Fprintln(writer, msg)
 }
 
-func (x *dix) graph() string {
+func (x *dix) providerGraph() string {
 	b := &bytes.Buffer{}
 	fPrintln(b, "digraph G {")
 	fPrintln(b, "\tsubgraph providers {")
@@ -36,7 +36,11 @@ func (x *dix) graph() string {
 	}
 	fPrintln(b, "\t}")
 	fPrintln(b, "}")
+	return b.String()
+}
 
+func (x *dix) objectGraph() string {
+	b := &bytes.Buffer{}
 	fPrintln(b, "digraph G {")
 	fPrintln(b, "\tsubgraph objects {")
 	fPrintln(b, "\t\tlabel=objects")
@@ -47,6 +51,5 @@ func (x *dix) graph() string {
 	}
 	fPrintln(b, "\t}")
 	fPrintln(b, "}")
-
 	return b.String()
 }

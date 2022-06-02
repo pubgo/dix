@@ -16,7 +16,7 @@ func Inject(data interface{}) { _dix.Inject(data) }
 func Invoke() { _dix.Invoke() }
 
 // Graph dix graph
-func Graph() string { return _dix.Graph() }
+func Graph() map[string]string { return _dix.Graph() }
 
 // New dix new
 func New(opts ...Option) *dix { return newDix(opts...) }

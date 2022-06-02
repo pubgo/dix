@@ -113,7 +113,7 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 
 func (x *dix) evalProvider(typ key) map[group]value {
 	assert.Err(len(x.providers[typ]) == 0, &Err{
-		Msg:    "provider not found",
+		Msg:    "provider dependency not found",
 		Detail: fmt.Sprintf("type=%s", typ),
 	})
 
@@ -125,7 +125,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		return val
 	}
 
-	var rr = make(map[group]value)
+	var values = make(map[group]value)
 	for _, n := range x.providers[typ] {
 		var input []reflect.Value
 		for i := range n.input {
@@ -142,19 +142,27 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		}
 
 		for k, v := range x.handleOutput(n.call(input)) {
-			rr[k] = v
+			if _, ok := values[k]; ok {
+				logs.Printf("type value exists, type=%s key=%s\n", typ, k)
+			}
+
+			values[k] = v
 		}
 	}
 
-	assert.Err(len(rr) == 0, &Err{
-		Msg:    "provider value is zero",
+	assert.Err(len(values) == 0, &Err{
+		Msg:    "all provider value is zero",
 		Detail: fmt.Sprintf("type=%s", typ),
 	})
 
-	for k, v := range rr {
+	for k, v := range values {
+		if _, ok := x.objects[typ][k]; ok {
+			logs.Printf("type value exists, type=%s key=%s\n", typ, k)
+		}
+
 		x.objects[typ][k] = v
 	}
-	return rr
+	return values
 }
 
 func (x *dix) inject(param interface{}) {
@@ -313,13 +321,17 @@ func (x *dix) register(param interface{}) {
 }
 
 func newDix(opts ...Option) *dix {
-	var option = Options{
-		tagName: "inject",
-	}
+	var option = Options{tagName: "inject"}
+
+	defer recovery(func(err *Err) {
+		panic(&Err{Err: err, Msg: err.Msg, Detail: fmt.Sprintf("%#v\n", option)})
+	})
 
 	for i := range opts {
 		opts[i](&option)
 	}
+
+	option.Check()
 
 	c := &dix{
 		providers: make(map[key][]*node),
@@ -329,6 +341,3 @@ func newDix(opts ...Option) *dix {
 
 	return c
 }
-
-//func (x *dix) Graph() string                { return x.graph() }
-//func (x *dix) Json() map[string]interface{} { return x.json() }
