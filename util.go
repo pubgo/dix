@@ -2,6 +2,7 @@ package dix
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"runtime"
 	"strconv"
@@ -60,4 +61,18 @@ func makeMap(data map[string]reflect.Value) reflect.Value {
 		mapVal.SetMapIndex(reflect.ValueOf(k), v)
 	}
 	return mapVal
+}
+
+func recovery(fn func(err *Err)) {
+	var err = recover()
+	switch err.(type) {
+	case nil:
+		return
+	case error:
+		fn(&Err{Err: err.(error)})
+	case string:
+		fn(&Err{Msg: err.(string)})
+	default:
+		fn(&Err{Msg: fmt.Sprintf("%#v", err)})
+	}
 }

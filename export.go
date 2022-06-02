@@ -2,12 +2,10 @@ package dix
 
 import (
 	"fmt"
-
-	"github.com/pubgo/dix/internal/assert"
 )
 
 func (x *dix) Register(param interface{}) {
-	defer assert.Recovery(func(err error) {
+	defer recovery(func(err *Err) {
 		panic(&Err{
 			Err:    err,
 			Msg:    err.Error(),
@@ -19,7 +17,7 @@ func (x *dix) Register(param interface{}) {
 }
 
 func (x *dix) Inject(param interface{}) {
-	defer assert.Recovery(func(err error) {
+	defer recovery(func(err *Err) {
 		panic(&Err{
 			Err:    err,
 			Msg:    err.Error(),
@@ -31,7 +29,7 @@ func (x *dix) Inject(param interface{}) {
 }
 
 func (x *dix) Invoke() {
-	defer assert.Recovery(func(err error) {
+	defer recovery(func(err *Err) {
 		panic(&Err{
 			Err: err,
 			Msg: err.Error(),
@@ -41,7 +39,7 @@ func (x *dix) Invoke() {
 }
 
 func (x *dix) Graph() string {
-	defer assert.Recovery(func(err error) {
+	defer recovery(func(err *Err) {
 		panic(&Err{
 			Err: err,
 			Msg: err.Error(),

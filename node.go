@@ -2,8 +2,6 @@ package dix
 
 import (
 	"reflect"
-
-	"github.com/pubgo/dix/internal/assert"
 )
 
 type inType struct {
@@ -23,10 +21,11 @@ type node struct {
 }
 
 func (n node) call(in []reflect.Value) []reflect.Value {
-	defer assert.Recovery(func(err error) {
+	defer recovery(func(err *Err) {
 		logs.Println("provider call failed")
 		logs.Println("provider is", callerWithFunc(n.fn))
 		logs.Printf("provider input is %v\n", in)
+		panic(err)
 	})
 
 	return n.fn.Call(in)
