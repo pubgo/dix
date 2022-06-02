@@ -37,5 +37,16 @@ func (x *dix) graph() string {
 	fPrintln(b, "\t}")
 	fPrintln(b, "}")
 
+	fPrintln(b, "digraph G {")
+	fPrintln(b, "\tsubgraph objects {")
+	fPrintln(b, "\t\tlabel=objects")
+	for k, objects := range x.objects {
+		for g, v := range objects {
+			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %#v`, k, g, v.String()))
+		}
+	}
+	fPrintln(b, "\t}")
+	fPrintln(b, "}")
+
 	return b.String()
 }

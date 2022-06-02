@@ -48,8 +48,8 @@ func main() {
 
 	var h = Handler{Name: "ns"}
 	dix.Inject(&h)
-	assert.Fmt(h.Cli.Name != "hello", "inject error")
-	assert.Fmt(h.Cli1.Name != "hello1", "inject error")
+	assert.Msg(h.Cli.Name != "hello", "inject error")
+	assert.Msg(h.Cli1.Name != "hello1", "inject error")
 	dix.Invoke()
 	fmt.Println(dix.Graph())
 }
