@@ -15,8 +15,17 @@ func (e Err) String() string {
 }
 
 func (e Err) Error() string {
-	if e.Err == nil {
-		return ""
+	if e.Err != nil {
+		return e.Err.Error()
 	}
-	return e.Err.Error()
+
+	if e.Msg != "" {
+		return e.Msg
+	}
+
+	if e.Detail != "" {
+		return e.Detail
+	}
+
+	return "dix unknown error"
 }
