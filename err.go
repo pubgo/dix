@@ -8,7 +8,9 @@ type Err struct {
 	Detail string
 }
 
-func (e Err) Unwrap() error { return e.Err }
+func (e Err) Unwrap() error {
+	return e.Err
+}
 
 func (e Err) String() string {
 	return fmt.Sprintf("%s, err=%v detail=%s", e.Msg, e.Err, e.Detail)
