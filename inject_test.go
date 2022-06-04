@@ -2,9 +2,12 @@ package dix
 
 import (
 	"testing"
+
+	"github.com/pubgo/xerror"
 )
 
 func TestCycle(t *testing.T) {
+	defer xerror.RecoverTest(t, true)
 	type (
 		A struct {
 		}
@@ -30,7 +33,7 @@ func TestCycle(t *testing.T) {
 		return new(C)
 	})
 
-	c.register(func(*A) *C {
+	c.Register(func(*A) *C {
 		return new(C)
 	})
 }
