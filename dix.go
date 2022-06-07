@@ -37,6 +37,7 @@ func (x *dix) isCycle() (string, bool) {
 			if types[n.output.typ] == nil {
 				types[n.output.typ] = make(map[reflect.Type]bool)
 			}
+
 			for i := range n.input {
 				types[n.output.typ][n.input[i].typ] = true
 			}
@@ -137,6 +138,12 @@ func (x *dix) evalProvider(typ key) map[group]value {
 			if n.input[i].isMap {
 				input = append(input, makeMap(valMap))
 			} else {
+				if _, ok := valMap[Default]; !ok {
+					panic(&Err{
+						Msg:    "tag value not found",
+						Detail: fmt.Sprintf("all values=%v", valMap),
+					})
+				}
 				input = append(input, valMap[Default])
 			}
 		}
@@ -228,7 +235,7 @@ func (x *dix) inject(param interface{}) {
 				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
 
-			if _, ok := valMap[tagVal]; !ok {
+			if _, _ok := valMap[tagVal]; !_ok {
 				panic(&Err{
 					Msg:    "default value not found",
 					Detail: fmt.Sprintf("all values=%v", valMap),
@@ -275,6 +282,7 @@ func (x *dix) register(param interface{}) {
 		Msg:    "param should not be invalid or nil",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
+
 	xerror.AssertErr(fnVal.Kind() != reflect.Func, &Err{
 		Msg:    "param should be function type",
 		Detail: fmt.Sprintf("param=%#v", param),
