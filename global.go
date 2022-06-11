@@ -9,7 +9,7 @@ func Register(data interface{}) { _dix.Register(data) }
 
 // Inject 注入对象
 // 	data是指针类型
-func Inject(data interface{}) { _dix.Inject(data) }
+func Inject(data interface{}) interface{} { return _dix.Inject(data) }
 
 // Invoke 懒执行注册的invoke
 // 	执行所有预先注册的invoke

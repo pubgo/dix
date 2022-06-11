@@ -23,8 +23,7 @@ func main() {
 		return &c{C: "hello"}
 	})
 
-	var arg a
-	dix.Inject(&arg)
+	arg := dix.Inject(new(a)).(*a)
 	fmt.Println(arg.B.C.C)
 	fmt.Println(dix.Graph())
 }
