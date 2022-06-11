@@ -1,39 +1,13 @@
 package dix
 
 import (
-	"fmt"
-	"io"
+	"bytes"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
+	"text/template"
 )
-
-var errType = reflect.TypeOf((*error)(nil)).Elem()
-
-func isError(t reflect.Type) bool {
-	return t.Implements(errType)
-}
-
-func isElem(tye reflect.Type) bool {
-	switch tye.Kind() {
-	case reflect.Ptr:
-		return true
-	default:
-		return false
-	}
-}
-
-func getIndirectType(tye reflect.Type) reflect.Type {
-	for isElem(tye) {
-		tye = tye.Elem()
-	}
-	return tye
-}
-
-func fPrintln(w io.Writer, a ...interface{}) {
-	_, _ = fmt.Fprintln(w, a...)
-}
 
 func callerWithFunc(fn reflect.Value) string {
 	var _e = runtime.FuncForPC(fn.Pointer())
@@ -56,19 +30,34 @@ func callerWithFunc(fn reflect.Value) string {
 	return buf.String()
 }
 
-func equal(x, y []reflect.Value) bool {
-	if len(x) != len(y) {
-		return false
+func templates(s string, val interface{}) (string, error) {
+	tpl, err := template.New("main").Delims("${", "}").Parse(s)
+	if err != nil {
+		return "", err
 	}
 
-	for i := range x {
-		if x[i].IsNil() || y[i].IsNil() {
-			return false
-		}
-
-		if x[i] != y[i] {
-			return false
-		}
+	var buf = bytes.NewBuffer(nil)
+	if err := tpl.Execute(buf, val); err != nil {
+		return "", err
 	}
-	return true
+
+	return buf.String(), nil
+}
+
+func makeMap(data map[string]reflect.Value) reflect.Value {
+	if len(data) == 0 {
+		return reflect.Value{}
+	}
+
+	var kt reflect.Type
+	for k := range data {
+		kt = data[k].Type()
+		break
+	}
+
+	var mapVal = reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), kt))
+	for k, v := range data {
+		mapVal.SetMapIndex(reflect.ValueOf(k), v)
+	}
+	return mapVal
 }
