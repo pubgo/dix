@@ -182,7 +182,7 @@ func (x *dix) injectStruct(vp reflect.Value) {
 	}
 }
 
-func (x *dix) inject(param interface{}) {
+func (x *dix) inject(param interface{}) interface{} {
 	xerror.Assert(param == nil, "param is null")
 
 	vp := reflect.ValueOf(param)
@@ -205,6 +205,7 @@ func (x *dix) inject(param interface{}) {
 	})
 
 	x.injectStruct(vp)
+	return param
 }
 
 func (x *dix) invoke() {
