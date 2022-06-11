@@ -2,6 +2,4 @@ module github.com/pubgo/dix
 
 go 1.14
 
-require (
-	github.com/pubgo/xerror v0.4.29
-)
+require github.com/pubgo/xerror v0.4.32

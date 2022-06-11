@@ -24,7 +24,7 @@ func main() {
 	defer xerror.RecoverAndExit()
 
 	dix.Register(func() *log.Logger {
-		return log.New(os.Stderr, "", log.LstdFlags|log.Llongfile)
+		return log.New(os.Stderr, "example: ", log.LstdFlags|log.Lshortfile)
 	})
 
 	dix.Register(func(l *log.Logger) map[string]*Redis {

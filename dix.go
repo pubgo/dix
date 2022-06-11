@@ -1,7 +1,6 @@
 package dix
 
 import (
-	"container/list"
 	"fmt"
 	"log"
 	"os"
@@ -11,7 +10,7 @@ import (
 	"github.com/pubgo/xerror"
 )
 
-var logs = log.New(os.Stderr, "dix", log.LstdFlags|log.Llongfile)
+var logs = log.New(os.Stderr, "dix: ", log.LstdFlags|log.Lshortfile)
 
 const (
 	Default = "default"
@@ -28,58 +27,6 @@ type dix struct {
 	invokes   []*node
 	providers map[key][]*node
 	objects   map[key]map[group]value
-}
-
-func (x *dix) isCycle() (string, bool) {
-	var types = make(map[reflect.Type]map[reflect.Type]bool)
-	for _, nodes := range x.providers {
-		for _, n := range nodes {
-			if types[n.output.typ] == nil {
-				types[n.output.typ] = make(map[reflect.Type]bool)
-			}
-
-			for i := range n.input {
-				types[n.output.typ][n.input[i].typ] = true
-			}
-		}
-	}
-
-	var check func(root reflect.Type, data map[reflect.Type]bool, nodes *list.List) bool
-	check = func(root reflect.Type, nodeTypes map[reflect.Type]bool, nodes *list.List) bool {
-		for typ := range nodeTypes {
-			nodes.PushBack(typ)
-			if root == typ {
-				return true
-			}
-
-			if check(root, types[typ], nodes) {
-				return true
-			}
-			nodes.Remove(nodes.Back())
-		}
-		return false
-	}
-
-	var nodes = list.New()
-	for root := range types {
-		nodes.PushBack(root)
-		if check(root, types[root], nodes) {
-			break
-		}
-		nodes.Remove(nodes.Back())
-	}
-
-	if nodes.Len() == 0 {
-		return "", false
-	}
-
-	var dep []string
-	for nodes.Len() != 0 {
-		dep = append(dep, nodes.Front().Value.(reflect.Type).String())
-		nodes.Remove(nodes.Front())
-	}
-
-	return strings.Join(dep, " -> "), true
 }
 
 func (x *dix) handleOutput(output []reflect.Value) map[group]value {
@@ -172,28 +119,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 	return values
 }
 
-func (x *dix) inject(param interface{}) {
-	xerror.Assert(param == nil, "param is null")
-
-	vp := reflect.ValueOf(param)
-	xerror.AssertErr(!vp.IsValid() || vp.IsNil(), &Err{
-		Msg:    "param should not be invalid or nil",
-		Detail: fmt.Sprintf("param=%#v", param),
-	})
-	xerror.AssertErr(vp.Kind() != reflect.Ptr, &Err{
-		Msg:    "param should be ptr type",
-		Detail: fmt.Sprintf("param=%#v", param),
-	})
-
-	for vp.Kind() == reflect.Ptr {
-		vp = vp.Elem()
-	}
-
-	xerror.AssertErr(vp.Kind() != reflect.Struct, &Err{
-		Msg:    "param should be struct ptr type",
-		Detail: fmt.Sprintf("param=%#v", param),
-	})
-
+func (x *dix) injectStruct(vp reflect.Value) {
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
 		field := vp.Field(i)
@@ -215,12 +141,12 @@ func (x *dix) inject(param interface{}) {
 					return os.Getenv(strings.ToUpper(s))
 				}
 
-				var out, err = templates(fmt.Sprintf("${%s}", s), param)
+				var out, err = templates(fmt.Sprintf("${%s}", s), vp.Interface())
 				xerror.AssertFn(err != nil, func() error {
 					return &Err{
 						Err:    err,
 						Msg:    "expr eval failed",
-						Detail: fmt.Sprintf("param=%#v", param),
+						Detail: fmt.Sprintf("param=%#v", vp.Interface()),
 					}
 				})
 				return fmt.Sprintf("%v", out)
@@ -228,7 +154,9 @@ func (x *dix) inject(param interface{}) {
 		}
 
 		switch field.Kind() {
-		case reflect.Interface, reflect.Ptr:
+		case reflect.Struct:
+			x.injectStruct(field)
+		case reflect.Interface, reflect.Ptr, reflect.Func:
 			valMap := x.evalProvider(field.Type())
 			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
@@ -252,6 +180,31 @@ func (x *dix) inject(param interface{}) {
 			field.Set(makeMap(valMap))
 		}
 	}
+}
+
+func (x *dix) inject(param interface{}) {
+	xerror.Assert(param == nil, "param is null")
+
+	vp := reflect.ValueOf(param)
+	xerror.AssertErr(!vp.IsValid() || vp.IsNil(), &Err{
+		Msg:    "param should not be invalid or nil",
+		Detail: fmt.Sprintf("param=%#v", param),
+	})
+	xerror.AssertErr(vp.Kind() != reflect.Ptr, &Err{
+		Msg:    "param should be ptr type",
+		Detail: fmt.Sprintf("param=%#v", param),
+	})
+
+	for vp.Kind() == reflect.Ptr {
+		vp = vp.Elem()
+	}
+
+	xerror.AssertErr(vp.Kind() != reflect.Struct, &Err{
+		Msg:    "param should be struct ptr type",
+		Detail: fmt.Sprintf("param=%#v", param),
+	})
+
+	x.injectStruct(vp)
 }
 
 func (x *dix) invoke() {
@@ -299,7 +252,7 @@ func (x *dix) register(param interface{}) {
 		case reflect.Map:
 			n.output.isMap = true
 			n.output.typ = retTyp.Elem()
-		case reflect.Ptr, reflect.Interface:
+		case reflect.Ptr, reflect.Interface, reflect.Func:
 			n.output.typ = retTyp
 		default:
 			panic(&Err{Msg: "ret type error", Detail: fmt.Sprintf("retTyp=%s", retTyp)})
@@ -312,7 +265,7 @@ func (x *dix) register(param interface{}) {
 
 	for i := 0; i < typ.NumIn(); i++ {
 		switch inTye := typ.In(i); inTye.Kind() {
-		case reflect.Interface, reflect.Ptr:
+		case reflect.Interface, reflect.Ptr, reflect.Func:
 			n.input = append(n.input, &inType{typ: inTye})
 		case reflect.Map:
 			n.input = append(n.input, &inType{typ: inTye.Elem(), isMap: true})

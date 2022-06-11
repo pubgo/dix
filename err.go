@@ -1,6 +1,8 @@
 package dix
 
-import "fmt"
+import (
+	"fmt"
+)
 
 type Err struct {
 	Err    error

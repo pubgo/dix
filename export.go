@@ -20,13 +20,16 @@ func (x *dix) Inject(param interface{}) {
 	x.inject(param)
 }
 
-func (x *dix) Invoke() {
-	x.invoke()
+func (x *dix) Invoke() { x.invoke() }
+
+func (x *dix) Graph() *graph {
+	return &graph{
+		Objects:  x.objectGraph(),
+		Provider: x.providerGraph(),
+	}
 }
 
-func (x *dix) Graph() map[string]string {
-	return map[string]string{
-		"objects":  x.objectGraph(),
-		"provider": x.providerGraph(),
-	}
+type graph struct {
+	Objects  string
+	Provider string
 }
