@@ -61,7 +61,7 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 
 func (x *dix) evalProvider(typ key) map[group]value {
 	xerror.AssertErr(len(x.providers[typ]) == 0, &Err{
-		Msg:    "provider dependency not found",
+		Msg:    "type provider dependency not found",
 		Detail: fmt.Sprintf("type=%s", typ),
 	})
 
@@ -73,7 +73,6 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		return val
 	}
 
-	var values = make(map[group]value)
 	for _, n := range x.providers[typ] {
 		var input []reflect.Value
 		for i := range n.input {
@@ -87,7 +86,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 			} else {
 				if _, ok := valMap[Default]; !ok {
 					panic(&Err{
-						Msg:    "tag value not found",
+						Msg:    "[default] tag value not found",
 						Detail: fmt.Sprintf("all values=%v", valMap),
 					})
 				}
@@ -96,27 +95,29 @@ func (x *dix) evalProvider(typ key) map[group]value {
 		}
 
 		for k, v := range x.handleOutput(n.call(input)) {
-			if _, ok := values[k]; ok {
+			if n.output.isList {
+				if _, ok := x.objects[typ][Default]; !ok {
+					x.objects[typ][Default] = v
+				} else {
+					x.objects[typ][Default] = reflect.AppendSlice(x.objects[typ][Default], v)
+				}
+				continue
+			}
+
+			if _, ok := x.objects[typ][k]; ok {
 				logs.Printf("type value exists, type=%s key=%s\n", typ, k)
 			}
 
-			values[k] = v
+			x.objects[typ][k] = v
 		}
 	}
 
-	xerror.AssertErr(len(values) == 0, &Err{
+	xerror.AssertErr(len(x.objects[typ]) == 0, &Err{
 		Msg:    "all provider value is zero",
 		Detail: fmt.Sprintf("type=%s", typ),
 	})
 
-	for k, v := range values {
-		if _, ok := x.objects[typ][k]; ok {
-			logs.Printf("type value exists, type=%s key=%s\n", typ, k)
-		}
-
-		x.objects[typ][k] = v
-	}
-	return values
+	return x.objects[typ]
 }
 
 func (x *dix) injectStruct(vp reflect.Value) {
@@ -178,6 +179,21 @@ func (x *dix) injectStruct(vp reflect.Value) {
 				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
 			field.Set(makeMap(valMap))
+		case reflect.Slice:
+			valMap := x.evalProvider(field.Type().Elem())
+			xerror.AssertErr(len(valMap) == 0, &Err{
+				Msg:    "provider value not found",
+				Detail: fmt.Sprintf("type=%s", field.Type()),
+			})
+
+			if _, _ok := valMap[Default]; !_ok {
+				panic(&Err{
+					Msg:    "default value not found",
+					Detail: fmt.Sprintf("all values=%v", valMap),
+				})
+			}
+
+			field.Set(valMap[tagVal])
 		}
 	}
 }
@@ -250,6 +266,9 @@ func (x *dix) register(param interface{}) {
 		n.output = new(outType)
 		var retTyp = typ.Out(0)
 		switch retTyp.Kind() {
+		case reflect.Slice:
+			n.output.isList = true
+			n.output.typ = retTyp.Elem()
 		case reflect.Map:
 			n.output.isMap = true
 			n.output.typ = retTyp.Elem()
@@ -270,6 +289,8 @@ func (x *dix) register(param interface{}) {
 			n.input = append(n.input, &inType{typ: inTye})
 		case reflect.Map:
 			n.input = append(n.input, &inType{typ: inTye.Elem(), isMap: true})
+		case reflect.Slice:
+			n.input = append(n.input, &inType{typ: inTye.Elem(), isList: true})
 		default:
 			panic(&Err{Msg: "incorrect input type", Detail: fmt.Sprintf("inTye=%s", inTye)})
 		}

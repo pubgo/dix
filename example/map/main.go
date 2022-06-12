@@ -20,5 +20,10 @@ func main() {
 		fmt.Println(errs)
 	})
 	dix.Invoke()
+
+	type param struct {
+		ErrMap map[string]*xerror.Err `inject:""`
+	}
+	fmt.Println(dix.Inject(new(param)).(*param).ErrMap)
 	fmt.Println(dix.Graph())
 }

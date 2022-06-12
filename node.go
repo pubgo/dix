@@ -7,13 +7,15 @@ import (
 )
 
 type inType struct {
-	typ   reflect.Type
-	isMap bool
+	typ    reflect.Type
+	isMap  bool
+	isList bool
 }
 
 type outType struct {
-	typ   reflect.Type
-	isMap bool
+	typ    reflect.Type
+	isMap  bool
+	isList bool
 }
 
 type node struct {
