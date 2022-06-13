@@ -10,7 +10,7 @@ func Provider(data interface{}) { _dix.Register(data) }
 
 // Inject 注入对象
 // 	data是指针类型
-func Inject(data interface{}) interface{} { return _dix.Inject(data) }
+func Inject(data interface{}, opts ...Option) interface{} { return _dix.Inject(data, opts...) }
 
 // Graph dix graph
 func Graph() *graph { return _dix.Graph() }

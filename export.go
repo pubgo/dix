@@ -12,12 +12,12 @@ func (x *dix) Register(param interface{}) {
 	x.register(param)
 }
 
-func (x *dix) Inject(param interface{}) interface{} {
+func (x *dix) Inject(param interface{}, opts ...Option) interface{} {
 	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 
-	return x.inject(param)
+	return x.inject(param, opts...)
 }
 
 func (x *dix) Graph() *graph {

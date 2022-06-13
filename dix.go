@@ -58,12 +58,7 @@ func (x *dix) handleOutput(output []reflect.Value) map[group]value {
 	return rr
 }
 
-func (x *dix) evalProvider(typ key) map[group]value {
-	xerror.AssertErr(len(x.providers[typ]) == 0, &Err{
-		Msg:    "type provider dependency not found",
-		Detail: fmt.Sprintf("type=%s", typ),
-	})
-
+func (x *dix) evalProvider(typ key, opt Options) map[group]value {
 	if x.objects[typ] == nil {
 		x.objects[typ] = make(map[group]value)
 	}
@@ -75,7 +70,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 	for _, n := range x.providers[typ] {
 		var input []reflect.Value
 		for i := range n.input {
-			valMap := x.evalProvider(n.input[i].typ)
+			valMap := x.evalProvider(n.input[i].typ, opt)
 			if len(valMap) == 0 {
 				continue
 			}
@@ -91,6 +86,10 @@ func (x *dix) evalProvider(typ key) map[group]value {
 				}
 				input = append(input, valMap[Default])
 			}
+		}
+
+		if len(input) != len(n.input) {
+			continue
 		}
 
 		for k, v := range x.handleOutput(n.call(input)) {
@@ -119,7 +118,7 @@ func (x *dix) evalProvider(typ key) map[group]value {
 	return x.objects[typ]
 }
 
-func (x *dix) injectFunc(vp reflect.Value) {
+func (x *dix) injectFunc(vp reflect.Value, opt Options) {
 	var inTypes []*inType
 	typ := vp.Type()
 	for i := 0; i < typ.NumIn(); i++ {
@@ -137,7 +136,7 @@ func (x *dix) injectFunc(vp reflect.Value) {
 
 	var input []reflect.Value
 	for _, in := range inTypes {
-		valMap := x.evalProvider(in.typ)
+		valMap := x.evalProvider(in.typ, opt)
 		xerror.AssertErr(len(valMap) == 0, &Err{
 			Msg:    "provider value is null",
 			Detail: fmt.Sprintf("type=%s", in.typ),
@@ -146,13 +145,19 @@ func (x *dix) injectFunc(vp reflect.Value) {
 		if in.isMap {
 			input = append(input, makeMap(valMap))
 		} else {
+			if _, _ok := valMap[Default]; !_ok {
+				panic(&Err{
+					Msg:    "default value not found",
+					Detail: fmt.Sprintf("all values=%v", valMap),
+				})
+			}
 			input = append(input, valMap[Default])
 		}
 	}
 	vp.Call(input)
 }
 
-func (x *dix) injectStruct(vp reflect.Value) {
+func (x *dix) injectStruct(vp reflect.Value, opt Options) {
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
 		field := vp.Field(i)
@@ -166,9 +171,9 @@ func (x *dix) injectStruct(vp reflect.Value) {
 
 		switch field.Kind() {
 		case reflect.Struct:
-			x.injectStruct(field)
+			x.injectStruct(field, opt)
 		case reflect.Interface, reflect.Ptr, reflect.Func:
-			valMap := x.evalProvider(field.Type())
+			valMap := x.evalProvider(field.Type(), opt)
 			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s", field.Type()),
@@ -183,14 +188,14 @@ func (x *dix) injectStruct(vp reflect.Value) {
 
 			field.Set(valMap[Default])
 		case reflect.Map:
-			valMap := x.evalProvider(field.Type().Elem())
+			valMap := x.evalProvider(field.Type().Elem(), opt)
 			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
 			field.Set(makeMap(valMap))
 		case reflect.Slice:
-			valMap := x.evalProvider(field.Type().Elem())
+			valMap := x.evalProvider(field.Type().Elem(), opt)
 			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s", field.Type()),
@@ -208,8 +213,13 @@ func (x *dix) injectStruct(vp reflect.Value) {
 	}
 }
 
-func (x *dix) inject(param interface{}) interface{} {
+func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 	xerror.Assert(param == nil, "param is null")
+
+	var opt Options
+	for i := range opts {
+		opts[i](&opt)
+	}
 
 	vp := reflect.ValueOf(param)
 	xerror.AssertErr(!vp.IsValid() || vp.IsNil(), &Err{
@@ -218,7 +228,7 @@ func (x *dix) inject(param interface{}) interface{} {
 	})
 
 	if vp.Kind() == reflect.Func {
-		x.injectFunc(vp)
+		x.injectFunc(vp, opt)
 		return nil
 	}
 
@@ -236,7 +246,7 @@ func (x *dix) inject(param interface{}) interface{} {
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
-	x.injectStruct(vp)
+	x.injectStruct(vp, opt)
 	return param
 }
 
@@ -244,7 +254,7 @@ func (x *dix) invoke() {
 	for _, n := range x.invokes {
 		var input []reflect.Value
 		for _, in := range n.input {
-			valMap := x.evalProvider(in.typ)
+			valMap := x.evalProvider(in.typ, Options{})
 			xerror.AssertErr(len(valMap) == 0, &Err{
 				Msg:    "provider value is null",
 				Detail: fmt.Sprintf("type=%s", in.typ),

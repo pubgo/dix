@@ -8,6 +8,7 @@ import (
 )
 
 func main() {
+	defer xerror.RecoverAndExit()
 	type handler struct{}
 	dix.Provider(func() *handler {
 		fmt.Println("1")
