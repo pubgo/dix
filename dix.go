@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"reflect"
-	"strings"
 
 	"github.com/pubgo/xerror"
 )
@@ -120,38 +119,45 @@ func (x *dix) evalProvider(typ key) map[group]value {
 	return x.objects[typ]
 }
 
+func (x *dix) injectFunc(vp reflect.Value) {
+	var inTypes []*inType
+	typ := vp.Type()
+	for i := 0; i < typ.NumIn(); i++ {
+		switch inTye := typ.In(i); inTye.Kind() {
+		case reflect.Interface, reflect.Ptr, reflect.Func:
+			inTypes = append(inTypes, &inType{typ: inTye})
+		case reflect.Map:
+			inTypes = append(inTypes, &inType{typ: inTye.Elem(), isMap: true})
+		case reflect.Slice:
+			inTypes = append(inTypes, &inType{typ: inTye.Elem(), isList: true})
+		default:
+			panic(&Err{Msg: "incorrect input type", Detail: fmt.Sprintf("inTye=%s", inTye)})
+		}
+	}
+
+	var input []reflect.Value
+	for _, in := range inTypes {
+		valMap := x.evalProvider(in.typ)
+		xerror.AssertErr(len(valMap) == 0, &Err{
+			Msg:    "provider value is null",
+			Detail: fmt.Sprintf("type=%s", in.typ),
+		})
+
+		if in.isMap {
+			input = append(input, makeMap(valMap))
+		} else {
+			input = append(input, valMap[Default])
+		}
+	}
+	vp.Call(input)
+}
+
 func (x *dix) injectStruct(vp reflect.Value) {
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
 		field := vp.Field(i)
 		if !field.CanSet() {
 			continue
-		}
-
-		inTye := tp.Field(i)
-		tagVal, ok := inTye.Tag.Lookup(x.option.tagName)
-		if !ok {
-			continue
-		}
-
-		if tagVal == "" {
-			tagVal = Default
-		} else {
-			tagVal = os.Expand(tagVal, func(s string) string {
-				if !strings.HasPrefix(s, ".") {
-					return os.Getenv(strings.ToUpper(s))
-				}
-
-				var out, err = templates(fmt.Sprintf("${%s}", s), vp.Interface())
-				xerror.AssertFn(err != nil, func() error {
-					return &Err{
-						Err:    err,
-						Msg:    "expr eval failed",
-						Detail: fmt.Sprintf("param=%#v", vp.Interface()),
-					}
-				})
-				return fmt.Sprintf("%v", out)
-			})
 		}
 
 		switch field.Kind() {
@@ -164,14 +170,14 @@ func (x *dix) injectStruct(vp reflect.Value) {
 				Detail: fmt.Sprintf("type=%s", field.Type()),
 			})
 
-			if _, _ok := valMap[tagVal]; !_ok {
+			if _, _ok := valMap[Default]; !_ok {
 				panic(&Err{
 					Msg:    "default value not found",
 					Detail: fmt.Sprintf("all values=%v", valMap),
 				})
 			}
 
-			field.Set(valMap[tagVal])
+			field.Set(valMap[Default])
 		case reflect.Map:
 			valMap := x.evalProvider(field.Type().Elem())
 			xerror.AssertErr(len(valMap) == 0, &Err{
@@ -193,7 +199,7 @@ func (x *dix) injectStruct(vp reflect.Value) {
 				})
 			}
 
-			field.Set(valMap[tagVal])
+			field.Set(valMap[Default])
 		}
 	}
 }
@@ -206,6 +212,12 @@ func (x *dix) inject(param interface{}) interface{} {
 		Msg:    "param should not be invalid or nil",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
+
+	if vp.Kind() == reflect.Func {
+		x.injectFunc(vp)
+		return nil
+	}
+
 	xerror.AssertErr(vp.Kind() != reflect.Ptr, &Err{
 		Msg:    "param should be ptr type",
 		Detail: fmt.Sprintf("param=%#v", param),
@@ -304,7 +316,7 @@ func (x *dix) register(param interface{}) {
 }
 
 func newDix(opts ...Option) *dix {
-	var option = Options{tagName: "inject"}
+	var option = Options{}
 	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
 		return err.WrapF("options=%#v\n", option)
 	})
