@@ -160,6 +160,10 @@ func (x *dix) injectStruct(vp reflect.Value) {
 			continue
 		}
 
+		if tp.Field(i).Anonymous {
+			continue
+		}
+
 		switch field.Kind() {
 		case reflect.Struct:
 			x.injectStruct(field)
