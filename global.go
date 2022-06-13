@@ -6,14 +6,11 @@ var _dix = New()
 // 	invoke没有返回值
 // 	provider必须有返回值, 且返回值只能有一个, 类型为map,interface,ptr
 func Register(data interface{}) { _dix.Register(data) }
+func Provider(data interface{}) { _dix.Register(data) }
 
 // Inject 注入对象
 // 	data是指针类型
 func Inject(data interface{}) interface{} { return _dix.Inject(data) }
-
-// Invoke 懒执行注册的invoke
-// 	执行所有预先注册的invoke
-func Invoke() { _dix.Invoke() }
 
 // Graph dix graph
 func Graph() *graph { return _dix.Graph() }

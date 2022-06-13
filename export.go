@@ -20,8 +20,6 @@ func (x *dix) Inject(param interface{}) interface{} {
 	return x.inject(param)
 }
 
-func (x *dix) Invoke() { x.invoke() }
-
 func (x *dix) Graph() *graph {
 	return &graph{
 		Objects:  x.objectGraph(),
