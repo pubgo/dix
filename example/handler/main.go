@@ -39,7 +39,7 @@ func main() {
 		}
 	})
 
-	dix.Register(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
+	dix.Inject(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
 		l.Println("invoke redis")
 		fmt.Println("invoke:", r.name)
 		fmt.Println("invoke:", rr)
@@ -49,6 +49,5 @@ func main() {
 	dix.Inject(&h)
 	xerror.Assert(h.Cli.name != "hello", "inject error")
 	xerror.Assert(h.Cli1["ns"].name != "hello1", "inject error")
-	dix.Invoke()
 	fmt.Println(dix.Graph())
 }

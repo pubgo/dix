@@ -15,11 +15,10 @@ func main() {
 		}
 	})
 
-	dix.Register(func(err *xerror.Err, errs map[string]*xerror.Err) {
+	dix.Inject(func(err *xerror.Err, errs map[string]*xerror.Err) {
 		fmt.Println(err.Msg)
 		fmt.Println(errs)
 	})
-	dix.Invoke()
 
 	type param struct {
 		ErrMap map[string]*xerror.Err `inject:""`

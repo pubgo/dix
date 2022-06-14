@@ -33,12 +33,11 @@ func main() {
 		}
 	})
 
-	dix.Register(func(handlers []handler) {
+	dix.Inject(func(handlers []handler) {
 		for i := range handlers {
 			fmt.Println("fn:", handlers[i]())
 		}
 	})
-	dix.Invoke()
 
 	type param struct {
 		H []handler `inject:""`

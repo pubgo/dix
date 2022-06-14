@@ -14,11 +14,6 @@ func main() {
 		}
 	})
 
-	dix.Register(func(h handler) {
-		fmt.Println("invoke: ", h())
-	})
-	dix.Invoke()
-
 	type param struct {
 		H handler `inject:""`
 	}
