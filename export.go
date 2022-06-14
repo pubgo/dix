@@ -9,7 +9,7 @@ func (x *dix) Register(param interface{}) {
 		return err.WrapF("param=%#v", param)
 	})
 
-	x.register(param)
+	x.provider(param)
 }
 
 func (x *dix) Provider(param interface{}) {
@@ -17,7 +17,7 @@ func (x *dix) Provider(param interface{}) {
 		return err.WrapF("param=%#v", param)
 	})
 
-	x.register(param)
+	x.provider(param)
 }
 
 func (x *dix) Inject(param interface{}, opts ...Option) interface{} {

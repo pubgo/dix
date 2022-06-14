@@ -13,6 +13,7 @@ func fPrintln(writer io.Writer, msg string) {
 func (x *dix) providerGraph() string {
 	b := &bytes.Buffer{}
 	fPrintln(b, "digraph G {")
+
 	fPrintln(b, "\tsubgraph providers {")
 	fPrintln(b, "\t\tlabel=providers")
 	for k, vs := range x.providers {
@@ -26,15 +27,6 @@ func (x *dix) providerGraph() string {
 	}
 	fPrintln(b, "\t}")
 
-	fPrintln(b, "\tsubgraph invokes {")
-	fPrintln(b, "\t\tlabel=invokes")
-	for _, n := range x.invokes {
-		fn := callerWithFunc(n.fn)
-		for _, in := range n.input {
-			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, in.typ, fn))
-		}
-	}
-	fPrintln(b, "\t}")
 	fPrintln(b, "}")
 	return b.String()
 }
@@ -46,7 +38,7 @@ func (x *dix) objectGraph() string {
 	fPrintln(b, "\t\tlabel=objects")
 	for k, objects := range x.objects {
 		for g, v := range objects {
-			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %#v`, k, g, v.String()))
+			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %v`, k, g, v))
 		}
 	}
 	fPrintln(b, "\t}")

@@ -44,20 +44,22 @@ func templates(s string, val interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-func makeMap(data map[string]reflect.Value) reflect.Value {
-	if len(data) == 0 {
-		return reflect.Value{}
-	}
+func makeList(data []reflect.Value) reflect.Value {
+	var kt = data[0].Type()
+	var val = reflect.MakeSlice(reflect.SliceOf(kt), 0, 0)
+	return reflect.Append(val, data...)
+}
 
+func makeMap(data map[string][]reflect.Value) reflect.Value {
 	var kt reflect.Type
 	for k := range data {
-		kt = data[k].Type()
+		kt = data[k][0].Type()
 		break
 	}
 
 	var mapVal = reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), kt))
 	for k, v := range data {
-		mapVal.SetMapIndex(reflect.ValueOf(k), v)
+		mapVal.SetMapIndex(reflect.ValueOf(k), v[len(v)-1])
 	}
 	return mapVal
 }

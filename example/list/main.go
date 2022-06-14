@@ -11,29 +11,20 @@ import (
 func main() {
 	defer xerror.RecoverAndExit()
 	type handler func() string
-	dix.Register(func() []handler {
-		return []handler{
-			func() string {
-				return "hello"
-			},
-			func() string {
-				return "world"
-			},
+	dix.Register(func() handler {
+		return func() string {
+			return "hello"
 		}
 	})
 
-	dix.Register(func() []handler {
-		return []handler{
-			func() string {
-				return "hello1"
-			},
-			func() string {
-				return "world2"
-			},
+	dix.Register(func() handler {
+		return func() string {
+			return "world"
 		}
 	})
 
-	dix.Inject(func(handlers []handler) {
+	dix.Inject(func(handlers []handler, a handler) {
+		fmt.Println("default: ", a())
 		for i := range handlers {
 			fmt.Println("fn:", handlers[i]())
 		}
@@ -41,9 +32,13 @@ func main() {
 
 	type param struct {
 		H []handler
+		A handler
+		M map[string]handler
 	}
 
 	hh := dix.Inject(new(param)).(*param)
+	fmt.Println("default: ", hh.A())
+	fmt.Println("default: ", hh.M["default"]())
 	for i := range hh.H {
 		fmt.Println("struct:", hh.H[i]())
 	}
