@@ -64,6 +64,15 @@ func (x *dix) handleOutput(output []reflect.Value) map[group][]value {
 }
 
 func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
+	switch typ.Kind() {
+	case reflect.Ptr, reflect.Interface, reflect.Func:
+	default:
+		xerror.Panic(&Err{
+			Msg:    "provider type kind error, the supported type kinds are <ptr,interface,func>",
+			Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
+		})
+	}
+
 	xerror.AssertErr(len(x.providers[typ]) == 0, &Err{
 		Msg:    "provider not found, please check whether the provider imports or type error",
 		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
@@ -200,6 +209,13 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 		Msg:    "param should be ptr type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
+
+	//var injectHandler = vp.MethodByName("Inject")
+	//if injectHandler.IsValid() && !injectHandler.IsNil() {
+	//	xerror.Assert(injectHandler.Type().NumOut() != 0, "the func of provider output num should be zero")
+	//	x.injectFunc(injectHandler, opt)
+	//	return nil
+	//}
 
 	for vp.Kind() == reflect.Ptr {
 		vp = vp.Elem()
