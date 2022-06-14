@@ -1,12 +1,10 @@
 package dix
 
 import (
-	"bytes"
 	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
-	"text/template"
 )
 
 func callerWithFunc(fn reflect.Value) string {
@@ -28,20 +26,6 @@ func callerWithFunc(fn reflect.Value) string {
 
 	buf.WriteString(fn.String())
 	return buf.String()
-}
-
-func templates(s string, val interface{}) (string, error) {
-	tpl, err := template.New("main").Delims("${", "}").Parse(s)
-	if err != nil {
-		return "", err
-	}
-
-	var buf = bytes.NewBuffer(nil)
-	if err := tpl.Execute(buf, val); err != nil {
-		return "", err
-	}
-
-	return buf.String(), nil
 }
 
 func makeList(data []reflect.Value) reflect.Value {

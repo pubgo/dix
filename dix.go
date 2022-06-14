@@ -64,6 +64,11 @@ func (x *dix) handleOutput(output []reflect.Value) map[group][]value {
 }
 
 func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
+	xerror.AssertErr(len(x.providers[typ]) == 0, &Err{
+		Msg:    "provider not found, please check whether the provider imports or type error",
+		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
+	})
+
 	if x.objects[typ] == nil {
 		x.objects[typ] = make(map[group][]value)
 	}
@@ -88,8 +93,6 @@ func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
 			objects[k] = append(objects[k], v...)
 		}
 	}
-
-	fmt.Println(objects, typ, typ.Kind())
 
 	xerror.AssertErr(len(objects) == 0, &Err{
 		Msg:    "provider values is zero, please check whether the provider imports",
@@ -188,6 +191,7 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 	})
 
 	if vp.Kind() == reflect.Func {
+		xerror.Assert(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
 		x.injectFunc(vp, opt)
 		return nil
 	}

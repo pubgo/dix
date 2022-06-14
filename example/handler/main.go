@@ -15,7 +15,6 @@ type Redis struct {
 
 type Handler struct {
 	name string
-	// 如果是结构体，且tag为dix，那么，会检查结构体内部有指针或者接口属性，然后进行对象注入
 	Cli  *Redis
 	Cli1 map[string]*Redis
 }
