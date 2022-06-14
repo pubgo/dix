@@ -40,7 +40,7 @@ func main() {
 	})
 
 	type param struct {
-		H []handler `inject:""`
+		H []handler
 	}
 
 	hh := dix.Inject(new(param)).(*param)

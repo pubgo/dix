@@ -7,11 +7,11 @@ import (
 )
 
 type a struct {
-	B b `inject:""`
+	B b
 }
 
 type b struct {
-	C *c `inject:""`
+	C *c
 }
 
 type c struct {

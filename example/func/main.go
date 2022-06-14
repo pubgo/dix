@@ -14,9 +14,16 @@ func main() {
 		}
 	})
 
+	dix.Register(func() handler {
+		return func() string {
+			return "world"
+		}
+	})
+
 	type param struct {
-		H handler `inject:""`
+		H handler
 	}
+
 	fmt.Println("struct: ", dix.Inject(new(param)).(*param).H())
 	dix.Inject(func(h handler) {
 		fmt.Println("inject: ", h())

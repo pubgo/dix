@@ -21,7 +21,7 @@ func main() {
 	})
 
 	type param struct {
-		ErrMap map[string]*xerror.Err `inject:""`
+		ErrMap map[string]*xerror.Err
 	}
 	fmt.Println(dix.Inject(new(param)).(*param).ErrMap)
 	fmt.Println(dix.Graph())
