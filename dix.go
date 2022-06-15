@@ -210,12 +210,14 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
-	//var injectHandler = vp.MethodByName("Inject")
-	//if injectHandler.IsValid() && !injectHandler.IsNil() {
-	//	xerror.Assert(injectHandler.Type().NumOut() != 0, "the func of provider output num should be zero")
-	//	x.injectFunc(injectHandler, opt)
-	//	return nil
-	//}
+	for i := 0; i < vp.NumMethod(); i++ {
+		var name = vp.Type().Method(i).Name
+		if !strings.HasPrefix(name, "DixInject") {
+			continue
+		}
+
+		x.injectFunc(vp.Method(i), opt)
+	}
 
 	for vp.Kind() == reflect.Ptr {
 		vp = vp.Elem()
