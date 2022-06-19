@@ -19,11 +19,11 @@ type c struct {
 }
 
 func main() {
-	dix.Register(func() *c {
+	dix.Provider(func() *c {
 		return &c{C: "hello"}
 	})
 
-	arg := dix.Inject(new(a)).(*a)
+	arg := dix.Inject(new(a))
 	fmt.Println(arg.B.C.C)
 	fmt.Println(dix.Graph())
 }

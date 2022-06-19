@@ -12,7 +12,7 @@ func main() {
 	defer xerror.RecoverAndExit()
 	type handler func() string
 	type handlers []handler
-	dix.Register(func() handlers {
+	dix.Provider(func() handlers {
 		return handlers{
 			func() string {
 				return "hello"
@@ -20,7 +20,7 @@ func main() {
 		}
 	})
 
-	dix.Register(func() handlers {
+	dix.Provider(func() handlers {
 		return handlers{
 			func() string {
 				return "world"
@@ -28,7 +28,7 @@ func main() {
 		}
 	})
 
-	dix.Register(func() handler {
+	dix.Provider(func() handler {
 		return func() string {
 			return "world next"
 		}
@@ -49,7 +49,7 @@ func main() {
 		M map[string]handler
 	}
 
-	hh := dix.Inject(new(param)).(*param)
+	hh := dix.Inject(new(param))
 	//  default是最后一个
 	fmt.Println("default: ", hh.M["default"]())
 	for i := range hh.H {

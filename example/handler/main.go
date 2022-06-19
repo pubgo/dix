@@ -22,16 +22,16 @@ type Handler struct {
 func main() {
 	defer xerror.RecoverAndExit()
 
-	dix.Register(func() *log.Logger {
+	dix.Provider(func() *log.Logger {
 		return log.New(os.Stderr, "example: ", log.LstdFlags|log.Lshortfile)
 	})
 
-	dix.Register(func(l *log.Logger) *Redis {
+	dix.Provider(func(l *log.Logger) *Redis {
 		l.Println("init redis")
 		return &Redis{name: "hello"}
 	})
 
-	dix.Register(func(l *log.Logger) map[string]*Redis {
+	dix.Provider(func(l *log.Logger) map[string]*Redis {
 		l.Println("init redis")
 		return map[string]*Redis{
 			"ns": {name: "hello1"},

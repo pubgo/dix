@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	dix.Register(func() map[string]*xerror.Err {
+	dix.Provider(func() map[string]*xerror.Err {
 		return map[string]*xerror.Err{
 			"":      {Msg: "default"},
 			"hello": {Msg: "hello"},
@@ -23,6 +23,6 @@ func main() {
 	type param struct {
 		ErrMap map[string]*xerror.Err
 	}
-	fmt.Println(dix.Inject(new(param)).(*param).ErrMap)
+	fmt.Println(dix.Inject(new(param)).ErrMap)
 	fmt.Println(dix.Graph())
 }

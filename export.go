@@ -4,7 +4,7 @@ import (
 	"github.com/pubgo/xerror"
 )
 
-func (x *dix) Register(param interface{}) {
+func (x *dix) Register(param any) {
 	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
 		return err.WrapF("param=%#v", param)
 	})
@@ -12,7 +12,7 @@ func (x *dix) Register(param interface{}) {
 	x.provider(param)
 }
 
-func (x *dix) Provider(param interface{}) {
+func (x *dix) Provider(param any) {
 	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
 		return err.WrapF("param=%#v", param)
 	})
@@ -20,7 +20,7 @@ func (x *dix) Provider(param interface{}) {
 	x.provider(param)
 }
 
-func (x *dix) Inject(param interface{}, opts ...Option) interface{} {
+func (x *dix) Inject(param any, opts ...Option) any {
 	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
 		return err.WrapF("param=%#v", param)
 	})
