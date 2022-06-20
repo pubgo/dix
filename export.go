@@ -1,11 +1,11 @@
 package dix
 
 import (
-	"github.com/pubgo/xerror"
+	"github.com/pubgo/funk"
 )
 
 func (x *dix) Register(param any) {
-	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+	defer funk.RecoverAndRaise(func(err funk.XErr) funk.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 
@@ -13,7 +13,7 @@ func (x *dix) Register(param any) {
 }
 
 func (x *dix) Provider(param any) {
-	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+	defer funk.RecoverAndRaise(func(err funk.XErr) funk.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 
@@ -21,7 +21,7 @@ func (x *dix) Provider(param any) {
 }
 
 func (x *dix) Inject(param any, opts ...Option) any {
-	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+	defer funk.RecoverAndRaise(func(err funk.XErr) funk.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 

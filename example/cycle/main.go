@@ -4,11 +4,11 @@ import (
 	"strings"
 
 	"github.com/pubgo/dix"
-	"github.com/pubgo/xerror"
+	"github.com/pubgo/funk"
 )
 
 func main() {
-	defer xerror.RecoverAndExit()
+	defer funk.RecoverAndExit()
 	type (
 		A struct {
 		}
@@ -36,7 +36,7 @@ func main() {
 		return new(C)
 	})
 
-	xerror.TryCatch(func() {
+	funk.TryCatch(func() {
 		c.Register(func(*A) *C {
 			return new(C)
 		})
@@ -44,6 +44,7 @@ func main() {
 		if strings.Contains(err.Error(), "provider circular dependency") {
 			return
 		}
-		xerror.Panic(err)
+
+		funk.Must(err)
 	})
 }

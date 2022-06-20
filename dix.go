@@ -2,15 +2,12 @@ package dix
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"reflect"
 	"strings"
 
-	"github.com/pubgo/xerror"
+	"github.com/pubgo/funk"
+	"k8s.io/klog/v2"
 )
-
-var logs = log.New(os.Stderr, "dix: ", log.LstdFlags|log.Lshortfile)
 
 const (
 	defaultKey = "default"
@@ -67,13 +64,13 @@ func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
 	switch typ.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
-		xerror.Panic(&Err{
+		funk.Must(&Err{
 			Msg:    "provider type kind error, the supported type kinds are <ptr,interface,func>",
 			Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
 		})
 	}
 
-	xerror.AssertErr(len(x.providers[typ]) == 0, &Err{
+	funk.AssertErr(len(x.providers[typ]) == 0, &Err{
 		Msg:    "provider not found, please check whether the provider imports or type error",
 		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
 	})
@@ -96,14 +93,14 @@ func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
 		for k, v := range x.handleOutput(n.call(input)) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
-					logs.Printf("type value exists, type=%s key=%s\n", typ, k)
+					klog.Warningf("type value exists, type=%s key=%s\n", typ, k)
 				}
 			}
 			objects[k] = append(objects[k], v...)
 		}
 	}
 
-	xerror.AssertErr(len(objects) == 0, &Err{
+	funk.AssertErr(len(objects) == 0, &Err{
 		Msg:    "provider values is zero, please check whether the provider imports",
 		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
 	})
@@ -113,11 +110,11 @@ func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
 }
 
 func (x *dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
-	valMap := x.evalProvider(typ, opt)
 	switch {
 	case isMap:
-		return makeMap(valMap)
+		return makeMap(x.evalProvider(typ, opt))
 	case isList:
+		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			panic(&Err{
 				Msg:    "slice: provider default value not found",
@@ -126,7 +123,12 @@ func (x *dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		} else {
 			return makeList(valMap[defaultKey])
 		}
+	case typ.Kind() == reflect.Struct:
+		var v = reflect.New(typ)
+		x.injectStruct(v.Elem(), opt)
+		return v.Elem()
 	default:
+		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			panic(&Err{
 				Msg:    "provider default value not found",
@@ -142,7 +144,7 @@ func (x *dix) injectFunc(vp reflect.Value, opt Options) {
 	var inTypes []*inType
 	for i := 0; i < vp.Type().NumIn(); i++ {
 		switch inTyp := vp.Type().In(i); inTyp.Kind() {
-		case reflect.Interface, reflect.Ptr, reflect.Func:
+		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			inTypes = append(inTypes, &inType{typ: inTyp})
 		case reflect.Map:
 			inTypes = append(inTypes, &inType{typ: inTyp.Elem(), isMap: true})
@@ -186,7 +188,7 @@ func (x *dix) injectStruct(vp reflect.Value, opt Options) {
 }
 
 func (x *dix) inject(param interface{}, opts ...Option) interface{} {
-	xerror.Assert(param == nil, "param is null")
+	funk.Assert(param == nil, "param is null")
 
 	var opt Options
 	for i := range opts {
@@ -194,18 +196,18 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 	}
 
 	vp := reflect.ValueOf(param)
-	xerror.AssertErr(!vp.IsValid() || vp.IsNil(), &Err{
+	funk.AssertErr(!vp.IsValid() || vp.IsNil(), &Err{
 		Msg:    "param should not be invalid or nil",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
 	if vp.Kind() == reflect.Func {
-		xerror.Assert(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
+		funk.Assert(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
 		x.injectFunc(vp, opt)
 		return nil
 	}
 
-	xerror.AssertErr(vp.Kind() != reflect.Ptr, &Err{
+	funk.AssertErr(vp.Kind() != reflect.Ptr, &Err{
 		Msg:    "param should be ptr type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
@@ -223,7 +225,7 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 		vp = vp.Elem()
 	}
 
-	xerror.AssertErr(vp.Kind() != reflect.Struct, &Err{
+	funk.AssertErr(vp.Kind() != reflect.Struct, &Err{
 		Msg:    "param should be struct ptr type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
@@ -233,27 +235,27 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 }
 
 func (x *dix) provider(param interface{}) {
-	xerror.Assert(param == nil, "param is null")
+	funk.Assert(param == nil, "param is null")
 
 	fnVal := reflect.ValueOf(param)
-	xerror.AssertErr(!fnVal.IsValid() || fnVal.IsZero(), &Err{
+	funk.AssertErr(!fnVal.IsValid() || fnVal.IsZero(), &Err{
 		Msg:    "param should not be invalid or nil",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
-	xerror.AssertErr(fnVal.Kind() != reflect.Func, &Err{
+	funk.AssertErr(fnVal.Kind() != reflect.Func, &Err{
 		Msg:    "param should be function type",
 		Detail: fmt.Sprintf("param=%#v", param),
 	})
 
 	typ := fnVal.Type()
-	xerror.Assert(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
-	xerror.Assert(typ.NumOut() == 0, "the func of provider output num should not be zero")
+	funk.Assert(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
+	funk.Assert(typ.NumOut() == 0, "the func of provider output num should not be zero")
 
 	var n = &node{fn: fnVal}
 	for i := 0; i < typ.NumIn(); i++ {
 		switch inTye := typ.In(i); inTye.Kind() {
-		case reflect.Interface, reflect.Ptr, reflect.Func:
+		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			n.input = append(n.input, &inType{typ: inTye})
 		case reflect.Map:
 			n.input = append(n.input, &inType{typ: inTye.Elem(), isMap: true})
@@ -265,12 +267,12 @@ func (x *dix) provider(param interface{}) {
 	}
 
 	switch outTyp := typ.Out(0); outTyp.Kind() {
+	case reflect.Slice:
+		n.output = &outType{isList: true, typ: outTyp.Elem()}
 	case reflect.Map:
 		n.output = &outType{isMap: true, typ: outTyp.Elem()}
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 		n.output = &outType{isList: true, typ: outTyp}
-	case reflect.Slice:
-		n.output = &outType{isList: true, typ: outTyp.Elem()}
 	default:
 		panic(&Err{Msg: "incorrect output type", Detail: fmt.Sprintf("ouTyp=%s kind=%s", outTyp, outTyp.Kind())})
 	}
@@ -278,7 +280,7 @@ func (x *dix) provider(param interface{}) {
 	x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 
 	dep, ok := x.isCycle()
-	xerror.AssertErr(ok, &Err{
+	funk.AssertErr(ok, &Err{
 		Msg:    "provider circular dependency",
 		Detail: dep,
 	})
@@ -286,7 +288,7 @@ func (x *dix) provider(param interface{}) {
 
 func newDix(opts ...Option) *dix {
 	var option = Options{}
-	defer xerror.RecoverAndRaise(func(err xerror.XErr) xerror.XErr {
+	defer funk.RecoverAndRaise(func(err funk.XErr) funk.XErr {
 		return err.WrapF("options=%#v\n", option)
 	})
 

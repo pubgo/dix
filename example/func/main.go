@@ -4,11 +4,11 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix"
-	"github.com/pubgo/xerror"
+	"github.com/pubgo/funk"
 )
 
 func main() {
-	defer xerror.RecoverAndExit()
+	defer funk.RecoverAndExit()
 	type handler func() string
 	dix.Provider(func() handler {
 		return func() string {
@@ -33,6 +33,11 @@ func main() {
 	dix.Inject(func(h handler, list []handler) {
 		fmt.Println("inject: ", h())
 		fmt.Println("inject: ", list)
+	})
+
+	dix.Inject(func(p param) {
+		fmt.Println("inject struct: ", p.H())
+		fmt.Println("inject struct: ", p.List)
 	})
 
 	fmt.Println(dix.Graph())
