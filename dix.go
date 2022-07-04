@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/pubgo/funk"
+	"github.com/pubgo/funk/xerr"
 	"k8s.io/klog/v2"
 )
 
@@ -19,13 +20,17 @@ type (
 	value = reflect.Value
 )
 
-type dix struct {
+type Dix struct {
 	option    Options
 	providers map[key][]*node
 	objects   map[key]map[group][]value
 }
 
-func (x *dix) handleOutput(output []reflect.Value) map[group][]value {
+func (x *Dix) Option() Options {
+	return x.option
+}
+
+func (x *Dix) handleOutput(output []reflect.Value) map[group][]value {
 	var out = output[0]
 	var rr = make(map[group][]value)
 	switch out.Kind() {
@@ -60,7 +65,7 @@ func (x *dix) handleOutput(output []reflect.Value) map[group][]value {
 	return rr
 }
 
-func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
+func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 	switch typ.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
@@ -109,7 +114,7 @@ func (x *dix) evalProvider(typ key, opt Options) map[group][]value {
 	return objects
 }
 
-func (x *dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
+func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
 	switch {
 	case isMap:
 		return makeMap(x.evalProvider(typ, opt))
@@ -140,7 +145,7 @@ func (x *dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 	}
 }
 
-func (x *dix) injectFunc(vp reflect.Value, opt Options) {
+func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 	var inTypes []*inType
 	for i := 0; i < vp.Type().NumIn(); i++ {
 		switch inTyp := vp.Type().In(i); inTyp.Kind() {
@@ -162,7 +167,7 @@ func (x *dix) injectFunc(vp reflect.Value, opt Options) {
 	vp.Call(input)
 }
 
-func (x *dix) injectStruct(vp reflect.Value, opt Options) {
+func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
 		if !vp.Field(i).CanSet() {
@@ -187,7 +192,7 @@ func (x *dix) injectStruct(vp reflect.Value, opt Options) {
 	}
 }
 
-func (x *dix) inject(param interface{}, opts ...Option) interface{} {
+func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	funk.Assert(param == nil, "param is null")
 
 	var opt Options
@@ -234,7 +239,7 @@ func (x *dix) inject(param interface{}, opts ...Option) interface{} {
 	return param
 }
 
-func (x *dix) provider(param interface{}) {
+func (x *Dix) provider(param interface{}) {
 	funk.Assert(param == nil, "param is null")
 
 	fnVal := reflect.ValueOf(param)
@@ -286,9 +291,28 @@ func (x *dix) provider(param interface{}) {
 	})
 }
 
-func newDix(opts ...Option) *dix {
+func (x *Dix) dix(opts ...Option) *Dix {
+	var sub = newDix(opts...)
+
+	for k, v := range x.providers {
+		sub.providers[k] = append(sub.providers[k], v...)
+	}
+
+	for k, v := range x.objects {
+		if sub.objects[k] == nil {
+			sub.objects[k] = make(map[group][]value)
+		}
+		for k1, v1 := range v {
+			sub.objects[k][k1] = append(sub.objects[k][k1], v1...)
+		}
+	}
+
+	return sub
+}
+
+func newDix(opts ...Option) *Dix {
 	var option = Options{}
-	defer funk.RecoverAndRaise(func(err funk.XErr) funk.XErr {
+	defer funk.RecoverAndRaise(func(err xerr.XErr) xerr.XErr {
 		return err.WrapF("options=%#v\n", option)
 	})
 
@@ -298,7 +322,7 @@ func newDix(opts ...Option) *dix {
 
 	option.Check()
 
-	c := &dix{
+	c := &Dix{
 		option:    option,
 		providers: make(map[key][]*node),
 		objects:   make(map[key]map[group][]value),

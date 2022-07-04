@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func (x *dix) isCycle() (string, bool) {
+func (x *Dix) isCycle() (string, bool) {
 	var types = make(map[reflect.Type]map[reflect.Type]bool)
 	for _, nodes := range x.providers {
 		for _, n := range nodes {
