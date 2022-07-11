@@ -17,7 +17,7 @@ jobs:
         with:
           go-version: 1.18.0
 
-      - run: git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
+      - run: git config --global url."https://kooksee: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@github.com/pubgo".insteadOf "https://github.com/pubgo"
       - run: go version
       - run: go mod tidy
       - run: go mod vendor
