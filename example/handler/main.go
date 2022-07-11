@@ -6,51 +6,58 @@ import (
 	"os"
 
 	"github.com/pubgo/dix"
-	"github.com/pubgo/xerror"
+	"github.com/pubgo/funk"
 )
 
 type Redis struct {
-	Name string
+	name string
 }
 
 type Handler struct {
-	Name string
-	// 如果是结构体，且tag为dix，那么，会检查结构体内部有指针或者接口属性，然后进行对象注入
-	Cli  *Redis `inject:""`
-	Cli1 *Redis `inject:"${.Name}"`
+	Cli  *Redis
+	Cli1 map[string]*Redis
 }
 
 func main() {
-	defer xerror.RecoverAndExit()
+	defer funk.RecoverAndExit()
 
-	dix.Register(func() *log.Logger {
+	defer func() {
+		fmt.Println(dix.Graph())
+	}()
+
+	dix.Provider(func() *log.Logger {
 		return log.New(os.Stderr, "example: ", log.LstdFlags|log.Lshortfile)
 	})
 
-	dix.Register(func(l *log.Logger) map[string]*Redis {
+	dix.Provider(func(p struct {
+		L *log.Logger
+	}) *Redis {
+		p.L.Println("init redis")
+		return &Redis{name: "hello"}
+	})
+
+	dix.Provider(func(l *log.Logger) map[string]*Redis {
 		l.Println("init redis")
 		return map[string]*Redis{
-			"default": {Name: "hello"},
+			"ns": {name: "hello1"},
 		}
 	})
 
-	dix.Register(func(l *log.Logger) map[string]*Redis {
-		l.Println("init redis")
-		return map[string]*Redis{
-			"ns": {Name: "hello1"},
-		}
-	})
+	fmt.Println(dix.Graph())
 
-	dix.Register(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
+	dix.Inject(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
 		l.Println("invoke redis")
-		fmt.Println("invoke:", r.Name)
+		fmt.Println("invoke:", r.name)
 		fmt.Println("invoke:", rr)
 	})
 
-	var h = Handler{Name: "ns"}
+	var h Handler
 	dix.Inject(&h)
-	xerror.Assert(h.Cli.Name != "hello", "inject error")
-	xerror.Assert(h.Cli1.Name != "hello1", "inject error")
-	dix.Invoke()
-	fmt.Println(dix.Graph())
+	funk.Assert(h.Cli.name != "hello", "inject error")
+	funk.Assert(h.Cli1["ns"].name != "hello1", "inject error")
+
+	dix.Inject(func(h Handler) {
+		funk.Assert(h.Cli.name != "hello", "inject error")
+		funk.Assert(h.Cli1["ns"].name != "hello1", "inject error")
+	})
 }

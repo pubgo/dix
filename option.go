@@ -1,20 +1,16 @@
 package dix
 
-import (
-	"github.com/pubgo/xerror"
-)
-
 type Option func(opts *Options)
 type Options struct {
-	tagName string
+	// 允许结果为nil
+	AllowNil bool
 }
 
 func (o Options) Check() {
-	xerror.Assert(o.tagName == "", "tag name is null")
 }
 
-func WithTag(name string) Option {
+func AllowNil() Option {
 	return func(opts *Options) {
-		opts.tagName = name
+		opts.AllowNil = true
 	}
 }

@@ -4,19 +4,41 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix"
+	"github.com/pubgo/funk"
 )
 
 func main() {
+	defer funk.RecoverAndExit()
 	type handler func() string
-	dix.Register(func() handler {
+	dix.Provider(func() handler {
 		return func() string {
 			return "hello"
 		}
 	})
 
-	dix.Register(func(h handler) {
-		fmt.Println(h())
+	dix.Provider(func() handler {
+		return func() string {
+			return "world"
+		}
 	})
-	dix.Invoke()
+
+	type param struct {
+		H    handler
+		List []handler
+	}
+
+	fmt.Println(dix.Graph())
+
+	fmt.Println("struct: ", dix.Inject(new(param)).H())
+	dix.Inject(func(h handler, list []handler) {
+		fmt.Println("inject: ", h())
+		fmt.Println("inject: ", list)
+	})
+
+	dix.Inject(func(p param) {
+		fmt.Println("inject struct: ", p.H())
+		fmt.Println("inject struct: ", p.List)
+	})
+
 	fmt.Println(dix.Graph())
 }

@@ -7,11 +7,11 @@ import (
 )
 
 type a struct {
-	B b `inject:""`
+	B b
 }
 
 type b struct {
-	C *c `inject:""`
+	C *c
 }
 
 type c struct {
@@ -19,12 +19,11 @@ type c struct {
 }
 
 func main() {
-	dix.Register(func() *c {
+	dix.Provider(func() *c {
 		return &c{C: "hello"}
 	})
 
-	var arg a
-	dix.Inject(&arg)
+	arg := dix.Inject(new(a))
 	fmt.Println(arg.B.C.C)
 	fmt.Println(dix.Graph())
 }

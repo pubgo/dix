@@ -4,21 +4,28 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix"
-	"github.com/pubgo/xerror"
+	"github.com/pubgo/funk"
 )
 
 func main() {
-	dix.Register(func() map[string]*xerror.Err {
-		return map[string]*xerror.Err{
+	defer funk.RecoverAndExit()
+	defer func() {
+		fmt.Println(dix.Graph())
+	}()
+	dix.Provider(func() map[string]*funk.Err {
+		return map[string]*funk.Err{
 			"":      {Msg: "default"},
 			"hello": {Msg: "hello"},
 		}
 	})
 
-	dix.Register(func(err *xerror.Err, errs map[string]*xerror.Err) {
+	dix.Inject(func(err *funk.Err, errs map[string]*funk.Err) {
 		fmt.Println(err.Msg)
 		fmt.Println(errs)
 	})
-	dix.Invoke()
-	fmt.Println(dix.Graph())
+
+	type param struct {
+		ErrMap map[string]*funk.Err
+	}
+	fmt.Println(dix.Inject(new(param)).ErrMap)
 }

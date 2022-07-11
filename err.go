@@ -11,7 +11,11 @@ type Err struct {
 }
 
 func (e Err) Unwrap() error {
-	return e.Err
+	if e.Err != nil {
+		return e.Err
+	}
+
+	return fmt.Errorf("msg=%s detail=%s", e.Msg, e.Detail)
 }
 
 func (e Err) String() string {
@@ -23,13 +27,5 @@ func (e Err) Error() string {
 		return e.Err.Error()
 	}
 
-	if e.Msg != "" {
-		return e.Msg
-	}
-
-	if e.Detail != "" {
-		return e.Detail
-	}
-
-	return "dix unknown error"
+	return fmt.Sprintf("%s, detail=%s", e.Msg, e.Detail)
 }
