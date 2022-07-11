@@ -20,7 +20,7 @@ jobs:
       - name: Run
         shell: bash
         run: |
-          git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
+          git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
           go version
           export GOPRIVATE=github.com/pubgo
           export GOPRIVATE=github.com/pubgo
