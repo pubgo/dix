@@ -5,6 +5,7 @@ import (
 
 	"github.com/pubgo/dix"
 	"github.com/pubgo/funk"
+	"github.com/pubgo/funk/xerr"
 )
 
 func main() {
@@ -40,7 +41,7 @@ func main() {
 		c.Register(func(*A) *C {
 			return new(C)
 		})
-	}, func(err error) {
+	}, func(err xerr.XErr) {
 		if strings.Contains(err.Error(), "provider circular dependency") {
 			return
 		}
