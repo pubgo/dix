@@ -43,5 +43,4 @@ func main() {
 		sub.Inject(func(logger *log.Logger) {})
 	})
 	funk.Assert(err != nil, "inject failed")
-
 }
