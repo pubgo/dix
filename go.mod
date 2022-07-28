@@ -2,9 +2,11 @@ module github.com/pubgo/dix
 
 go 1.18
 
-require (
-	github.com/pubgo/funk v0.5.2
-	k8s.io/klog/v2 v2.60.1
-)
+require github.com/pubgo/funk v0.5.3
 
-require github.com/go-logr/logr v1.2.0 // indirect
+require (
+	github.com/go-kit/log v0.2.1 // indirect
+	github.com/go-logfmt/logfmt v0.5.1 // indirect
+	github.com/go-logr/logr v1.2.2 // indirect
+	github.com/iand/logfmtr v0.2.1 // indirect
+)

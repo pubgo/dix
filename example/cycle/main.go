@@ -3,13 +3,16 @@ package main
 import (
 	"strings"
 
-	"github.com/pubgo/dix"
 	"github.com/pubgo/funk"
+	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/xerr"
+
+	"github.com/pubgo/dix"
 )
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
 	type (
 		A struct {
 		}
@@ -46,6 +49,6 @@ func main() {
 			return
 		}
 
-		funk.Must(err)
+		assert.Must(err)
 	})
 }

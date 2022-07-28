@@ -3,44 +3,48 @@ package main
 import (
 	"log"
 
-	"github.com/pubgo/dix"
 	"github.com/pubgo/funk"
+	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/funk/xerr"
+
+	"github.com/pubgo/dix"
 )
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
 	dix.Provide(func() *log.Logger {
 		return log.Default()
 	})
 
 	var sub = dix.SubDix()
-	sub.Provider(func() *funk.Err {
-		return &funk.Err{Msg: "ok"}
+	sub.Provider(func() *xerr.Err {
+		return &xerr.Err{Msg: "ok"}
 	})
 
 	var err error
 	funk.TryWith(&err, func() {
 		dix.Inject(func(logger *log.Logger) {})
 	})
-	funk.Assert(err != nil, "inject failed")
+	assert.If(err != nil, "inject failed")
 
 	funk.TryWith(&err, func() {
-		dix.Inject(func(err *funk.Err) {})
+		dix.Inject(func(err *xerr.Err) {})
 	})
 	if err != nil {
 		//xerr.WrapXErr(err).DebugPrint()
 	}
 
-	funk.Assert(err == nil, "inject error")
+	assert.If(err == nil, "inject error")
 
 	err = nil
 	funk.TryWith(&err, func() {
-		sub.Inject(func(err *funk.Err) {})
+		sub.Inject(func(err *xerr.Err) {})
 	})
-	funk.Assert(err != nil, "inject failed")
+	assert.If(err != nil, "inject failed")
 
 	funk.TryWith(&err, func() {
 		sub.Inject(func(logger *log.Logger) {})
 	})
-	funk.Assert(err != nil, "inject failed")
+	assert.If(err != nil, "inject failed")
 }
