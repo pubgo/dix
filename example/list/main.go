@@ -3,12 +3,13 @@ package main
 import (
 	"fmt"
 
+	"github.com/pubgo/funk/recovery"
+
 	"github.com/pubgo/dix"
-	"github.com/pubgo/funk"
 )
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
 	defer func() {
 		fmt.Println(dix.Graph())
 	}()

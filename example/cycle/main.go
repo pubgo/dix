@@ -3,12 +3,16 @@ package main
 import (
 	"strings"
 
-	"github.com/pubgo/dix"
 	"github.com/pubgo/funk"
+	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/funk/xerr"
+
+	"github.com/pubgo/dix"
 )
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
 	type (
 		A struct {
 		}
@@ -36,15 +40,16 @@ func main() {
 		return new(C)
 	})
 
-	funk.TryCatch(func() {
+	funk.Try(func() error {
 		c.Register(func(*A) *C {
 			return new(C)
 		})
-	}, func(err error) {
+		return nil
+	}, func(err xerr.XErr) {
 		if strings.Contains(err.Error(), "provider circular dependency") {
 			return
 		}
 
-		funk.Must(err)
+		assert.Must(err)
 	})
 }

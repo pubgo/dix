@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 
+	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/recovery"
+
 	"github.com/pubgo/dix"
-	"github.com/pubgo/funk"
 )
 
 type Redis struct {
@@ -19,7 +21,7 @@ type Handler struct {
 }
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
 
 	defer func() {
 		fmt.Println(dix.Graph())
@@ -53,11 +55,11 @@ func main() {
 
 	var h Handler
 	dix.Inject(&h)
-	funk.Assert(h.Cli.name != "hello", "inject error")
-	funk.Assert(h.Cli1["ns"].name != "hello1", "inject error")
+	assert.If(h.Cli.name != "hello", "inject error")
+	assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 
 	dix.Inject(func(h Handler) {
-		funk.Assert(h.Cli.name != "hello", "inject error")
-		funk.Assert(h.Cli1["ns"].name != "hello1", "inject error")
+		assert.If(h.Cli.name != "hello", "inject error")
+		assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 	})
 }

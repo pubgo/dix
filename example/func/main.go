@@ -3,12 +3,14 @@ package main
 import (
 	"fmt"
 
+	"github.com/pubgo/funk/recovery"
+
 	"github.com/pubgo/dix"
-	"github.com/pubgo/funk"
 )
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
+	
 	type handler func() string
 	dix.Provider(func() handler {
 		return func() string {

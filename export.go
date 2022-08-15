@@ -1,12 +1,12 @@
 package dix
 
 import (
-	"github.com/pubgo/funk"
+	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/xerr"
 )
 
 func (x *Dix) Register(param any) {
-	defer funk.RecoverAndRaise(func(err xerr.XErr) xerr.XErr {
+	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 
@@ -14,7 +14,7 @@ func (x *Dix) Register(param any) {
 }
 
 func (x *Dix) Provider(param any) {
-	defer funk.RecoverAndRaise(func(err xerr.XErr) xerr.XErr {
+	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 
@@ -22,7 +22,7 @@ func (x *Dix) Provider(param any) {
 }
 
 func (x *Dix) Inject(param any, opts ...Option) any {
-	defer funk.RecoverAndRaise(func(err xerr.XErr) xerr.XErr {
+	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
 		return err.WrapF("param=%#v", param)
 	})
 

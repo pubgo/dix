@@ -3,12 +3,15 @@ package main
 import (
 	"fmt"
 
+	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/funk/xerr"
+
 	"github.com/pubgo/dix"
-	"github.com/pubgo/funk"
 )
 
 func main() {
-	defer funk.RecoverAndExit()
+	defer recovery.Exit()
+
 	type handler struct{}
 	dix.Provider(func() *handler {
 		fmt.Println("1")
@@ -20,11 +23,11 @@ func main() {
 		return new(handler)
 	})
 
-	dix.Provider(func(_ *handler) *funk.Err {
-		return &funk.Err{Msg: "ok"}
+	dix.Provider(func(_ *handler) *xerr.Err {
+		return &xerr.Err{Msg: "ok"}
 	})
 
-	dix.Inject(func(err *funk.Err) {
+	dix.Inject(func(err *xerr.Err) {
 		fmt.Println(err.Msg)
 	})
 }
