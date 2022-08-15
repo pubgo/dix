@@ -9,7 +9,7 @@ github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbV
 github.com/iand/logfmtr v0.2.1 h1:y677w6gmOdGXaPbIGjQhGZdmezpCo0AyxXC74scyDk0=
 github.com/iand/logfmtr v0.2.1/go.mod h1:J1K526bF1o/E0Xq01J0vk7pLEfHkgGs8vmdbxH4wqwU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
-github.com/pubgo/funk v0.5.3 h1:IHWy/6f4irMm8+oiY+2D0u2zqpo6KSO5CimNksxamRk=
-github.com/pubgo/funk v0.5.3/go.mod h1:FTllaYVNAS0RWT8CL0XfRVXXwg1C6WyRRSj6OabI8eY=
+github.com/pubgo/funk v0.5.8 h1:asClxjHvpPSdOFLv3dJwSANX+t9MHPrJNf4XJykmVVI=
+github.com/pubgo/funk v0.5.8/go.mod h1:czu03byQsqyp1rvSThu/xsyLdiix76kX+lOBKLLUsHo=
 github.com/stretchr/testify v1.7.2 h1:4jaiDzPyXQvSd7D0EjG45355tLlV3VOECpq10pLC+8s=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

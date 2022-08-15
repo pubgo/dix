@@ -22,29 +22,13 @@ func main() {
 		return &xerr.Err{Msg: "ok"}
 	})
 
-	var err error
-	funk.TryWith(&err, func() {
+	funk.Try(func() error {
 		dix.Inject(func(logger *log.Logger) {})
-	})
-	assert.If(err != nil, "inject failed")
-
-	funk.TryWith(&err, func() {
 		dix.Inject(func(err *xerr.Err) {})
-	})
-	if err != nil {
-		//xerr.WrapXErr(err).DebugPrint()
-	}
-
-	assert.If(err == nil, "inject error")
-
-	err = nil
-	funk.TryWith(&err, func() {
 		sub.Inject(func(err *xerr.Err) {})
-	})
-	assert.If(err != nil, "inject failed")
-
-	funk.TryWith(&err, func() {
 		sub.Inject(func(logger *log.Logger) {})
+		return nil
+	}, func(err xerr.XErr) {
+		assert.Must(err, "inject failed")
 	})
-	assert.If(err != nil, "inject failed")
 }

@@ -40,10 +40,11 @@ func main() {
 		return new(C)
 	})
 
-	funk.TryCatch(func() {
+	funk.Try(func() error {
 		c.Register(func(*A) *C {
 			return new(C)
 		})
+		return nil
 	}, func(err xerr.XErr) {
 		if strings.Contains(err.Error(), "provider circular dependency") {
 			return

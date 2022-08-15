@@ -2,7 +2,7 @@ module github.com/pubgo/dix
 
 go 1.18
 
-require github.com/pubgo/funk v0.5.3
+require github.com/pubgo/funk v0.5.8
 
 require (
 	github.com/go-kit/log v0.2.1 // indirect
