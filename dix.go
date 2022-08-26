@@ -22,9 +22,10 @@ type (
 )
 
 type Dix struct {
-	option    Options
-	providers map[key][]*node
-	objects   map[key]map[group][]value
+	option      Options
+	providers   map[key][]*node
+	objects     map[key]map[group][]value
+	subscribers []func(ns string, val reflect.Value)
 }
 
 func (x *Dix) Option() Options {
@@ -111,6 +112,13 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
 	})
 
+	for _, sub := range x.subscribers {
+		for ns, obj := range objects {
+			for _, o := range obj {
+				sub(ns, o)
+			}
+		}
+	}
 	x.objects[typ] = objects
 	return objects
 }
@@ -191,6 +199,12 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true))
 		}
 	}
+}
+
+func (x *Dix) sub(fn func(ns string, val reflect.Value)) error {
+	assert.If(fn == nil, "fn is nil")
+	x.subscribers = append(x.subscribers, fn)
+	return nil
 }
 
 func (x *Dix) inject(param interface{}, opts ...Option) interface{} {

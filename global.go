@@ -1,6 +1,15 @@
 package dix
 
+import (
+	"github.com/pubgo/funk/assert"
+	"reflect"
+)
+
 var _dix = New()
+
+func Sub(fn func(ns string, val reflect.Value)) {
+	assert.Must(_dix.sub(fn))
+}
 
 // Provider 注册provider
 // 	provider必须有返回值, 且返回值只能有一个, 类型为map,any,ptr,slice,func
