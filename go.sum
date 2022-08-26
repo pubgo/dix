@@ -9,7 +9,9 @@ github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbV
 github.com/iand/logfmtr v0.2.1 h1:y677w6gmOdGXaPbIGjQhGZdmezpCo0AyxXC74scyDk0=
 github.com/iand/logfmtr v0.2.1/go.mod h1:J1K526bF1o/E0Xq01J0vk7pLEfHkgGs8vmdbxH4wqwU=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
-github.com/pubgo/funk v0.5.8 h1:asClxjHvpPSdOFLv3dJwSANX+t9MHPrJNf4XJykmVVI=
-github.com/pubgo/funk v0.5.8/go.mod h1:czu03byQsqyp1rvSThu/xsyLdiix76kX+lOBKLLUsHo=
+github.com/pubgo/funk v0.5.18 h1:qpJk/HaxzEPOejz6ZMmjoE/BQcqmvUSAPA7iwb/D9w4=
+github.com/pubgo/funk v0.5.18/go.mod h1:2D7X+IZ36+5DeRM2K6mT/XpCISUHEBMty8bqXFrQy94=
 github.com/stretchr/testify v1.7.2 h1:4jaiDzPyXQvSd7D0EjG45355tLlV3VOECpq10pLC+8s=
+golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e h1:+WEEuIdZHnUeJJmEUjyYC2gfUMj69yZXw17EnHg/otA=
+golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e/go.mod h1:Kr81I6Kryrl9sr8s2FK3vxD90NdsKWRuOIl2O4CvYbA=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
