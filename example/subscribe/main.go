@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/dix"
 	"reflect"
+
+	"github.com/pubgo/dix"
 )
 
 func main() {
