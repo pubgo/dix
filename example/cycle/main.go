@@ -3,10 +3,9 @@ package main
 import (
 	"strings"
 
-	"github.com/pubgo/funk"
-	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/xerr"
+	"github.com/pubgo/funk/result"
+	"github.com/pubgo/funk/xtry"
 
 	"github.com/pubgo/dix"
 )
@@ -40,16 +39,15 @@ func main() {
 		return new(C)
 	})
 
-	funk.Try(func() error {
+	xtry.Try(func() {
 		c.Register(func(*A) *C {
 			return new(C)
 		})
-		return nil
-	}, func(err xerr.XErr) {
-		if strings.Contains(err.Error(), "provider circular dependency") {
+	}).Do(func(err result.Error) {
+		if strings.Contains(err.Err().Error(), "provider circular dependency") {
 			return
 		}
 
-		assert.Must(err)
+		err.Must()
 	})
 }

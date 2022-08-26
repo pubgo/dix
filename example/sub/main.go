@@ -3,10 +3,9 @@ package main
 import (
 	"log"
 
-	"github.com/pubgo/funk"
-	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/xerr"
+	"github.com/pubgo/funk/xtry"
 
 	"github.com/pubgo/dix"
 )
@@ -22,13 +21,10 @@ func main() {
 		return &xerr.Err{Msg: "ok"}
 	})
 
-	funk.Try(func() error {
+	xtry.Try(func() {
 		dix.Inject(func(logger *log.Logger) {})
 		dix.Inject(func(err *xerr.Err) {})
 		sub.Inject(func(err *xerr.Err) {})
 		sub.Inject(func(logger *log.Logger) {})
-		return nil
-	}, func(err xerr.XErr) {
-		assert.Must(err, "inject failed")
-	})
+	}).Expect("inject failed")
 }

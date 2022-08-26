@@ -1,9 +1,9 @@
 package dix
 
 import (
-	"github.com/pubgo/funk/recovery"
 	"reflect"
 
+	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/xerr"
 )
 
