@@ -22,10 +22,9 @@ type (
 )
 
 type Dix struct {
-	option      Options
-	providers   map[key][]*node
-	objects     map[key]map[group][]value
-	subscribers []func(ns string, val reflect.Value)
+	option    Options
+	providers map[key][]*node
+	objects   map[key]map[group][]value
 }
 
 func (x *Dix) Option() Options {
@@ -112,13 +111,6 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
 	})
 
-	for _, sub := range x.subscribers {
-		for ns, obj := range objects {
-			for _, o := range obj {
-				sub(ns, o)
-			}
-		}
-	}
 	x.objects[typ] = objects
 	return objects
 }
@@ -201,13 +193,17 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 	}
 }
 
-func (x *Dix) sub(fn func(ns string, val reflect.Value)) error {
-	assert.If(fn == nil, "fn is nil")
-	x.subscribers = append(x.subscribers, fn)
-	return nil
-}
-
 func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
+	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
+		return err.WrapF("param=%#v", param)
+	})
+
+	dep, ok := x.isCycle()
+	assert.Err(ok, &Err{
+		Msg:    "provider circular dependency",
+		Detail: dep,
+	})
+
 	assert.If(param == nil, "param is null")
 
 	var opt Options
@@ -254,7 +250,11 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	return param
 }
 
-func (x *Dix) provider(param interface{}) {
+func (x *Dix) provide(param interface{}) {
+	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
+		return err.WrapF("param=%#v", param)
+	})
+
 	assert.If(param == nil, "param is null")
 
 	fnVal := reflect.ValueOf(param)
@@ -298,31 +298,6 @@ func (x *Dix) provider(param interface{}) {
 	}
 
 	x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
-
-	dep, ok := x.isCycle()
-	assert.Err(ok, &Err{
-		Msg:    "provider circular dependency",
-		Detail: dep,
-	})
-}
-
-func (x *Dix) dix(opts ...Option) *Dix {
-	var sub = newDix(opts...)
-
-	for k, v := range x.providers {
-		sub.providers[k] = append(sub.providers[k], v...)
-	}
-
-	for k, v := range x.objects {
-		if sub.objects[k] == nil {
-			sub.objects[k] = make(map[group][]value)
-		}
-		for k1, v1 := range v {
-			sub.objects[k][k1] = append(sub.objects[k][k1], v1...)
-		}
-	}
-
-	return sub
 }
 
 func newDix(opts ...Option) *Dix {

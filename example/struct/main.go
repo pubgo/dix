@@ -2,8 +2,7 @@ package main
 
 import (
 	"fmt"
-
-	"github.com/pubgo/dix"
+	"github.com/pubgo/dix/di"
 )
 
 type a struct {
@@ -19,11 +18,11 @@ type c struct {
 }
 
 func main() {
-	dix.Provider(func() *c {
+	di.Provide(func() *c {
 		return &c{C: "hello"}
 	})
 
-	arg := dix.Inject(new(a))
+	arg := di.Inject(new(a))
 	fmt.Println(arg.B.C.C)
-	fmt.Println(dix.Graph())
+	fmt.Println(di.Graph())
 }
