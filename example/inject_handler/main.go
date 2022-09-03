@@ -2,10 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/pubgo/dix/di"
 
 	"github.com/pubgo/funk/xerr"
-
-	"github.com/pubgo/dix"
 )
 
 type handler struct {
@@ -30,13 +29,13 @@ func (h *handler) DixInjectB(err *xerr.Err, errs []*xerr.Err) {
 }
 
 func main() {
-	dix.Provider(func() *xerr.Err {
+	di.Provide(func() *xerr.Err {
 		return &xerr.Err{Msg: "<ok>"}
 	})
 
-	dix.Provider(func() *xerr.Err {
+	di.Provide(func() *xerr.Err {
 		return &xerr.Err{Msg: "<ok 1>"}
 	})
 
-	dix.Inject(&handler{})
+	di.Inject(&handler{})
 }

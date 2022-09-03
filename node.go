@@ -27,9 +27,9 @@ type node struct {
 
 func (n node) call(in []reflect.Value) []reflect.Value {
 	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
-		err = err.WrapF("provider call failed")
-		err = err.WrapF("provider is %s", callerWithFunc(n.fn))
-		return err.WrapF("provider input is %v\n", in)
+		err = err.Wrap("provider invoke failed")
+		err = err.WithMeta("func", callerWithFunc(n.fn))
+		return err.WithMeta("input", in)
 	})
 
 	return n.fn.Call(in)

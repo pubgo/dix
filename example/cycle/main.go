@@ -3,11 +3,10 @@ package main
 import (
 	"strings"
 
+	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/result"
 	"github.com/pubgo/funk/xtry"
-
-	"github.com/pubgo/dix"
 )
 
 func main() {
@@ -26,23 +25,22 @@ func main() {
 		}
 	)
 
-	var c = dix.New()
-	c.Register(func(*B) *A {
+	di.Provide(func(*B) *A {
 		return new(A)
 	})
 
-	c.Register(func(*C) *B {
+	di.Provide(func(*C) *B {
 		return new(B)
 	})
 
-	c.Register(func(*D) *C {
+	di.Provide(func(*A) *C {
 		return new(C)
 	})
 
 	xtry.Try(func() {
-		c.Register(func(*A) *C {
-			return new(C)
-		})
+		di.Inject(func(*A) {})
+		di.Inject(func(*B) {})
+		di.Inject(func(*C) {})
 	}).Do(func(err result.Error) {
 		if strings.Contains(err.Err().Error(), "provider circular dependency") {
 			return
