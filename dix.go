@@ -31,11 +31,15 @@ func (x *Dix) Option() Options {
 	return x.option
 }
 
-func (x *Dix) handleOutput(output []reflect.Value) map[group][]value {
+func (x *Dix) handleOutput(output []reflect.Value) map[key]map[group][]value {
 	var out = output[0]
-	var rr = make(map[group][]value)
+	var rr = make(map[key]map[group][]value)
 	switch out.Kind() {
 	case reflect.Map:
+		if rr[nil] == nil {
+			rr[nil] = make(map[group][]value)
+		}
+
 		for _, k := range out.MapKeys() {
 			var mapK = strings.TrimSpace(k.String())
 			if mapK == "" {
@@ -47,20 +51,37 @@ func (x *Dix) handleOutput(output []reflect.Value) map[group][]value {
 				continue
 			}
 
-			rr[mapK] = append(rr[mapK], val)
+			rr[nil][mapK] = append(rr[nil][mapK], val)
 		}
 	case reflect.Slice:
+		if rr[nil] == nil {
+			rr[nil] = make(map[group][]value)
+		}
+
 		for i := 0; i < out.Len(); i++ {
 			var val = out.Index(i)
 			if !val.IsValid() || val.IsNil() {
 				continue
 			}
 
-			rr[defaultKey] = append(rr[defaultKey], val)
+			rr[nil][defaultKey] = append(rr[nil][defaultKey], val)
+		}
+	case reflect.Struct:
+		for i := 0; i < out.NumField(); i++ {
+			f := out.Field(i)
+			if rr[f.Type()] == nil {
+				rr[f.Type()] = make(map[group][]value)
+			}
+
+			rr[f.Type()][defaultKey] = append(rr[f.Type()][defaultKey], f)
 		}
 	default:
+		if rr[nil] == nil {
+			rr[nil] = make(map[group][]value)
+		}
+
 		if out.IsValid() && !out.IsNil() {
-			rr[defaultKey] = []value{out}
+			rr[nil][defaultKey] = []value{out}
 		}
 	}
 	return rr
@@ -89,20 +110,31 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		return val
 	}
 
-	objects := make(map[group][]value)
+	objects := make(map[key]map[group][]value)
 	for _, n := range x.providers[typ] {
 		var input []reflect.Value
 		for _, in := range n.input {
 			input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList))
 		}
 
-		for k, v := range x.handleOutput(n.call(input)) {
+		for k, oo := range x.handleOutput(n.call(input)) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
 					logx.V(1).Info("type value exists", "type", typ, "key", k)
 				}
 			}
-			objects[k] = append(objects[k], v...)
+
+			if k == nil {
+				k = typ
+			}
+
+			if objects[k] == nil {
+				objects[k] = make(map[group][]value)
+			}
+
+			for g, o := range oo {
+				objects[k][g] = append(objects[k][g], o...)
+			}
 		}
 	}
 
@@ -111,8 +143,17 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
 	})
 
-	x.objects[typ] = objects
-	return objects
+	for a, b := range objects {
+		if x.objects[a] == nil {
+			x.objects[a] = make(map[group][]value)
+		}
+
+		for c, d := range b {
+			x.objects[a][c] = append(x.objects[a][c], d...)
+		}
+	}
+
+	return x.objects[typ]
 }
 
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
@@ -293,6 +334,21 @@ func (x *Dix) provide(param interface{}) {
 		n.output = &outType{isMap: true, typ: outTyp.Elem()}
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 		n.output = &outType{isList: true, typ: outTyp}
+	case reflect.Struct:
+		var out = typ.Out(0)
+		for i := 0; i < out.NumField(); i++ {
+			nn := &node{fn: fnVal, input: n.input[:]}
+			switch oo := out.Field(i); oo.Type.Kind() {
+			case reflect.Slice:
+				nn.output = &outType{isList: true, typ: oo.Type.Elem()}
+			case reflect.Map:
+				nn.output = &outType{isMap: true, typ: oo.Type.Elem()}
+			case reflect.Ptr, reflect.Interface, reflect.Func:
+				nn.output = &outType{isList: true, typ: oo.Type}
+			}
+			x.providers[nn.output.typ] = append(x.providers[nn.output.typ], nn)
+		}
+		return
 	default:
 		panic(&Err{Msg: "incorrect output type", Detail: fmt.Sprintf("ouTyp=%s kind=%s", outTyp, outTyp.Kind())})
 	}
