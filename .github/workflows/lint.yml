@@ -21,7 +21,7 @@ jobs:
         shell: bash
         run: |
           go env -w GOPRIVATE=gitlab.com/pubgo/*
-          git config --global url."https://kooksee:${{ secrets.TOKEN }}@github.com".insteadOf "https://github.com"
+          git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
           env
           go version
           go mod tidy
