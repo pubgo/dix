@@ -20,16 +20,12 @@ jobs:
       - name: Run
         shell: bash
         run: |
-          git config --global url."https://kooksee:${{ secrets.ACCESS_TOKEN }}@github.com".insteadOf "https://github.com"
+          go env -w GOPRIVATE=gitlab.com/pubgo/*
+          git config --global url."https://kooksee:${{ secrets.TOKEN }}@github.com".insteadOf "https://github.com"
+          env
           go version
-          export GOPRIVATE=github.com/pubgo
-          export GOPRIVATE=github.com/pubgo
-          export GONOPROXY="github.com/pubgo"
-          export GONOSUMDB="github.com/pubgo"
-          export GOPRIVATE="github.com/pubgo"
           go mod tidy
           go mod vendor
-
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
