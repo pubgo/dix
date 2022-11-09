@@ -97,10 +97,11 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		})
 	}
 
-	assert.Err(len(x.providers[typ]) == 0, &Err{
-		Msg:    "provider not found, please check whether the provider imports or type error",
-		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
-	})
+	if len(x.providers[typ]) == 0 {
+		logx.Info("provider not found, please check whether the provider imports or type error",
+			"type", typ.String(), "kind", typ.Kind().String())
+		return make(map[group][]value)
+	}
 
 	if x.objects[typ] == nil {
 		x.objects[typ] = make(map[group][]value)
@@ -114,7 +115,8 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 	for _, n := range x.providers[typ] {
 		var input []reflect.Value
 		for _, in := range n.input {
-			input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList))
+			var val = x.getValue(in.typ, opt, in.isMap, in.isList)
+			input = append(input, val)
 		}
 
 		for k, oo := range x.handleOutput(n.call(input)) {
@@ -138,11 +140,6 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		}
 	}
 
-	assert.Err(len(objects) == 0, &Err{
-		Msg:    "provider values is zero, please check whether the provider imports",
-		Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
-	})
-
 	for a, b := range objects {
 		if x.objects[a] == nil {
 			x.objects[a] = make(map[group][]value)
@@ -159,17 +156,9 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
 	switch {
 	case isMap:
-		return makeMap(x.evalProvider(typ, opt))
+		return makeMap(typ, x.evalProvider(typ, opt))
 	case isList:
-		valMap := x.evalProvider(typ, opt)
-		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
-			panic(&Err{
-				Msg:    "slice: provider default value not found",
-				Detail: fmt.Sprintf("type=%s, allValues=%v", typ, valMap),
-			})
-		} else {
-			return makeList(valMap[defaultKey])
-		}
+		return makeList(typ, x.evalProvider(typ, opt)[defaultKey])
 	case typ.Kind() == reflect.Struct:
 		var v = reflect.New(typ)
 		x.injectStruct(v.Elem(), opt)
@@ -179,10 +168,18 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			panic(&Err{
 				Msg:    "provider default value not found",
-				Detail: fmt.Sprintf("type=%s, allValues=%v", typ, valMap),
+				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			})
+
 		} else {
-			return valList[len(valList)-1]
+			var val = valList[len(valList)-1]
+			if val.IsZero() {
+				panic(&Err{
+					Msg:    "provider default value is nil",
+					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
+				})
+			}
+			return val
 		}
 	}
 }
@@ -198,7 +195,10 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 		case reflect.Slice:
 			inTypes = append(inTypes, &inType{typ: inTyp.Elem(), isList: true})
 		default:
-			panic(&Err{Msg: "incorrect input type", Detail: fmt.Sprintf("inTyp=%s kind=%s", inTyp, inTyp.Kind())})
+			panic(&Err{
+				Msg:    "incorrect input type",
+				Detail: fmt.Sprintf("inTyp=%s kind=%s", inTyp, inTyp.Kind()),
+			})
 		}
 	}
 
@@ -251,6 +251,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	for i := range opts {
 		opts[i](&opt)
 	}
+	opt = x.option.Merge(opt)
 
 	vp := reflect.ValueOf(param)
 	assert.Err(!vp.IsValid() || vp.IsNil(), &Err{
@@ -260,6 +261,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 
 	if vp.Kind() == reflect.Func {
 		assert.If(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
+		assert.If(vp.Type().NumIn() == 0, "the func of provider input num should not be zero")
 		x.injectFunc(vp, opt)
 		return nil
 	}
@@ -323,7 +325,10 @@ func (x *Dix) provide(param interface{}) {
 		case reflect.Slice:
 			n.input = append(n.input, &inType{typ: inTye.Elem(), isList: true})
 		default:
-			panic(&Err{Msg: "incorrect input type", Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind())})
+			panic(&Err{
+				Msg:    "incorrect input type",
+				Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
+			})
 		}
 	}
 
@@ -350,7 +355,10 @@ func (x *Dix) provide(param interface{}) {
 		}
 		return
 	default:
-		panic(&Err{Msg: "incorrect output type", Detail: fmt.Sprintf("ouTyp=%s kind=%s", outTyp, outTyp.Kind())})
+		panic(&Err{
+			Msg:    "incorrect output type",
+			Detail: fmt.Sprintf("ouTyp=%s kind=%s", outTyp, outTyp.Kind()),
+		})
 	}
 
 	x.providers[n.output.typ] = append(x.providers[n.output.typ], n)

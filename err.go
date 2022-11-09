@@ -12,14 +12,14 @@ type Err struct {
 
 func (e Err) Unwrap() error {
 	if e.Err != nil {
-		return e.Err
+		return fmt.Errorf("dix unknown err: %w", e.Err)
 	}
 
-	return fmt.Errorf("msg=%s detail=%s", e.Msg, e.Detail)
+	return fmt.Errorf("dix: msg=%q detail=%q", e.Msg, e.Detail)
 }
 
 func (e Err) String() string {
-	return fmt.Sprintf("%s, err=%v detail=%s", e.Msg, e.Err, e.Detail)
+	return fmt.Sprintf("dix: msg=%q err=%v detail=%q", e.Msg, e.Err, e.Detail)
 }
 
 func (e Err) Error() string {
@@ -27,5 +27,5 @@ func (e Err) Error() string {
 		return e.Err.Error()
 	}
 
-	return fmt.Sprintf("%s, detail=%s", e.Msg, e.Detail)
+	return fmt.Sprintf("msg=%q detail=%q", e.Msg, e.Detail)
 }

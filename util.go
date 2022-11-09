@@ -28,20 +28,13 @@ func callerWithFunc(fn reflect.Value) string {
 	return buf.String()
 }
 
-func makeList(data []reflect.Value) reflect.Value {
-	var kt = data[0].Type()
-	var val = reflect.MakeSlice(reflect.SliceOf(kt), 0, 0)
+func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
+	var val = reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
 	return reflect.Append(val, data...)
 }
 
-func makeMap(data map[string][]reflect.Value) reflect.Value {
-	var kt reflect.Type
-	for k := range data {
-		kt = data[k][0].Type()
-		break
-	}
-
-	var mapVal = reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), kt))
+func makeMap(typ reflect.Type, data map[string][]reflect.Value) reflect.Value {
+	var mapVal = reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), typ))
 	for k, v := range data {
 		mapVal.SetMapIndex(reflect.ValueOf(k), v[len(v)-1])
 	}

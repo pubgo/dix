@@ -6,6 +6,13 @@ type Options struct {
 	AllowNil bool
 }
 
+func (o Options) Merge(opt Options) Options {
+	if o.AllowNil {
+		opt.AllowNil = o.AllowNil
+	}
+	return opt
+}
+
 func (o Options) Check() {
 }
 
