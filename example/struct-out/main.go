@@ -27,6 +27,7 @@ func main() {
 		return Conf{
 			A: &A{Hello: "hello-a"},
 			B: &B{Hello: "hello-b"},
+			C: "hello",
 		}
 	})
 
