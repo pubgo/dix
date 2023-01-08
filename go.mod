@@ -11,8 +11,6 @@ require (
 	github.com/mattn/go-isatty v0.0.16 // indirect
 	github.com/phuslu/goid v1.0.0 // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
-	github.com/valyala/fastrand v1.1.0 // indirect
-	golang.org/x/crypto v0.1.0 // indirect
 	golang.org/x/exp v0.0.0-20221114191408-850992195362 // indirect
 	golang.org/x/sys v0.1.0 // indirect
 	golang.org/x/text v0.5.0 // indirect
