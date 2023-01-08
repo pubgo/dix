@@ -3,8 +3,8 @@ package dix
 import (
 	"reflect"
 
+	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/xerr"
 )
 
 type inType struct {
@@ -26,10 +26,10 @@ type node struct {
 }
 
 func (n node) call(in []reflect.Value) []reflect.Value {
-	defer recovery.Raise(func(err xerr.XErr) xerr.XErr {
-		err = err.Wrap("provider invoke failed")
-		err = err.WithMeta("func", callerWithFunc(n.fn))
-		return err.WithMeta("input", in)
+	defer recovery.Raise(func(err errors.XErr) {
+		err.AddMsg("provider invoke failed")
+		err.AddTag("func", callerWithFunc(n.fn))
+		err.AddTag("input", in)
 	})
 
 	return n.fn.Call(in)
