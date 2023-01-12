@@ -6,12 +6,12 @@ func (x *Dix) Provide(param any)                    { x.provide(param) }
 func (x *Dix) Inject(param any, opts ...Option) any { return x.inject(param, opts...) }
 func (x *Dix) Graph() *Graph {
 	return &Graph{
-		Objects:  x.objectGraph(),
-		Provider: x.providerGraph(),
+		Objects:   x.objectGraph(),
+		Providers: x.providerGraph(),
 	}
 }
 
 type Graph struct {
-	Objects  string
-	Provider string
+	Objects   string `json:"objects"`
+	Providers string `json:"providers"`
 }

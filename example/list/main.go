@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/dix/di"
 
+	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/recovery"
 )
 

@@ -2,6 +2,7 @@ package dix
 
 import (
 	"fmt"
+	"github.com/pubgo/funk/pretty"
 	"reflect"
 	"strings"
 
@@ -9,16 +10,6 @@ import (
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
-)
-
-const (
-	defaultKey = "default"
-)
-
-type (
-	group = string
-	key   = reflect.Type
-	value = reflect.Value
 )
 
 type Dix struct {
@@ -175,7 +166,6 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 				Msg:    "provider default value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			})
-
 		} else {
 			var val = valList[len(valList)-1]
 			if val.IsZero() {
@@ -300,10 +290,10 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 
 func (x *Dix) provide(param interface{}) {
 	defer recovery.Raise(func(err errors.XErr) {
-		err.AddTag("param", param)
+		err.AddTag("param", pretty.Sprint(param))
 	})
 
-	assert.If(param == nil, "param is null")
+	assert.If(param == nil, "[param] is null")
 
 	fnVal := reflect.ValueOf(param)
 	assert.Err(!fnVal.IsValid() || fnVal.IsZero(), &errors.Err{

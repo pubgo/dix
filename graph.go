@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+
+	"github.com/pubgo/funk/stack"
 )
 
 func fPrintln(writer io.Writer, msg string) {
@@ -18,7 +20,7 @@ func (x *Dix) providerGraph() string {
 	fPrintln(b, "\t\tlabel=providers")
 	for k, vs := range x.providers {
 		for _, n := range vs {
-			fn := callerWithFunc(n.fn)
+			fn := stack.CallerWithFunc(n.fn).String()
 			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, fn, k))
 			for _, in := range n.input {
 				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, in.typ, fn))
