@@ -10,8 +10,3 @@ func (x *Dix) Graph() *Graph {
 		Providers: x.providerGraph(),
 	}
 }
-
-type Graph struct {
-	Objects   string `json:"objects"`
-	Providers string `json:"providers"`
-}

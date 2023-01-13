@@ -6,6 +6,7 @@ import (
 	"strings"
 )
 
+// isCycle Check whether type circular dependency
 func (x *Dix) isCycle() (string, bool) {
 	var types = make(map[reflect.Type]map[reflect.Type]bool)
 	for _, nodes := range x.providers {

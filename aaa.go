@@ -3,7 +3,8 @@ package dix
 import "reflect"
 
 const (
-	defaultKey = "default"
+	defaultKey         = "default"
+	InjectMethodPrefix = "DixInject"
 )
 
 type (
@@ -11,3 +12,8 @@ type (
 	key   = reflect.Type
 	value = reflect.Value
 )
+
+type Graph struct {
+	Objects   string `json:"objects"`
+	Providers string `json:"providers"`
+}

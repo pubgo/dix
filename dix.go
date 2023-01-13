@@ -2,15 +2,36 @@ package dix
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/pretty"
 	"reflect"
 	"strings"
 
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
+	"github.com/pubgo/funk/pretty"
 	"github.com/pubgo/funk/recovery"
 )
+
+func newDix(opts ...Option) *Dix {
+	var option = Options{}
+	defer recovery.Raise(func(err errors.XErr) {
+		err.AddTag("options", option)
+	})
+
+	for i := range opts {
+		opts[i](&option)
+	}
+
+	option.Check()
+
+	c := &Dix{
+		option:    option,
+		providers: make(map[key][]*node),
+		objects:   make(map[key]map[group][]value),
+	}
+
+	return c
+}
 
 type Dix struct {
 	option    Options
@@ -231,16 +252,16 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 
 func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	defer recovery.Raise(func(err errors.XErr) {
-		err.AddTag("param", param)
+		err.AddTag("param", pretty.Sprint(param))
 	})
+
+	assert.If(param == nil, "param is null")
 
 	dep, ok := x.isCycle()
 	assert.Err(ok, &errors.Err{
 		Msg:    "provider circular dependency",
 		Detail: dep,
 	})
-
-	assert.If(param == nil, "param is null")
 
 	var opt Options
 	for i := range opts {
@@ -250,8 +271,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 
 	vp := reflect.ValueOf(param)
 	assert.Err(!vp.IsValid() || vp.IsNil(), &errors.Err{
-		Msg:    "param should not be invalid or nil",
-		Detail: fmt.Sprintf("param=%#v", param),
+		Msg: "param should not be invalid or nil",
 	})
 
 	if vp.Kind() == reflect.Func {
@@ -262,13 +282,12 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	}
 
 	assert.Err(vp.Kind() != reflect.Ptr, &errors.Err{
-		Msg:    "param should be ptr type",
-		Detail: fmt.Sprintf("param=%#v", param),
+		Msg: "param should be ptr type",
 	})
 
 	for i := 0; i < vp.NumMethod(); i++ {
 		var name = vp.Type().Method(i).Name
-		if !strings.HasPrefix(name, "DixInject") {
+		if !strings.HasPrefix(name, InjectMethodPrefix) {
 			continue
 		}
 
@@ -280,8 +299,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	}
 
 	assert.Err(vp.Kind() != reflect.Struct, &errors.Err{
-		Msg:    "param should be struct ptr type",
-		Detail: fmt.Sprintf("param=%#v", param),
+		Msg: "param raw type should be struct",
 	})
 
 	x.injectStruct(vp, opt)
@@ -297,13 +315,11 @@ func (x *Dix) provide(param interface{}) {
 
 	fnVal := reflect.ValueOf(param)
 	assert.Err(!fnVal.IsValid() || fnVal.IsZero(), &errors.Err{
-		Msg:    "param should not be invalid or nil",
-		Detail: fmt.Sprintf("param=%#v", param),
+		Msg: "param should not be invalid or nil",
 	})
 
 	assert.Err(fnVal.Kind() != reflect.Func, &errors.Err{
-		Msg:    "param should be function type",
-		Detail: fmt.Sprintf("param=%#v", param),
+		Msg: "param should be function type",
 	})
 
 	typ := fnVal.Type()
@@ -357,25 +373,4 @@ func (x *Dix) provide(param interface{}) {
 	}
 
 	x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
-}
-
-func newDix(opts ...Option) *Dix {
-	var option = Options{}
-	defer recovery.Raise(func(err errors.XErr) {
-		err.AddTag("options", option)
-	})
-
-	for i := range opts {
-		opts[i](&option)
-	}
-
-	option.Check()
-
-	c := &Dix{
-		option:    option,
-		providers: make(map[key][]*node),
-		objects:   make(map[key]map[group][]value),
-	}
-
-	return c
 }

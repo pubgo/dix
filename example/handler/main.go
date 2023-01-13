@@ -52,8 +52,7 @@ func main() {
 		fmt.Println("invoke:", rr)
 	})
 
-	var h Handler
-	di.Inject(&h)
+	h := di.Inject(new(Handler))
 	assert.If(h.Cli.name != "hello", "inject error")
 	assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 
