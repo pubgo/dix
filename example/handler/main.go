@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/dix/di"
 	"log"
 	"os"
 
+	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/recovery"
 )
@@ -52,8 +52,7 @@ func main() {
 		fmt.Println("invoke:", rr)
 	})
 
-	var h Handler
-	di.Inject(&h)
+	h := di.Inject(new(Handler))
 	assert.If(h.Cli.name != "hello", "inject error")
 	assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 

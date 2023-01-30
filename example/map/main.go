@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/dix/di"
 
+	"github.com/pubgo/dix/di"
+	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/xerr"
 )
 
 func main() {
@@ -15,20 +15,20 @@ func main() {
 		fmt.Println(di.Graph())
 	}()
 
-	di.Provide(func() map[string]*xerr.Err {
-		return map[string]*xerr.Err{
+	di.Provide(func() map[string]*errors.Err {
+		return map[string]*errors.Err{
 			"":      {Msg: "default"},
 			"hello": {Msg: "hello"},
 		}
 	})
 
-	di.Inject(func(err *xerr.Err, errs map[string]*xerr.Err) {
+	di.Inject(func(err *errors.Err, errs map[string]*errors.Err) {
 		fmt.Println(err.Msg)
 		fmt.Println(errs)
 	})
 
 	type param struct {
-		ErrMap map[string]*xerr.Err
+		ErrMap map[string]*errors.Err
 	}
 	fmt.Println(di.Inject(new(param)).ErrMap)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/pubgo/funk/assert"
 
 	"github.com/pubgo/dix/di"
 )
@@ -24,6 +25,7 @@ func main() {
 	})
 
 	arg := di.Inject(new(a))
+	assert.If(arg.B.C.C != "hello", "not match")
 	fmt.Println(arg.B.C.C)
 	fmt.Println(di.Graph())
 }

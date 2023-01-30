@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/pubgo/dix/di"
+	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/result"
-	"github.com/pubgo/funk/xtry"
+	"github.com/pubgo/funk/try"
 )
 
 func main() {
@@ -37,15 +37,18 @@ func main() {
 		return new(C)
 	})
 
-	xtry.Try(func() {
+	var err = try.Try(func() error {
 		di.Inject(func(*A) {})
 		di.Inject(func(*B) {})
 		di.Inject(func(*C) {})
-	}).Do(func(err result.Error) {
-		if strings.Contains(err.Err().Error(), "provider circular dependency") {
+		return nil
+	})
+
+	if !errors.IsNil(err) {
+		if strings.Contains(err.Error(), "provider circular dependency") {
 			return
 		}
 
-		err.Must()
-	})
+		panic(err)
+	}
 }

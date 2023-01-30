@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix/di"
+	"github.com/pubgo/funk/recovery"
 )
 
 type C interface{}
@@ -23,6 +24,7 @@ type B struct {
 }
 
 func main() {
+	defer recovery.Exit()
 	di.Provide(func() Conf {
 		return Conf{
 			A: &A{Hello: "hello-a"},
@@ -34,5 +36,6 @@ func main() {
 	di.Inject(func(a *A, b *B, cc C) {
 		fmt.Println(a.Hello, b.Hello, cc)
 	})
+
 	fmt.Println(di.Graph())
 }

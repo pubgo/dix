@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/dix/di"
 
+	"github.com/pubgo/dix/di"
+	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/xerr"
 )
 
 func main() {
@@ -22,11 +22,11 @@ func main() {
 		return new(handler)
 	})
 
-	di.Provide(func(_ *handler) *xerr.Err {
-		return &xerr.Err{Msg: "ok"}
+	di.Provide(func(_ *handler) *errors.Err {
+		return &errors.Err{Msg: "ok"}
 	})
 
-	di.Inject(func(err *xerr.Err) {
+	di.Inject(func(err *errors.Err) {
 		fmt.Println(err.Msg)
 	})
 }

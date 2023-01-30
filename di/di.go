@@ -8,7 +8,7 @@ var _dix = dix.New()
 func Provide(data any) { _dix.Provide(data) }
 
 // Inject 注入对象
-// 	data是<*struct>或者<func>
+// 	data: <*struct>或<func>
 func Inject[T any](data T, opts ...dix.Option) T {
 	_ = _dix.Inject(data, opts...)
 	return data
