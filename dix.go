@@ -14,8 +14,8 @@ import (
 
 func newDix(opts ...Option) *Dix {
 	var option = Options{}
-	defer recovery.Raise(func(err errors.XErr) {
-		err.AddTag("options", option)
+	defer recovery.Raise(func(err error) error {
+		return errors.WrapKV(err, "options", option)
 	})
 
 	for i := range opts {
@@ -251,8 +251,8 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 }
 
 func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
-	defer recovery.Raise(func(err errors.XErr) {
-		err.AddTag("param", pretty.Sprint(param))
+	defer recovery.Raise(func(err error) error {
+		return errors.WrapKV(err, "param", pretty.Sprint(param))
 	})
 
 	assert.If(param == nil, "param is null")
@@ -307,8 +307,8 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 }
 
 func (x *Dix) provide(param interface{}) {
-	defer recovery.Raise(func(err errors.XErr) {
-		err.AddTag("param", pretty.Sprint(param))
+	defer recovery.Raise(func(err error) error {
+		return errors.WrapKV(err, "param", pretty.Sprint(param))
 	})
 
 	assert.If(param == nil, "[param] is null")

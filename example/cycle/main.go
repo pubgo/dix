@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/pubgo/dix/di"
-	"github.com/pubgo/funk/errors"
+	"github.com/pubgo/funk/generic"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/try"
 )
@@ -44,7 +44,7 @@ func main() {
 		return nil
 	})
 
-	if !errors.IsNil(err) {
+	if !generic.IsNil(err) {
 		if strings.Contains(err.Error(), "provider circular dependency") {
 			return
 		}
