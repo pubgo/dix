@@ -15,13 +15,13 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-go@v3
         with:
-          go-version: 1.18.0
+          go-version: 1.19.0
 
       - name: Run
         shell: bash
         run: |
           go env -w GOPRIVATE=gitlab.com/pubgo/*
-          git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
+          git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
           env
           go version
           go mod tidy
