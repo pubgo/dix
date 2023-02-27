@@ -7,12 +7,18 @@ import (
 	"github.com/pubgo/funk/recovery"
 )
 
+type D struct {
+	M C
+}
+
 type C interface{}
 
 type Conf struct {
-	A *A
-	B *B
-	C C
+	A  *A
+	B  *B
+	C  C
+	D  *D
+	D1 D
 }
 
 type A struct {
@@ -30,10 +36,16 @@ func main() {
 			A: &A{Hello: "hello-a"},
 			B: &B{Hello: "hello-b"},
 			C: "hello",
+			D: &D{
+				M: "hello",
+			},
+			D1: D{
+				M: "hello",
+			},
 		}
 	})
 
-	di.Inject(func(a *A, b *B, cc C) {
+	di.Inject(func(a *A, b *B, cc []C) {
 		fmt.Println(a.Hello, b.Hello, cc)
 	})
 

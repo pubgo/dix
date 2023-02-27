@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/alecthomas/repr"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
@@ -308,7 +309,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 
 func (x *Dix) provide(param interface{}) {
 	defer recovery.Raise(func(err error) error {
-		return errors.WrapKV(err, "param", pretty.Sprint(param))
+		return errors.WrapKV(err, "param", repr.String(param))
 	})
 
 	assert.If(param == nil, "[param] is null")

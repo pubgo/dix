@@ -15,6 +15,26 @@ type inType struct {
 	isList bool
 }
 
+func (v inType) Validate() error {
+	if v.isMap && !checkType(v.typ.Kind()) {
+		return errors.New("input map value type kind not support, kind=%s", v.typ.Kind().String())
+	}
+
+	if v.isList && !checkType(v.typ.Kind()) {
+		return errors.New("input list element value type kind not support, kind=%s", v.typ.Kind().String())
+	}
+
+	if v.typ.Kind() != reflect.Struct {
+
+	}
+
+	if !checkType(v.typ.Kind()) {
+		return errors.New("input value type kind not support, kind=%s", v.typ.Kind().String())
+	}
+
+	return nil
+}
+
 type outType struct {
 	typ    reflect.Type
 	isMap  bool

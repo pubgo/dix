@@ -4,6 +4,15 @@ import (
 	"reflect"
 )
 
+func checkType(p reflect.Kind) bool {
+	switch p {
+	case reflect.Interface, reflect.Ptr, reflect.Func:
+		return true
+	default:
+		return false
+	}
+}
+
 func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
 	var val = reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
 	return reflect.Append(val, data...)
