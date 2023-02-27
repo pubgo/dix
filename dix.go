@@ -9,7 +9,6 @@ import (
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
-	"github.com/pubgo/funk/pretty"
 	"github.com/pubgo/funk/recovery"
 )
 
@@ -172,17 +171,32 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 }
 
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
+	valMap := x.evalProvider(typ, opt)
+
 	switch {
 	case isMap:
-		return makeMap(typ, x.evalProvider(typ, opt))
+		if !opt.AllowNil && len(valMap) == 0 {
+			panic(&errors.Err{
+				Msg:    "provider default value not found",
+				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
+			})
+		}
+
+		return makeMap(typ, valMap)
 	case isList:
-		return makeList(typ, x.evalProvider(typ, opt)[defaultKey])
+		if !opt.AllowNil && len(valMap[defaultKey]) == 0 {
+			panic(&errors.Err{
+				Msg:    "provider default value not found",
+				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
+			})
+		}
+
+		return makeList(typ, valMap[defaultKey])
 	case typ.Kind() == reflect.Struct:
 		var v = reflect.New(typ)
 		x.injectStruct(v.Elem(), opt)
 		return v.Elem()
 	default:
-		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			panic(&errors.Err{
 				Msg:    "provider default value not found",
@@ -251,9 +265,9 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 	}
 }
 
-func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
-	defer recovery.Raise(func(err error) error {
-		return errors.WrapKV(err, "param", pretty.Sprint(param))
+func (x *Dix) inject(param interface{}, opts ...Option) (_ interface{}, gErr error) {
+	defer recovery.Err(&gErr, func(err *errors.Event) {
+		err.Str("param", repr.String(param))
 	})
 
 	assert.If(param == nil, "param is null")
@@ -279,7 +293,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 		assert.If(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
 		assert.If(vp.Type().NumIn() == 0, "the func of provider input num should not be zero")
 		x.injectFunc(vp, opt)
-		return nil
+		return nil, nil
 	}
 
 	assert.Err(vp.Kind() != reflect.Ptr, &errors.Err{
@@ -304,7 +318,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	})
 
 	x.injectStruct(vp, opt)
-	return param
+	return param, nil
 }
 
 func (x *Dix) provide(param interface{}) {
