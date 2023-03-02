@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pubgo/dix/di"
@@ -11,6 +12,10 @@ import (
 
 func main() {
 	defer recovery.Exit()
+	defer func() {
+		fmt.Println(di.Graph())
+	}()
+
 	type (
 		A struct {
 		}
@@ -19,9 +24,6 @@ func main() {
 		}
 
 		C struct {
-		}
-
-		D struct {
 		}
 	)
 
@@ -33,14 +35,10 @@ func main() {
 		return new(B)
 	})
 
-	di.Provide(func(*A) *C {
-		return new(C)
-	})
-
 	var err = try.Try(func() error {
-		di.Inject(func(*A) {})
-		di.Inject(func(*B) {})
-		di.Inject(func(*C) {})
+		di.Provide(func(*A) *C {
+			return new(C)
+		})
 		return nil
 	})
 
