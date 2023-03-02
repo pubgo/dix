@@ -18,7 +18,7 @@ type Conf struct {
 	B  *B
 	C  C
 	D  *D
-	D1 D
+	D1 *D
 }
 
 type A struct {
@@ -39,7 +39,7 @@ func main() {
 			D: &D{
 				M: "hello",
 			},
-			D1: D{
+			D1: &D{
 				M: "hello",
 			},
 		}

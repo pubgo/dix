@@ -1,16 +1,14 @@
 package di
 
 import (
-	"github.com/alecthomas/repr"
 	"github.com/pubgo/dix"
-	"github.com/pubgo/funk/assert"
 )
 
 var _dix = dix.New(dix.WithValuesNull())
 
 // Provide 注册对象构造器
 func Provide(data any) {
-	assert.Must(_dix.Provide(data), repr.String(data))
+	_dix.Provide(data)
 }
 
 // Inject 注入对象

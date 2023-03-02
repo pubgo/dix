@@ -4,6 +4,10 @@ import (
 	"github.com/pubgo/dix/internal/dix_inter"
 )
 
+const (
+	InjectMethodPrefix = dix_inter.InjectMethodPrefix
+)
+
 type (
 	Option  = dix_inter.Option
 	Options = dix_inter.Options
@@ -11,11 +15,10 @@ type (
 	Graph   = dix_inter.Graph
 )
 
-var (
-	WithValuesNull = dix_inter.WithValuesNull
-	New            = dix_inter.New
-)
+func WithValuesNull() Option {
+	return dix_inter.WithValuesNull()
+}
 
-const (
-	InjectMethodPrefix = dix_inter.InjectMethodPrefix
-)
+func New(opts ...Option) *Dix {
+	return dix_inter.New(opts...)
+}

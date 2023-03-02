@@ -171,10 +171,9 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 }
 
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) reflect.Value {
-	valMap := x.evalProvider(typ, opt)
-
 	switch {
 	case isMap:
+		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
 			panic(&errors.Err{
 				Msg:    "provider default value not found",
@@ -184,6 +183,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 
 		return makeMap(typ, valMap)
 	case isList:
+		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
 			panic(&errors.Err{
 				Msg:    "provider default value not found",
@@ -197,6 +197,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		x.injectStruct(v.Elem(), opt)
 		return v.Elem()
 	default:
+		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			panic(&errors.Err{
 				Msg:    "provider default value not found",
@@ -265,9 +266,9 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 	}
 }
 
-func (x *Dix) inject(param interface{}, opts ...Option) (_ interface{}, gErr error) {
-	defer recovery.Err(&gErr, func(err *errors.Event) {
-		err.Str("param", repr.String(param))
+func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
+	defer recovery.Raise(func(err error) error {
+		return errors.WrapKV(err, "param", repr.String(param))
 	})
 
 	assert.If(param == nil, "param is null")
@@ -287,7 +288,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) (_ interface{}, gErr err
 		assert.If(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
 		assert.If(vp.Type().NumIn() == 0, "the func of provider input num should not be zero")
 		x.injectFunc(vp, opt)
-		return nil, nil
+		return nil
 	}
 
 	assert.Err(vp.Kind() != reflect.Ptr, &errors.Err{
@@ -312,12 +313,12 @@ func (x *Dix) inject(param interface{}, opts ...Option) (_ interface{}, gErr err
 	})
 
 	x.injectStruct(vp, opt)
-	return param, nil
+	return param
 }
 
-func (x *Dix) provide(param interface{}) (gErr error) {
-	defer recovery.Err(&gErr, func(err *errors.Event) {
-		err.Str("param", repr.String(param))
+func (x *Dix) provide(param interface{}) {
+	defer recovery.Raise(func(err error) error {
+		return errors.WrapKV(err, "param", repr.String(param))
 	})
 
 	assert.If(param == nil, "[param] is null")
