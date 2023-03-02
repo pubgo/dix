@@ -1,4 +1,4 @@
-package dix
+package dix_inter
 
 import "reflect"
 

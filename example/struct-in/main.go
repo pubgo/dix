@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/assert"
 
 	"github.com/pubgo/dix/di"
+	"github.com/pubgo/funk/assert"
 )
 
 type a struct {

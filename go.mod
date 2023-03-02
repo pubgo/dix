@@ -2,10 +2,12 @@ module github.com/pubgo/dix
 
 go 1.19
 
-require github.com/pubgo/funk v0.5.28
+require (
+	github.com/alecthomas/repr v0.2.0
+	github.com/pubgo/funk v0.5.29-8
+)
 
 require (
-	github.com/alecthomas/repr v0.2.0 // indirect
 	github.com/goccy/go-json v0.10.0 // indirect
 	github.com/k0kubun/pp/v3 v3.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
