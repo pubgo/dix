@@ -175,10 +175,18 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 	case isMap:
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
-			panic(&errors.Err{
+			var err = &errors.Err{
 				Msg:    "provider default value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
-			})
+			}
+
+			log.Err(err).
+				Any("options", opt).
+				Any("values", valMap).
+				Str("type", typ.String()).
+				Str("type-kind", typ.Kind().String()).
+				Msg(err.Msg)
+			panic(err)
 		}
 
 		return makeMap(typ, valMap, isList)
