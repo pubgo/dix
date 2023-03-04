@@ -181,7 +181,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 			})
 		}
 
-		return makeMap(typ, valMap)
+		return makeMap(typ, valMap, isList)
 	case isList:
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
@@ -223,7 +223,12 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			inTypes = append(inTypes, &inType{typ: inTyp})
 		case reflect.Map:
-			inTypes = append(inTypes, &inType{typ: inTyp.Elem(), isMap: true})
+			var isList = inTyp.Elem().Kind() == reflect.Slice
+			typ := inTyp.Elem()
+			if isList {
+				typ = typ.Elem()
+			}
+			inTypes = append(inTypes, &inType{typ: typ, isMap: true, isList: isList})
 		case reflect.Slice:
 			inTypes = append(inTypes, &inType{typ: inTyp.Elem(), isList: true})
 		default:
@@ -259,7 +264,12 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 		case reflect.Interface, reflect.Ptr, reflect.Func:
 			vp.Field(i).Set(x.getValue(field.Type, opt, false, false))
 		case reflect.Map:
-			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, true, false))
+			var isList = field.Type.Elem().Kind() == reflect.Slice
+			typ := field.Type.Elem()
+			if isList {
+				typ = typ.Elem()
+			}
+			vp.Field(i).Set(x.getValue(typ, opt, true, isList))
 		case reflect.Slice:
 			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true))
 		}
@@ -342,7 +352,8 @@ func (x *Dix) provide(param interface{}) {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			n.input = append(n.input, &inType{typ: inTye})
 		case reflect.Map:
-			n.input = append(n.input, &inType{typ: inTye.Elem(), isMap: true})
+			var isList = inTye.Elem().Kind() == reflect.Slice
+			n.input = append(n.input, &inType{typ: inTye.Elem(), isMap: true, isList: isList})
 		case reflect.Slice:
 			n.input = append(n.input, &inType{typ: inTye.Elem(), isList: true})
 		default:
