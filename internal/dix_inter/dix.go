@@ -2,6 +2,7 @@ package dix_inter
 
 import (
 	"fmt"
+	"github.com/pubgo/funk/stack"
 	"reflect"
 	"strings"
 
@@ -176,7 +177,8 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
 			var err = &errors.Err{
-				Msg:    "provider default value not found",
+				Caller: stack.Caller(0),
+				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			}
 
@@ -193,10 +195,19 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 	case isList:
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
-			panic(&errors.Err{
-				Msg:    "provider default value not found",
+			var err = &errors.Err{
+				Caller: stack.Caller(0),
+				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
-			})
+			}
+
+			log.Err(err).
+				Any("options", opt).
+				Any("values", valMap[defaultKey]).
+				Str("type", typ.String()).
+				Str("type-kind", typ.Kind().String()).
+				Msg(err.Msg)
+			panic(err)
 		}
 
 		return makeList(typ, valMap[defaultKey])
@@ -207,17 +218,35 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 	default:
 		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
-			panic(&errors.Err{
-				Msg:    "provider default value not found",
+			var err = &errors.Err{
+				Caller: stack.Caller(0),
+				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
-			})
+			}
+
+			log.Err(err).
+				Any("options", opt).
+				Any("values", valMap[defaultKey]).
+				Str("type", typ.String()).
+				Str("type-kind", typ.Kind().String()).
+				Msg(err.Msg)
+			panic(err)
 		} else {
+			// 最后一个value
 			var val = valList[len(valList)-1]
 			if val.IsZero() {
-				panic(&errors.Err{
-					Msg:    "provider default value is nil",
+				var err = &errors.Err{
+					Msg:    "provider value is nil",
 					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
-				})
+				}
+
+				log.Err(err).
+					Any("options", opt).
+					Any("values", valList).
+					Str("type", typ.String()).
+					Str("type-kind", typ.Kind().String()).
+					Msg(err.Msg)
+				panic(err)
 			}
 			return val
 		}
