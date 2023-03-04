@@ -2,15 +2,14 @@ package dix_inter
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/stack"
 	"reflect"
 	"strings"
 
-	"github.com/alecthomas/repr"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/funk/stack"
 )
 
 func newDix(opts ...Option) *Dix {
@@ -315,7 +314,7 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 
 func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	defer recovery.Raise(func(err error) error {
-		return errors.WrapKV(err, "param", repr.String(param))
+		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
 	})
 
 	assert.If(param == nil, "param is null")
@@ -365,7 +364,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 
 func (x *Dix) provide(param interface{}) {
 	defer recovery.Raise(func(err error) error {
-		return errors.WrapKV(err, "param", repr.String(param))
+		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
 	})
 
 	assert.If(param == nil, "[param] is null")
