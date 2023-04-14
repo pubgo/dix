@@ -110,7 +110,7 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 	}
 
 	if len(x.providers[typ]) == 0 {
-		log.Info().
+		log.Warn().
 			Str("type", typ.String()).
 			Str("kind", typ.Kind().String()).
 			Msg("provider not found, please check whether the provider imports or type error")
