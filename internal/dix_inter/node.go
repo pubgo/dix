@@ -17,11 +17,11 @@ type inType struct {
 
 func (v inType) Validate() error {
 	if v.isMap && !checkType(v.typ.Kind()) {
-		return errors.New("input map value type kind not support, kind=%s", v.typ.Kind().String())
+		return fmt.Errorf("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if v.isList && !checkType(v.typ.Kind()) {
-		return errors.New("input list element value type kind not support, kind=%s", v.typ.Kind().String())
+		return fmt.Errorf("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if v.typ.Kind() != reflect.Struct {
@@ -29,7 +29,7 @@ func (v inType) Validate() error {
 	}
 
 	if !checkType(v.typ.Kind()) {
-		return errors.New("input value type kind not support, kind=%s", v.typ.Kind().String())
+		return fmt.Errorf("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	return nil
@@ -49,11 +49,11 @@ type node struct {
 
 func (n node) call(in []reflect.Value) []reflect.Value {
 	defer recovery.Raise(func(err error) error {
-		return errors.WrapEventFn(err, func(evt *errors.Event) {
-			evt.Str("msg", "failed to handle provider invoke")
-			evt.Str("fn_stack", stack.CallerWithFunc(n.fn).String())
-			evt.Str("input", fmt.Sprintf("%v", in))
-			evt.Str("input_data", fmt.Sprintf("%v", in))
+		return errors.WrapTags(err, errors.Tags{
+			"msg":        "failed to handle provider invoke",
+			"fn_stack":   stack.CallerWithFunc(n.fn).String(),
+			"input":      fmt.Sprintf("%v", in),
+			"input_data": fmt.Sprintf("%v", in),
 		})
 	})
 

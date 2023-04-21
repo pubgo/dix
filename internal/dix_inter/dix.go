@@ -9,7 +9,6 @@ import (
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/stack"
 )
 
 func newDix(opts ...Option) *Dix {
@@ -103,10 +102,10 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 	switch typ.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
-		assert.Must(errors.SimpleErr(func(err *errors.Err) {
-			err.Msg = "provider type kind error, the supported type kinds are <ptr,interface,func>"
-			err.Detail = fmt.Sprintf("type=%s kind=%s", typ, typ.Kind())
-		}))
+		assert.Must(errors.Err{
+			Msg:    "provider type kind error, the supported type kinds are <ptr,interface,func>",
+			Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
+		})
 	}
 
 	if len(x.providers[typ]) == 0 {
@@ -176,7 +175,6 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
 			var err = &errors.Err{
-				Caller: stack.Caller(0),
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			}
@@ -195,7 +193,6 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
 			var err = &errors.Err{
-				Caller: stack.Caller(0),
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			}
@@ -218,7 +215,6 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			var err = &errors.Err{
-				Caller: stack.Caller(0),
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			}
