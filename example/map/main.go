@@ -17,8 +17,14 @@ func main() {
 
 	di.Provide(func() map[string]*errors.Err {
 		return map[string]*errors.Err{
-			"":      {Msg: "default"},
+			"":      {Msg: "default msg"},
 			"hello": {Msg: "hello"},
+		}
+	})
+
+	di.Provide(func() map[string]*errors.Err {
+		return map[string]*errors.Err{
+			"hello": {Msg: "hello1"},
 		}
 	})
 
