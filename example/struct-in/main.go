@@ -28,4 +28,20 @@ func main() {
 	assert.If(arg.B.C.C != "hello", "not match")
 	fmt.Println(arg.B.C.C)
 	fmt.Println(di.Graph())
+
+	di.Provide(func(a a1) *a2 {
+		return &a2{Hello: "a2"}
+	})
+
+	di.Inject(func(a *a2) {
+		fmt.Println(a.Hello)
+	})
+}
+
+type a1 struct {
+	b
+}
+
+type a2 struct {
+	Hello string
 }
