@@ -49,12 +49,12 @@ type node struct {
 
 func (n node) call(in []reflect.Value) []reflect.Value {
 	defer recovery.Raise(func(err error) error {
-		return errors.WrapTags(err, errors.Tags{
-			"msg":        "failed to handle provider invoke",
-			"fn_stack":   stack.CallerWithFunc(n.fn).String(),
-			"input":      fmt.Sprintf("%v", in),
-			"input_data": fmt.Sprintf("%v", in),
-		})
+		return errors.WrapTag(err,
+			errors.T("msg", "failed to handle provider invoke"),
+			errors.T("fn_stack", stack.CallerWithFunc(n.fn).String()),
+			errors.T("input", fmt.Sprintf("%v", in)),
+			errors.T("input_data", fmt.Sprintf("%v", in)),
+		)
 	})
 
 	return n.fn.Call(in)
