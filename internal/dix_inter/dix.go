@@ -25,8 +25,8 @@ func newDix(opts ...Option) *Dix {
 
 	c := &Dix{
 		option:    option,
-		providers: make(map[key][]*node),
-		objects:   make(map[key]map[group][]value),
+		providers: make(map[outputType][]*node),
+		objects:   make(map[outputType]map[group][]value),
 	}
 
 	return c
@@ -34,17 +34,17 @@ func newDix(opts ...Option) *Dix {
 
 type Dix struct {
 	option    Options
-	providers map[key][]*node
-	objects   map[key]map[group][]value
+	providers map[outputType][]*node
+	objects   map[outputType]map[group][]value
 }
 
 func (x *Dix) Option() Options {
 	return x.option
 }
 
-func (x *Dix) handleOutput(output []reflect.Value) map[key]map[group][]value {
+func (x *Dix) handleOutput(output []reflect.Value) map[outputType]map[group][]value {
 	var out = output[0]
-	var rr = make(map[key]map[group][]value)
+	var rr = make(map[outputType]map[group][]value)
 	switch out.Kind() {
 	case reflect.Map:
 		if rr[nil] == nil {
@@ -98,7 +98,7 @@ func (x *Dix) handleOutput(output []reflect.Value) map[key]map[group][]value {
 	return rr
 }
 
-func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
+func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 	switch typ.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
@@ -124,7 +124,7 @@ func (x *Dix) evalProvider(typ key, opt Options) map[group][]value {
 		return val
 	}
 
-	objects := make(map[key]map[group][]value)
+	objects := make(map[outputType]map[group][]value)
 	for _, n := range x.providers[typ] {
 		var input []reflect.Value
 		for _, in := range n.input {
@@ -327,8 +327,8 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	})
 
 	if vp.Kind() == reflect.Func {
-		assert.If(vp.Type().NumOut() != 0, "the func of provider output num should be zero")
-		assert.If(vp.Type().NumIn() == 0, "the func of provider input num should not be zero")
+		assert.If(vp.Type().NumOut() != 0, "func output num should be zero")
+		assert.If(vp.Type().NumIn() == 0, "func input num should not be zero")
 		x.injectFunc(vp, opt)
 		return nil
 	}

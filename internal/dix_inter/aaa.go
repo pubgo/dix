@@ -8,9 +8,9 @@ const (
 )
 
 type (
-	group = string
-	key   = reflect.Type
-	value = reflect.Value
+	group      = string
+	outputType = reflect.Type
+	value      = reflect.Value
 )
 
 type Graph struct {
