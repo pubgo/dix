@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-
 	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/pretty"
 	"github.com/pubgo/funk/recovery"
@@ -60,7 +59,13 @@ func main() {
 	})
 
 	di.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D) {
-		pretty.Println(a.Hello, "1", b.Hello, "2", cc, "3", c1, "4", c2, "c2", d, "5", dd)
+		pretty.Println(a.Hello)
+		pretty.Println(b.Hello)
+		pretty.Println(cc)
+		pretty.Println(c1)
+		pretty.Println(c2)
+		pretty.Println(d)
+		pretty.Println(dd)
 	})
 
 	fmt.Println(di.Graph())

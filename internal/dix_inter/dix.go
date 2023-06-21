@@ -65,7 +65,7 @@ func (x *Dix) handleOutput(outType outputType, out reflect.Value) map[outputType
 				continue
 			}
 
-			rr[outType][mapK] = append(rr[nil][mapK], val)
+			rr[outType][mapK] = append(rr[outType][mapK], val)
 		}
 	case reflect.Slice:
 		if rr[outType] == nil {
@@ -78,17 +78,17 @@ func (x *Dix) handleOutput(outType outputType, out reflect.Value) map[outputType
 				continue
 			}
 
-			rr[outType][defaultKey] = append(rr[nil][defaultKey], val)
+			rr[outType][defaultKey] = append(rr[outType][defaultKey], val)
 		}
 	case reflect.Struct:
 		for i := 0; i < out.NumField(); i++ {
 			for typ, vv := range x.handleOutput(out.Field(i).Type(), out.Field(i)) {
 				if rr[typ] == nil {
 					rr[typ] = vv
-				}
-
-				for g, v := range vv {
-					rr[typ][g] = append(rr[typ][g], v...)
+				} else {
+					for g, v := range vv {
+						rr[typ][g] = append(rr[typ][g], v...)
+					}
 				}
 			}
 		}

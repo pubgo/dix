@@ -42,7 +42,7 @@ func (x *Dix) objectGraph() string {
 		for g, values := range objects {
 			var data []string
 			for i := range values {
-				data = append(data, fmt.Sprintf("%s(%p)", values[i].String(), values[i].Interface()))
+				data = append(data, fmt.Sprintf("%#v", values[i].Interface()))
 			}
 			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %v`, k, g, data))
 		}
