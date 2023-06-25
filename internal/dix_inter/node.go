@@ -53,7 +53,7 @@ func (n node) call(in []reflect.Value) []reflect.Value {
 			errors.T("msg", "failed to handle provider invoke"),
 			errors.T("fn_stack", stack.CallerWithFunc(n.fn).String()),
 			errors.T("input", fmt.Sprintf("%v", in)),
-			errors.T("input_data", fmt.Sprintf("%v", in)),
+			errors.T("input_data", reflectValueToString(in)),
 		)
 	})
 

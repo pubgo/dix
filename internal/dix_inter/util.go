@@ -1,6 +1,7 @@
 package dix_inter
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -34,4 +35,12 @@ func makeMap(typ reflect.Type, data map[string][]reflect.Value, valueList bool) 
 		mapVal.SetMapIndex(reflect.ValueOf(index), val)
 	}
 	return mapVal
+}
+
+func reflectValueToString(values []reflect.Value) []string {
+	var data []string
+	for i := range values {
+		data = append(data, fmt.Sprintf("%#v", values[i].Interface()))
+	}
+	return data
 }
