@@ -17,18 +17,27 @@ func main() {
 
 	di.Provide(func() map[string]*errors.Err {
 		return map[string]*errors.Err{
-			"":      {Msg: "default"},
+			"":      {Msg: "default msg"},
 			"hello": {Msg: "hello"},
 		}
 	})
 
-	di.Inject(func(err *errors.Err, errs map[string]*errors.Err) {
+	di.Provide(func() map[string]*errors.Err {
+		return map[string]*errors.Err{
+			"hello": {Msg: "hello1"},
+		}
+	})
+
+	di.Inject(func(err *errors.Err, errs map[string]*errors.Err, errMapList map[string][]*errors.Err) {
 		fmt.Println(err.Msg)
 		fmt.Println(errs)
+		fmt.Println(errMapList)
 	})
 
 	type param struct {
-		ErrMap map[string]*errors.Err
+		ErrMap     map[string]*errors.Err
+		ErrMapList map[string][]*errors.Err
 	}
 	fmt.Println(di.Inject(new(param)).ErrMap)
+	fmt.Println(di.Inject(new(param)).ErrMapList)
 }

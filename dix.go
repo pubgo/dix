@@ -22,3 +22,12 @@ func WithValuesNull() Option {
 func New(opts ...Option) *Dix {
 	return dix_inter.New(opts...)
 }
+
+func Inject[T any](di *Dix, data T, opts ...Option) T {
+	_ = di.Inject(data, opts...)
+	return data
+}
+
+func Provide(di *Dix, data any) {
+	di.Provide(data)
+}

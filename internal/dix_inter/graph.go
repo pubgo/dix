@@ -18,10 +18,10 @@ func (x *Dix) providerGraph() string {
 
 	fPrintln(b, "\tsubgraph providers {")
 	fPrintln(b, "\t\tlabel=providers")
-	for k, vs := range x.providers {
-		for _, n := range vs {
+	for providerOutputType, nodes := range x.providers {
+		for _, n := range nodes {
 			fn := stack.CallerWithFunc(n.fn).String()
-			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, fn, k))
+			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, fn, providerOutputType))
 			for _, in := range n.input {
 				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, in.typ, fn))
 			}
@@ -39,8 +39,8 @@ func (x *Dix) objectGraph() string {
 	fPrintln(b, "\tsubgraph objects {")
 	fPrintln(b, "\t\tlabel=objects")
 	for k, objects := range x.objects {
-		for g, v := range objects {
-			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %v`, k, g, v))
+		for g, values := range objects {
+			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %v`, k, g, reflectValueToString(values)))
 		}
 	}
 	fPrintln(b, "\t}")
