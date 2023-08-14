@@ -12,7 +12,7 @@ import (
 )
 
 func newDix(opts ...Option) *Dix {
-	var option = Options{}
+	var option = Options{AllowValuesNull: true}
 	defer recovery.Raise(func(err error) error {
 		return errors.WrapKV(err, "options", option)
 	})
