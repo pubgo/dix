@@ -24,10 +24,6 @@ func (v inType) Validate() error {
 		return fmt.Errorf("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
-	if v.typ.Kind() != reflect.Struct {
-
-	}
-
 	if !checkType(v.typ.Kind()) {
 		return fmt.Errorf("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}

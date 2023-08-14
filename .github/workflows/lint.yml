@@ -2,12 +2,11 @@ name: Lint
 
 on:
   push:
-    branches: [ master ]
+    branches: [master]
   pull_request:
-    branches: [ master ]
+    branches: [master]
 
 jobs:
-
   lint:
     runs-on: ubuntu-latest
 
@@ -17,15 +16,6 @@ jobs:
         with:
           go-version: 1.19.0
 
-      - name: Run
-        shell: bash
-        run: |
-          go env -w GOPRIVATE=gitlab.com/pubgo/*
-          git config --global url."https://kooksee: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@github.com".insteadOf "https://github.com"
-          env
-          go version
-          go mod tidy
-          go mod vendor
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v2
         with:
