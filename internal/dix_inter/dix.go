@@ -423,5 +423,4 @@ func (x *Dix) provide(param interface{}) {
 		Msg:    "provider circular dependency",
 		Detail: dep,
 	})
-	return
 }
