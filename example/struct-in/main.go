@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/pubgo/dix"
 	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/assert"
 )
@@ -29,12 +30,13 @@ func main() {
 	fmt.Println(arg.B.C.C)
 	fmt.Println(di.Graph())
 
-	di.Provide(func(a a1) *a2 {
-		return &a2{Hello: "a2"}
+	di.Provide(func(a a1, di *dix.Dix) *a2 {
+		return &a2{Hello: "a2", di: di}
 	})
 
 	di.Inject(func(a *a2) {
 		fmt.Println(a.Hello)
+		fmt.Println(a.di.Option())
 	})
 }
 
@@ -44,4 +46,5 @@ type a1 struct {
 
 type a2 struct {
 	Hello string
+	di    *dix.Dix
 }

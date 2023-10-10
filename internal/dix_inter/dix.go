@@ -29,6 +29,8 @@ func newDix(opts ...Option) *Dix {
 		objects:   make(map[outputType]map[group][]value),
 	}
 
+	c.provide(func() *Dix { return c })
+
 	return c
 }
 
@@ -258,7 +260,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		}
 	}
 
-	return reflect.Value{}
+	panic("unknown type")
 }
 
 func (x *Dix) injectFunc(vp reflect.Value, opt Options) {

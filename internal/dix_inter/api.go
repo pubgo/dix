@@ -2,9 +2,7 @@ package dix_inter
 
 // New Dix new
 func New(opts ...Option) *Dix {
-	di := newDix(opts...)
-	di.provide(func() *Dix { return di })
-	return di
+	return newDix(opts...)
 }
 
 func (x *Dix) Provide(param any) {
