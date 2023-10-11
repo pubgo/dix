@@ -381,6 +381,10 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Map:
 		n.output = &outType{isMap: true, typ: outTyp.Elem()}
+		if n.output.typ.Kind() == reflect.Slice {
+			n.output.isList = true
+			n.output.typ = n.output.typ.Elem()
+		}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 		n.output = &outType{isList: true, typ: outTyp}
@@ -424,8 +428,11 @@ func (x *Dix) provide(param interface{}) {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			input = append(input, &inType{typ: inTye})
 		case reflect.Map:
-			var isList = inTye.Elem().Kind() == reflect.Slice
-			input = append(input, &inType{typ: inTye.Elem(), isMap: true, isList: isList})
+			tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
+			if tt.isList {
+				tt.typ = tt.typ.Elem()
+			}
+			input = append(input, tt)
 		case reflect.Slice:
 			input = append(input, &inType{typ: inTye.Elem(), isList: true})
 		default:
