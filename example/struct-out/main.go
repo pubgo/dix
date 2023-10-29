@@ -27,6 +27,9 @@ type Conf struct {
 	C  C
 	D  *D
 	D1 *D
+	D2 map[string]*D
+	D3 []*D
+	D4 map[string][]*D
 }
 
 type A struct {
@@ -54,11 +57,28 @@ func main() {
 			D1: &D{
 				M: "hello d1",
 			},
+			D2: map[string]*D{
+				"default1": {
+					M: "hello d2",
+				},
+			},
+			D3: []*D{
+				{
+					M: "hello d3",
+				},
+			},
+			D4: map[string][]*D{
+				"default4": []*D{
+					{
+						M: "hello d4",
+					},
+				},
+			},
 			Inline: Inline{M: &C1{Name: "c1"}},
 		}
 	})
 
-	di.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D) {
+	di.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D, dm map[string]*D, d5 map[string][]*D) {
 		pretty.Println(a.Hello)
 		pretty.Println(b.Hello)
 		pretty.Println(cc)
@@ -66,6 +86,8 @@ func main() {
 		pretty.Println(c2)
 		pretty.Println(d)
 		pretty.Println(dd)
+		pretty.Println(dm)
+		pretty.Println(d5)
 	})
 
 	fmt.Println(di.Graph())

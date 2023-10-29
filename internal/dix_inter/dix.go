@@ -29,6 +29,8 @@ func newDix(opts ...Option) *Dix {
 		objects:   make(map[outputType]map[group][]value),
 	}
 
+	c.provide(func() *Dix { return c })
+
 	return c
 }
 
@@ -50,6 +52,12 @@ func (x *Dix) handleOutput(outType outputType, out reflect.Value) map[outputType
 
 	switch out.Kind() {
 	case reflect.Map:
+		outType = out.Type().Elem()
+		isList := outType.Kind() == reflect.Slice
+		if isList {
+			outType = outType.Elem()
+		}
+
 		if rr[outType] == nil {
 			rr[outType] = make(map[group][]value)
 		}
@@ -65,9 +73,21 @@ func (x *Dix) handleOutput(outType outputType, out reflect.Value) map[outputType
 				continue
 			}
 
-			rr[outType][mapK] = append(rr[outType][mapK], val)
+			if isList {
+				for i := 0; i < val.Len(); i++ {
+					var vv = val.Index(i)
+					if !vv.IsValid() || vv.IsNil() {
+						continue
+					}
+
+					rr[outType][mapK] = append(rr[outType][mapK], vv)
+				}
+			} else {
+				rr[outType][mapK] = append(rr[outType][mapK], val)
+			}
 		}
 	case reflect.Slice:
+		outType = out.Type().Elem()
 		if rr[outType] == nil {
 			rr[outType] = make(map[group][]value)
 		}
@@ -240,7 +260,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 		}
 	}
 
-	return reflect.Value{}
+	panic("unknown type")
 }
 
 func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
@@ -353,7 +373,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	return param
 }
 
-func (x *Dix) handleStructProvide(fnVal reflect.Value, out reflect.Type, in []*inType) {
+func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType) {
 	n := &node{fn: fnVal, input: in}
 	switch outTyp := out; outTyp.Kind() {
 	case reflect.Slice:
@@ -361,6 +381,10 @@ func (x *Dix) handleStructProvide(fnVal reflect.Value, out reflect.Type, in []*i
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Map:
 		n.output = &outType{isMap: true, typ: outTyp.Elem()}
+		if n.output.typ.Kind() == reflect.Slice {
+			n.output.isList = true
+			n.output.typ = n.output.typ.Elem()
+		}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 		n.output = &outType{isList: true, typ: outTyp}
@@ -368,7 +392,7 @@ func (x *Dix) handleStructProvide(fnVal reflect.Value, out reflect.Type, in []*i
 	case reflect.Struct:
 		log.Debug().Str("name", outTyp.Name()).Msg("struct info")
 		for i := 0; i < outTyp.NumField(); i++ {
-			x.handleStructProvide(fnVal, outTyp.Field(i).Type, in)
+			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}
 	default:
 		panic(&errors.Err{
@@ -404,8 +428,11 @@ func (x *Dix) provide(param interface{}) {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			input = append(input, &inType{typ: inTye})
 		case reflect.Map:
-			var isList = inTye.Elem().Kind() == reflect.Slice
-			input = append(input, &inType{typ: inTye.Elem(), isMap: true, isList: isList})
+			tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
+			if tt.isList {
+				tt.typ = tt.typ.Elem()
+			}
+			input = append(input, tt)
 		case reflect.Slice:
 			input = append(input, &inType{typ: inTye.Elem(), isList: true})
 		default:
@@ -416,7 +443,8 @@ func (x *Dix) provide(param interface{}) {
 		}
 	}
 
-	x.handleStructProvide(fnVal, typ.Out(0), input)
+	// 返回值只能有一个
+	x.handleProvide(fnVal, typ.Out(0), input)
 
 	dep, ok := x.isCycle()
 	assert.Err(ok, &errors.Err{
