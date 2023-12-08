@@ -296,12 +296,8 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
-		if !vp.Field(i).CanSet() {
-			continue
-		}
-
 		field := tp.Field(i)
-		if field.Anonymous {
+		if !vp.Field(i).CanSet() && field.Type.Kind() != reflect.Struct {
 			continue
 		}
 

@@ -10,6 +10,7 @@ import (
 )
 
 type a struct {
+	b
 	B b
 }
 
@@ -29,7 +30,8 @@ func main() {
 	})
 
 	arg := di.Inject(new(a))
-	assert.If(arg.B.C.C != "hello", "not match")
+	assert.If(arg.C.C != "hello", "not match")
+	fmt.Println(arg.C.C)
 	fmt.Println(arg.B.C.C)
 	fmt.Println(di.Graph())
 
