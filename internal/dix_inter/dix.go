@@ -148,10 +148,6 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		x.objects[typ] = make(map[group][]value)
 	}
 
-	if val := x.objects[typ]; len(val) != 0 {
-		return val
-	}
-
 	log.Debug().
 		Str("type", typ.String()).
 		Str("kind", typ.Kind().String()).
