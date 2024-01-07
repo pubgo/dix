@@ -24,9 +24,10 @@ func newDix(opts ...Option) *Dix {
 	option.Check()
 
 	c := &Dix{
-		option:    option,
-		providers: make(map[outputType][]*node),
-		objects:   make(map[outputType]map[group][]value),
+		option:      option,
+		providers:   make(map[outputType][]*node),
+		objects:     make(map[outputType]map[group][]value),
+		initializer: map[reflect.Value]bool{},
 	}
 
 	c.provide(func() *Dix { return c })
@@ -35,9 +36,10 @@ func newDix(opts ...Option) *Dix {
 }
 
 type Dix struct {
-	option    Options
-	providers map[outputType][]*node
-	objects   map[outputType]map[group][]value
+	option      Options
+	providers   map[outputType][]*node
+	objects     map[outputType]map[group][]value
+	initializer map[reflect.Value]bool
 }
 
 func (x *Dix) Option() Options {
@@ -157,13 +159,20 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		Msg("eval type value")
 	objects := make(map[outputType]map[group][]value)
 	for _, n := range x.providers[typ] {
+		if x.initializer[n.fn] {
+			continue
+		}
+
 		var input []reflect.Value
 		for _, in := range n.input {
 			var val = x.getValue(in.typ, opt, in.isMap, in.isList)
 			input = append(input, val)
 		}
 
-		for k, oo := range x.handleOutput(typ, n.call(input)[0]) {
+		var fnCall = n.call(input)
+		x.initializer[n.fn] = true
+
+		for k, oo := range x.handleOutput(typ, fnCall[0]) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
 					log.Info().
