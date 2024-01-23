@@ -448,8 +448,10 @@ func (x *Dix) provide(param interface{}) {
 	x.handleProvide(fnVal, typ.Out(0), input)
 
 	dep, ok := x.isCycle()
-	assert.Err(ok, &errors.Err{
+	err := &errors.Err{
 		Msg:    "provider circular dependency",
 		Detail: dep,
-	})
+	}
+	log.Err(err).Msg(err.Detail)
+	assert.Err(ok, err)
 }
