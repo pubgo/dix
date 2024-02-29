@@ -1,6 +1,8 @@
 package dix_inter
 
 import (
+	"fmt"
+	"github.com/pubgo/funk/errors"
 	"reflect"
 
 	"github.com/pubgo/funk/assert"
@@ -18,7 +20,25 @@ func (x *Dix) SetValue(value any, types ...any) {
 	var typ = reflect.TypeOf(value)
 	var val = reflect.ValueOf(value)
 	var typeMap = make(map[reflect.Type]struct{})
-	typeMap[typ] = struct{}{}
+	switch inTyp := typ; inTyp.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
+		typeMap[inTyp] = struct{}{}
+	case reflect.Map:
+		var isList = inTyp.Elem().Kind() == reflect.Slice
+		typ1 := inTyp.Elem()
+		if isList {
+			typ1 = typ1.Elem()
+		}
+		typeMap[typ1] = struct{}{}
+	case reflect.Slice:
+		typeMap[inTyp.Elem()] = struct{}{}
+	default:
+		panic(&errors.Err{
+			Msg:    "incorrect input type",
+			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTyp, inTyp.Kind()),
+		})
+	}
+
 	for _, t := range types {
 		var tt = reflect.TypeOf(t)
 		if tt.Elem().Kind() == reflect.Interface {
@@ -29,13 +49,13 @@ func (x *Dix) SetValue(value any, types ...any) {
 
 	objects := make(map[outputType]map[group][]reflect.Value)
 	for tt := range typeMap {
-		for k, oo := range handleOutput(tt, val) {
-			if objects[k] == nil {
-				objects[k] = make(map[group][]reflect.Value)
+		for _, oo := range handleOutput(tt, val) {
+			if objects[tt] == nil {
+				objects[tt] = make(map[group][]reflect.Value)
 			}
 
 			for g, o := range oo {
-				objects[k][g] = append(objects[k][g], o...)
+				objects[tt][g] = append(objects[tt][g], o...)
 			}
 		}
 	}

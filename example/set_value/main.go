@@ -22,7 +22,7 @@ func main() {
 	var vv = new(vs)
 	fmt.Printf("%p\n", vv)
 	di.SetValue(vv, (*V)(nil))
-	di.SetValue([]*vs{vv}, (*V)(nil))
+	di.SetValue([]*vs{vv})
 	di.SetValue(map[string][]*vs{"group": {vv}}, (*V)(nil))
 	di.Inject(func(a1 *vs, a2 map[string][]*vs, a3 map[string][]V) {
 		fmt.Printf("%p\n", a1)
