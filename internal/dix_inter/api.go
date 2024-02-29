@@ -2,10 +2,10 @@ package dix_inter
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/errors"
 	"reflect"
 
 	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/generic"
 )
 
