@@ -46,86 +46,6 @@ func (x *Dix) Option() Options {
 	return x.option
 }
 
-func (x *Dix) handleOutput(outType outputType, out reflect.Value) map[outputType]map[group][]value {
-	var rr = make(map[outputType]map[group][]value)
-	if !out.IsValid() || out.IsZero() {
-		return rr
-	}
-
-	switch out.Kind() {
-	case reflect.Map:
-		outType = out.Type().Elem()
-		isList := outType.Kind() == reflect.Slice
-		if isList {
-			outType = outType.Elem()
-		}
-
-		if rr[outType] == nil {
-			rr[outType] = make(map[group][]value)
-		}
-
-		for _, k := range out.MapKeys() {
-			var mapK = strings.TrimSpace(k.String())
-			if mapK == "" {
-				mapK = defaultKey
-			}
-
-			var val = out.MapIndex(k)
-			if !val.IsValid() || val.IsNil() {
-				continue
-			}
-
-			if isList {
-				for i := 0; i < val.Len(); i++ {
-					var vv = val.Index(i)
-					if !vv.IsValid() || vv.IsNil() {
-						continue
-					}
-
-					rr[outType][mapK] = append(rr[outType][mapK], vv)
-				}
-			} else {
-				rr[outType][mapK] = append(rr[outType][mapK], val)
-			}
-		}
-	case reflect.Slice:
-		outType = out.Type().Elem()
-		if rr[outType] == nil {
-			rr[outType] = make(map[group][]value)
-		}
-
-		for i := 0; i < out.Len(); i++ {
-			var val = out.Index(i)
-			if !val.IsValid() || val.IsNil() {
-				continue
-			}
-
-			rr[outType][defaultKey] = append(rr[outType][defaultKey], val)
-		}
-	case reflect.Struct:
-		for i := 0; i < out.NumField(); i++ {
-			for typ, vv := range x.handleOutput(out.Field(i).Type(), out.Field(i)) {
-				if rr[typ] == nil {
-					rr[typ] = vv
-				} else {
-					for g, v := range vv {
-						rr[typ][g] = append(rr[typ][g], v...)
-					}
-				}
-			}
-		}
-	default:
-		if rr[outType] == nil {
-			rr[outType] = make(map[group][]value)
-		}
-
-		if out.IsValid() && !out.IsNil() {
-			rr[outType][defaultKey] = []value{out}
-		}
-	}
-	return rr
-}
-
 func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 	switch typ.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
@@ -141,7 +61,7 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 			Str("type", typ.String()).
 			Str("kind", typ.Kind().String()).
 			Msg("provider not found, please check whether the provider imports or type error")
-		return make(map[group][]value)
+		//return make(map[group][]value)
 	}
 
 	if x.objects[typ] == nil {
@@ -168,7 +88,7 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		var fnCall = n.call(input)
 		x.initializer[n.fn] = true
 
-		for k, oo := range x.handleOutput(typ, fnCall[0]) {
+		for k, oo := range handleOutput(typ, fnCall[0]) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
 					log.Info().
@@ -320,6 +240,11 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 			vp.Field(i).Set(x.getValue(typ, opt, true, isList))
 		case reflect.Slice:
 			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true))
+		default:
+			panic(&errors.Err{
+				Msg:    "incorrect input type",
+				Detail: fmt.Sprintf("inTyp=%s kind=%s", field.Type, field.Type.Kind()),
+			})
 		}
 	}
 }
@@ -444,14 +369,12 @@ func (x *Dix) provide(param interface{}) {
 		}
 	}
 
-	// 返回值只能有一个
+	// The return value can only have one
+	// TODO Add the second parameter, support for error
 	x.handleProvide(fnVal, typ.Out(0), input)
 
 	dep, ok := x.isCycle()
-	err := &errors.Err{
-		Msg:    "provider circular dependency",
-		Detail: dep,
+	if ok {
+		log.Fatal().Str("cycle", dep).Msg("provider circular dependency")
 	}
-	log.Err(err).Msg(err.Detail)
-	assert.Err(ok, err)
 }
