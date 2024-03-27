@@ -2,6 +2,7 @@ package dix
 
 import (
 	"github.com/pubgo/dix/internal/dix_inter"
+	"reflect"
 )
 
 const (
@@ -24,7 +25,13 @@ func New(opts ...Option) *Dix {
 }
 
 func Inject[T any](di *Dix, data T, opts ...Option) T {
-	_ = di.Inject(data, opts...)
+	vp := reflect.ValueOf(data)
+	if vp.Kind() == reflect.Struct {
+		_ = di.Inject(&data, opts...)
+	} else {
+		_ = di.Inject(data, opts...)
+	}
+
 	return data
 }
 
