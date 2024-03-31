@@ -1,8 +1,9 @@
 package dix
 
 import (
-	"github.com/pubgo/dix/internal/dix_inter"
 	"reflect"
+
+	"github.com/pubgo/dix/internal/dix_inter"
 )
 
 const (
