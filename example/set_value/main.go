@@ -4,22 +4,26 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix/di"
+	"github.com/pubgo/funk/log"
 )
 
 type V interface {
 	Hello()
 }
 
-type vs struct {
-}
+type vs struct{}
 
 func (*vs) Hello() {
 	fmt.Println("hello")
 }
 
 func main() {
+	log.SetEnableChecker(func(lvl log.Level, name string, fields log.Map) bool {
+		return false
+	})
+
 	fmt.Println(di.Graph())
-	var vv = new(vs)
+	vv := new(vs)
 	fmt.Printf("%p\n", vv)
 	di.SetValue(vv, (*V)(nil))
 	di.SetValue([]*vs{vv})

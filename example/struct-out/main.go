@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	
+
 	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/pretty"
 	"github.com/pubgo/funk/recovery"
@@ -16,10 +16,12 @@ type D struct {
 	M C
 }
 
-type C interface{}
-type C1 struct {
-	Name string
-}
+type (
+	C  interface{}
+	C1 struct {
+		Name string
+	}
+)
 
 type Conf struct {
 	Inline
@@ -69,7 +71,7 @@ func main() {
 				},
 			},
 			D4: map[string][]*D{
-				"default4": []*D{
+				"default4": {
 					{
 						M: "hello d4",
 					},

@@ -7,12 +7,12 @@ import (
 
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/log"
+	"github.com/pubgo/funk/generic"
 	"github.com/pubgo/funk/recovery"
 )
 
 func newDix(opts ...Option) *Dix {
-	var option = Options{AllowValuesNull: true}
+	option := Options{AllowValuesNull: true}
 	defer recovery.Raise(func(err error) error {
 		return errors.WrapKV(err, "options", option)
 	})
@@ -46,6 +46,63 @@ func (x *Dix) Option() Options {
 	return x.option
 }
 
+func (x *Dix) setValue(value any, types ...any) {
+	assert.If(generic.IsNil(value), "value shoule not be nil")
+
+	typ := reflect.TypeOf(value)
+	val := reflect.ValueOf(value)
+	typeMap := make(map[reflect.Type]struct{})
+	switch inTyp := typ; inTyp.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
+		typeMap[inTyp] = struct{}{}
+	case reflect.Map:
+		isList := inTyp.Elem().Kind() == reflect.Slice
+		typ1 := inTyp.Elem()
+		if isList {
+			typ1 = typ1.Elem()
+		}
+		typeMap[typ1] = struct{}{}
+	case reflect.Slice:
+		typeMap[inTyp.Elem()] = struct{}{}
+	default:
+		panic(&errors.Err{
+			Msg:    "incorrect input type",
+			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTyp, inTyp.Kind()),
+		})
+	}
+
+	for _, t := range types {
+		tt := reflect.TypeOf(t)
+		if tt.Elem().Kind() == reflect.Interface {
+			tt = tt.Elem()
+		}
+		typeMap[tt] = struct{}{}
+	}
+
+	objects := make(map[outputType]map[group][]reflect.Value)
+	for tt := range typeMap {
+		for _, oo := range handleOutput(tt, val) {
+			if objects[tt] == nil {
+				objects[tt] = make(map[group][]reflect.Value)
+			}
+
+			for g, o := range oo {
+				objects[tt][g] = append(objects[tt][g], o...)
+			}
+		}
+	}
+
+	for a, b := range objects {
+		if x.objects[a] == nil {
+			x.objects[a] = make(map[group][]reflect.Value)
+		}
+
+		for c, d := range b {
+			x.objects[a][c] = append(x.objects[a][c], d...)
+		}
+	}
+}
+
 func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 	switch typ.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
@@ -57,18 +114,18 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 	}
 
 	if len(x.providers[typ]) == 0 {
-		log.Warn().
+		logger.Warn().
 			Str("type", typ.String()).
 			Str("kind", typ.Kind().String()).
 			Msg("provider not found, please check whether the provider imports or type error")
-		//return make(map[group][]value)
+		// return make(map[group][]value)
 	}
 
 	if x.objects[typ] == nil {
 		x.objects[typ] = make(map[group][]value)
 	}
 
-	log.Debug().
+	logger.Debug().
 		Str("type", typ.String()).
 		Str("kind", typ.Kind().String()).
 		Int("providers", len(x.providers[typ])).
@@ -81,17 +138,17 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 
 		var input []reflect.Value
 		for _, in := range n.input {
-			var val = x.getValue(in.typ, opt, in.isMap, in.isList)
+			val := x.getValue(in.typ, opt, in.isMap, in.isList)
 			input = append(input, val)
 		}
 
-		var fnCall = n.call(input)
+		fnCall := n.call(input)
 		x.initializer[n.fn] = true
 
 		for k, oo := range handleOutput(typ, fnCall[0]) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
-					log.Info().
+					logger.Info().
 						Str("type", typ.String()).
 						Str("key", k.String()).
 						Msg("type value exists")
@@ -126,7 +183,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 	case isMap:
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
-			log.Panic().
+			logger.Panic().
 				Any("options", opt).
 				Any("values", valMap).
 				Str("type", typ.String()).
@@ -138,12 +195,12 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 	case isList:
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
-			var err = &errors.Err{
+			err := &errors.Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			}
 
-			log.Panic().Err(err).
+			logger.Panic().Err(err).
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
 				Str("type", typ.String()).
@@ -153,13 +210,13 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 
 		return makeList(typ, valMap[defaultKey])
 	case typ.Kind() == reflect.Struct:
-		var v = reflect.New(typ)
+		v := reflect.New(typ)
 		x.injectStruct(v.Elem(), opt)
 		return v.Elem()
 	default:
 		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
-			log.Panic().
+			logger.Panic().
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
 				Str("type", typ.String()).
@@ -167,14 +224,14 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap bool, isList bool) r
 				Msg("provider value not found")
 		} else {
 			// 最后一个value
-			var val = valList[len(valList)-1]
+			val := valList[len(valList)-1]
 			if val.IsZero() {
-				var err = &errors.Err{
+				err := &errors.Err{
 					Msg:    "provider value is nil",
 					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
 				}
 
-				log.Panic().Err(err).
+				logger.Panic().Err(err).
 					Any("options", opt).
 					Any("values", valList).
 					Str("type", typ.String()).
@@ -195,7 +252,7 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
 			inTypes = append(inTypes, &inType{typ: inTyp})
 		case reflect.Map:
-			var isList = inTyp.Elem().Kind() == reflect.Slice
+			isList := inTyp.Elem().Kind() == reflect.Slice
 			typ := inTyp.Elem()
 			if isList {
 				typ = typ.Elem()
@@ -232,7 +289,7 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 		case reflect.Interface, reflect.Ptr, reflect.Func:
 			vp.Field(i).Set(x.getValue(field.Type, opt, false, false))
 		case reflect.Map:
-			var isList = field.Type.Elem().Kind() == reflect.Slice
+			isList := field.Type.Elem().Kind() == reflect.Slice
 			typ := field.Type.Elem()
 			if isList {
 				typ = typ.Elem()
@@ -279,7 +336,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	})
 
 	for i := 0; i < vp.NumMethod(); i++ {
-		var name = vp.Type().Method(i).Name
+		name := vp.Type().Method(i).Name
 		if !strings.HasPrefix(name, InjectMethodPrefix) {
 			continue
 		}
@@ -316,7 +373,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 		n.output = &outType{isList: true, typ: outTyp}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Struct:
-		log.Debug().Str("name", outTyp.Name()).Msg("struct info")
+		logger.Debug().Str("name", outTyp.Name()).Msg("struct info")
 		for i := 0; i < outTyp.NumField(); i++ {
 			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}
@@ -375,6 +432,6 @@ func (x *Dix) provide(param interface{}) {
 
 	dep, ok := x.isCycle()
 	if ok {
-		log.Fatal().Str("cycle", dep).Msg("provider circular dependency")
+		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
 	}
 }

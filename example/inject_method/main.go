@@ -7,8 +7,7 @@ import (
 	"github.com/pubgo/funk/errors"
 )
 
-type handler struct {
-}
+type handler struct{}
 
 func (h *handler) DixInjectA(err *errors.Err) {
 	fmt.Println("A: ", err.Msg)
@@ -16,7 +15,8 @@ func (h *handler) DixInjectA(err *errors.Err) {
 
 func (h *handler) DixInjectD(p struct {
 	Err *errors.Err
-}) {
+},
+) {
 	fmt.Println("D: ", p.Err.Msg)
 }
 

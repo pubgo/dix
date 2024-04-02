@@ -16,7 +16,7 @@ func checkType(p reflect.Kind) bool {
 }
 
 func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
-	var val = reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
+	val := reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
 	return reflect.Append(val, data...)
 }
 
@@ -25,10 +25,10 @@ func makeMap(typ reflect.Type, data map[string][]reflect.Value, valueList bool) 
 		typ = reflect.SliceOf(typ)
 	}
 
-	var mapVal = reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), typ))
+	mapVal := reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), typ))
 	for index, values := range data {
 		// 最后一个值作为默认值
-		var val = values[len(values)-1]
+		val := values[len(values)-1]
 		if valueList {
 			val = reflect.MakeSlice(typ, 0, len(values))
 			val = reflect.Append(val, values...)
@@ -47,7 +47,7 @@ func reflectValueToString(values []reflect.Value) []string {
 }
 
 func handleOutput(outType outputType, out reflect.Value) map[outputType]map[group][]value {
-	var rr = make(map[outputType]map[group][]value)
+	rr := make(map[outputType]map[group][]value)
 	if !out.IsValid() || out.IsZero() {
 		return rr
 	}
@@ -65,19 +65,19 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 		}
 
 		for _, k := range out.MapKeys() {
-			var mapK = strings.TrimSpace(k.String())
+			mapK := strings.TrimSpace(k.String())
 			if mapK == "" {
 				mapK = defaultKey
 			}
 
-			var val = out.MapIndex(k)
+			val := out.MapIndex(k)
 			if !val.IsValid() || val.IsNil() {
 				continue
 			}
 
 			if isList {
 				for i := 0; i < val.Len(); i++ {
-					var vv = val.Index(i)
+					vv := val.Index(i)
 					if !vv.IsValid() || vv.IsNil() {
 						continue
 					}
@@ -95,7 +95,7 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 		}
 
 		for i := 0; i < out.Len(); i++ {
-			var val = out.Index(i)
+			val := out.Index(i)
 			if !val.IsValid() || val.IsNil() {
 				continue
 			}
