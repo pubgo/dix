@@ -5,10 +5,6 @@ func New(opts ...Option) *Dix {
 	return newDix(opts...)
 }
 
-func (x *Dix) SetValue(value any, types ...any) {
-	x.setValue(value, types...)
-}
-
 func (x *Dix) Provide(param any) {
 	x.provide(param)
 }

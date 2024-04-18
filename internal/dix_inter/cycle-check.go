@@ -16,7 +16,9 @@ func (x *Dix) isCycle() (string, bool) {
 			}
 
 			for i := range n.input {
-				types[n.output.typ][n.input[i].typ] = true
+				for _, v := range x.getAllProvideInput(n.input[i].typ) {
+					types[n.output.typ][v.typ] = true
+				}
 			}
 		}
 	}
