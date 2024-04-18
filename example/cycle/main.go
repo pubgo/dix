@@ -17,14 +17,11 @@ func main() {
 	}()
 
 	type (
-		A struct {
-		}
+		A struct{}
 
-		B struct {
-		}
+		B struct{}
 
-		C struct {
-		}
+		C struct{}
 	)
 
 	di.Provide(func(*B) *A {
@@ -35,7 +32,7 @@ func main() {
 		return new(B)
 	})
 
-	var err = try.Try(func() error {
+	err := try.Try(func() error {
 		di.Provide(func(*A) *C {
 			return new(C)
 		})

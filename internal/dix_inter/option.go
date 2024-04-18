@@ -1,10 +1,12 @@
 package dix_inter
 
-type Option func(opts *Options)
-type Options struct {
-	// 允许结果为nil
-	AllowValuesNull bool
-}
+type (
+	Option  func(opts *Options)
+	Options struct {
+		// 允许结果为nil
+		AllowValuesNull bool
+	}
+)
 
 func (o Options) Merge(opt Options) Options {
 	if o.AllowValuesNull {

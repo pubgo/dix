@@ -1,6 +1,10 @@
 package dix_inter
 
-import "reflect"
+import (
+	"reflect"
+
+	"github.com/pubgo/funk/log"
+)
 
 const (
 	// defaultKey 默认的 namespace
@@ -20,3 +24,5 @@ type Graph struct {
 	Objects   string `json:"objects"`
 	Providers string `json:"providers"`
 }
+
+var logger = log.GetLogger("dix")

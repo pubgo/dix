@@ -8,7 +8,7 @@ import (
 
 // isCycle Check whether type circular dependency
 func (x *Dix) isCycle() (string, bool) {
-	var types = make(map[reflect.Type]map[reflect.Type]bool)
+	types := make(map[reflect.Type]map[reflect.Type]bool)
 	for _, nodes := range x.providers {
 		for _, n := range nodes {
 			if types[n.output.typ] == nil {
@@ -16,7 +16,9 @@ func (x *Dix) isCycle() (string, bool) {
 			}
 
 			for i := range n.input {
-				types[n.output.typ][n.input[i].typ] = true
+				for _, v := range x.getAllProvideInput(n.input[i].typ) {
+					types[n.output.typ][v.typ] = true
+				}
 			}
 		}
 	}
@@ -37,7 +39,7 @@ func (x *Dix) isCycle() (string, bool) {
 		return false
 	}
 
-	var nodes = list.New()
+	nodes := list.New()
 	for root := range types {
 		nodes.PushBack(root)
 		if check(root, types[root], nodes) {

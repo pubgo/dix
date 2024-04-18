@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/recovery"
 
 	"github.com/pubgo/dix"
 	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/recovery"
 )
 
 type a struct {

@@ -32,7 +32,8 @@ func main() {
 
 	di.Provide(func(p struct {
 		L *log.Logger
-	}) *Redis {
+	},
+	) *Redis {
 		p.L.Println("init redis")
 		return &Redis{name: "hello"}
 	})

@@ -2,6 +2,7 @@
 > dix是一个依赖注入框架
 
 > 它参考了dig的设计, 但是它能够完成更加复杂的依赖注入管理和namespace依赖隔离
+> https://github.com/uber-go/dig
 
 
 ## 功能描述

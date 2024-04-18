@@ -40,7 +40,9 @@ func (x *Dix) objectGraph() string {
 	fPrintln(b, "\t\tlabel=objects")
 	for k, objects := range x.objects {
 		for g, values := range objects {
-			fPrintln(b, fmt.Sprintf("\t\t"+`object -> "%s" -> "%s" -> %v`, k, g, reflectValueToString(values)))
+			for _, v := range values {
+				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s -> %s"`, k, g, v.Type().String()))
+			}
 		}
 	}
 	fPrintln(b, "\t}")
