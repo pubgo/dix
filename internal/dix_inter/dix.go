@@ -264,7 +264,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 
 	vp := reflect.ValueOf(param)
 	assert.Err(!vp.IsValid() || vp.IsNil(), &errors.Err{
-		Msg: "param should not be invalid or nil",
+		Msg: "param should not be invalid and nil",
 	})
 
 	if vp.Kind() == reflect.Func {
@@ -328,54 +328,6 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 	}
 }
 
-func (x *Dix) getAllProvideInput(typ reflect.Type) []*inType {
-	var input []*inType
-	switch inTye := typ; inTye.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Func:
-		input = append(input, &inType{typ: inTye})
-	case reflect.Struct:
-		for j := 0; j < inTye.NumField(); j++ {
-			input = append(input, x.getAllProvideInput(inTye.Field(j).Type)...)
-		}
-	case reflect.Map:
-		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
-		if tt.isList {
-			tt.typ = tt.typ.Elem()
-		}
-		input = append(input, tt)
-	case reflect.Slice:
-		input = append(input, &inType{typ: inTye.Elem(), isList: true})
-	default:
-		panic(&errors.Err{
-			Msg:    "incorrect input type",
-			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
-		})
-	}
-	return input
-}
-
-func (x *Dix) getProvideInput(typ reflect.Type) []*inType {
-	var input []*inType
-	switch inTye := typ; inTye.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
-		input = append(input, &inType{typ: inTye})
-	case reflect.Map:
-		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
-		if tt.isList {
-			tt.typ = tt.typ.Elem()
-		}
-		input = append(input, tt)
-	case reflect.Slice:
-		input = append(input, &inType{typ: inTye.Elem(), isList: true})
-	default:
-		panic(&errors.Err{
-			Msg:    "incorrect input type",
-			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
-		})
-	}
-	return input
-}
-
 func (x *Dix) provide(param interface{}) {
 	defer recovery.Raise(func(err error) error {
 		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
@@ -398,7 +350,7 @@ func (x *Dix) provide(param interface{}) {
 
 	var input []*inType
 	for i := 0; i < typ.NumIn(); i++ {
-		input = append(input, x.getProvideInput(typ.In(i))...)
+		input = append(input, getProvideInput(typ.In(i))...)
 	}
 
 	// The return value can only have one

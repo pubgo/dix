@@ -11,13 +11,18 @@ func (x *Dix) isCycle() (string, bool) {
 	types := make(map[reflect.Type]map[reflect.Type]bool)
 	for _, nodes := range x.providers {
 		for _, n := range nodes {
-			if types[n.output.typ] == nil {
-				types[n.output.typ] = make(map[reflect.Type]bool)
+			var _ouTyp = n.output.typ
+			if types[_ouTyp] == nil {
+				types[_ouTyp] = make(map[reflect.Type]bool)
 			}
 
 			for i := range n.input {
-				for _, v := range x.getAllProvideInput(n.input[i].typ) {
-					types[n.output.typ][v.typ] = true
+				var _inTyp = n.input[i].typ
+
+				// The input type may have a struct type
+				// Get all addressable types
+				for _, v := range getAllInputType(_inTyp) {
+					types[_ouTyp][v.typ] = true
 				}
 			}
 		}

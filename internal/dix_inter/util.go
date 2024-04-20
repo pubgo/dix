@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/pubgo/funk/errors"
 )
 
 func checkType(p reflect.Kind) bool {
@@ -124,4 +126,57 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 		}
 	}
 	return rr
+}
+
+// get all provider input type, include struct inner type
+func getAllInputType(inTye reflect.Type) []*inType {
+	var input []*inType
+	switch inTye.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func:
+		input = append(input, &inType{typ: inTye})
+	case reflect.Struct:
+		for j := 0; j < inTye.NumField(); j++ {
+			input = append(input, getAllInputType(inTye.Field(j).Type)...)
+		}
+	case reflect.Map:
+		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
+
+		// map[string][]Object
+		if tt.isList {
+			tt.typ = tt.typ.Elem()
+		}
+		input = append(input, tt)
+	case reflect.Slice:
+		input = append(input, &inType{typ: inTye.Elem(), isList: true})
+	default:
+		panic(&errors.Err{
+			Msg:    "incorrect input type",
+			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
+			Tags:   []errors.Tag{},
+		})
+	}
+	return input
+}
+
+// getProvideInput get provider input type without strcut inner type
+func getProvideInput(typ reflect.Type) []*inType {
+	var input []*inType
+	switch inTye := typ; inTye.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
+		input = append(input, &inType{typ: inTye})
+	case reflect.Map:
+		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
+		if tt.isList {
+			tt.typ = tt.typ.Elem()
+		}
+		input = append(input, tt)
+	case reflect.Slice:
+		input = append(input, &inType{typ: inTye.Elem(), isList: true})
+	default:
+		panic(&errors.Err{
+			Msg:    "incorrect input type",
+			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
+		})
+	}
+	return input
 }
