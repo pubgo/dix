@@ -9,6 +9,7 @@ import (
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/funk/stack"
 )
 
 func newDix(opts ...Option) *Dix {
@@ -121,6 +122,14 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 	return x.objects[typ]
 }
 
+func (x *Dix) getProviderStack(typ reflect.Type) []string {
+	var stacks []string
+	for _, n := range x.providers[typ] {
+		stacks = append(stacks, stack.CallerWithFunc(n.fn).String())
+	}
+	return stacks
+}
+
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflect.Value {
 	switch {
 	case isMap:
@@ -128,8 +137,8 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 		if !opt.AllowValuesNull && len(valMap) == 0 {
 			log.Panic().
 				Any("options", opt).
-				Any("values", valMap).
 				Str("type", typ.String()).
+				Any("providers", x.getProviderStack(typ)).
 				Str("type-kind", typ.Kind().String()).
 				Msg("provider value not found")
 		}
@@ -146,6 +155,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 			log.Panic().Err(err).
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
+				Any("providers", x.getProviderStack(typ)).
 				Str("type", typ.String()).
 				Str("type-kind", typ.Kind().String()).
 				Msg(err.Msg)
@@ -163,6 +173,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
 				Str("type", typ.String()).
+				Any("providers", x.getProviderStack(typ)).
 				Str("type-kind", typ.Kind().String()).
 				Msg("provider value not found")
 		} else {
@@ -177,6 +188,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 				log.Panic().Err(err).
 					Any("options", opt).
 					Any("values", valList).
+					Any("providers", x.getProviderStack(typ)).
 					Str("type", typ.String()).
 					Str("type-kind", typ.Kind().String()).
 					Msg(err.Msg)
