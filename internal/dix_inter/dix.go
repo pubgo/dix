@@ -7,7 +7,6 @@ import (
 
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
 )
@@ -58,7 +57,7 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 	}
 
 	if len(x.providers[typ]) == 0 {
-		log.Warn().
+		logger.Warn().
 			Str("type", typ.String()).
 			Str("kind", typ.Kind().String()).
 			Msg("provider not found, please check whether the provider imports or type error")
@@ -69,7 +68,7 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		x.objects[typ] = make(map[group][]value)
 	}
 
-	log.Debug().
+	logger.Debug().
 		Str("type", typ.String()).
 		Str("kind", typ.Kind().String()).
 		Int("providers", len(x.providers[typ])).
@@ -92,7 +91,7 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		for k, oo := range handleOutput(typ, fnCall[0]) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
-					log.Info().
+					logger.Info().
 						Str("type", typ.String()).
 						Str("key", k.String()).
 						Msg("type value exists")
@@ -135,7 +134,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 	case isMap:
 		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
-			log.Panic().
+			logger.Panic().
 				Any("options", opt).
 				Str("type", typ.String()).
 				Any("providers", x.getProviderStack(typ)).
@@ -152,7 +151,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 			}
 
-			log.Panic().Err(err).
+			logger.Panic().Err(err).
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
 				Any("providers", x.getProviderStack(typ)).
@@ -169,7 +168,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 	default:
 		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
-			log.Panic().
+			logger.Panic().
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
 				Str("type", typ.String()).
@@ -185,7 +184,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
 				}
 
-				log.Panic().Err(err).
+				logger.Panic().Err(err).
 					Any("options", opt).
 					Any("values", valList).
 					Any("providers", x.getProviderStack(typ)).
@@ -328,7 +327,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 		n.output = &outType{typ: outTyp}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Struct:
-		log.Debug().Str("name", outTyp.Name()).Msg("struct info")
+		logger.Debug().Str("name", outTyp.Name()).Msg("struct info")
 		for i := 0; i < outTyp.NumField(); i++ {
 			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}
@@ -419,6 +418,6 @@ func (x *Dix) provide(param interface{}) {
 
 	dep, ok := x.isCycle()
 	if ok {
-		log.Fatal().Str("cycle", dep).Msg("provider circular dependency")
+		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
 	}
 }
