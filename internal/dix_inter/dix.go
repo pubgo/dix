@@ -73,7 +73,6 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		Str("kind", typ.Kind().String()).
 		Int("providers", len(x.providers[typ])).
 		Msg("eval type value")
-	objects := make(map[outputType]map[group][]value)
 	for _, n := range x.providers[typ] {
 		if x.initializer[n.fn] {
 			continue
@@ -81,13 +80,14 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 
 		var input []reflect.Value
 		for _, in := range n.input {
-			val := x.getValue(in.typ, opt, in.isMap, in.isList)
+			val := x.getValue(in.typ, opt, in.isMap, in.isList, typ)
 			input = append(input, val)
 		}
 
 		fnCall := n.call(input)
 		x.initializer[n.fn] = true
 
+		objects := make(map[outputType]map[group][]value)
 		for k, oo := range handleOutput(typ, fnCall[0]) {
 			if n.output.isMap {
 				if _, ok := objects[k]; ok {
@@ -106,15 +106,15 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 				objects[k][g] = append(objects[k][g], o...)
 			}
 		}
-	}
 
-	for a, b := range objects {
-		if x.objects[a] == nil {
-			x.objects[a] = make(map[group][]value)
-		}
+		for a, b := range objects {
+			if x.objects[a] == nil {
+				x.objects[a] = make(map[group][]value)
+			}
 
-		for c, d := range b {
-			x.objects[a][c] = append(x.objects[a][c], d...)
+			for c, d := range b {
+				x.objects[a][c] = append(x.objects[a][c], d...)
+			}
 		}
 	}
 
@@ -129,7 +129,7 @@ func (x *Dix) getProviderStack(typ reflect.Type) []string {
 	return stacks
 }
 
-func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflect.Value {
+func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) reflect.Value {
 	switch {
 	case isMap:
 		valMap := x.evalProvider(typ, opt)
@@ -138,6 +138,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 				Any("options", opt).
 				Str("type", typ.String()).
 				Any("providers", x.getProviderStack(typ)).
+				Any("parents", fmt.Sprintf("%q", parents)).
 				Str("type-kind", typ.Kind().String()).
 				Msg("provider value not found")
 		}
@@ -155,6 +156,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 				Any("options", opt).
 				Any("values", valMap[defaultKey]).
 				Any("providers", x.getProviderStack(typ)).
+				Any("parents", fmt.Sprintf("%q", parents)).
 				Str("type", typ.String()).
 				Str("type-kind", typ.Kind().String()).
 				Msg(err.Msg)
@@ -173,6 +175,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 				Any("values", valMap[defaultKey]).
 				Str("type", typ.String()).
 				Any("providers", x.getProviderStack(typ)).
+				Any("parents", fmt.Sprintf("%q", parents)).
 				Str("type-kind", typ.Kind().String()).
 				Msg("provider value not found")
 		} else {
@@ -188,6 +191,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool) reflec
 					Any("options", opt).
 					Any("values", valList).
 					Any("providers", x.getProviderStack(typ)).
+					Any("parents", fmt.Sprintf("%q", parents)).
 					Str("type", typ.String()).
 					Str("type-kind", typ.Kind().String()).
 					Msg(err.Msg)
@@ -224,7 +228,7 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 
 	var input []reflect.Value
 	for _, in := range inTypes {
-		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList))
+		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()))
 	}
 	vp.Call(input)
 }
@@ -241,16 +245,16 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 		case reflect.Struct:
 			x.injectStruct(vp.Field(i), opt)
 		case reflect.Interface, reflect.Ptr, reflect.Func:
-			vp.Field(i).Set(x.getValue(field.Type, opt, false, false))
+			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()))
 		case reflect.Map:
 			isList := field.Type.Elem().Kind() == reflect.Slice
 			typ := field.Type.Elem()
 			if isList {
 				typ = typ.Elem()
 			}
-			vp.Field(i).Set(x.getValue(typ, opt, true, isList))
+			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()))
 		case reflect.Slice:
-			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true))
+			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()))
 		default:
 			panic(&errors.Err{
 				Msg:    "incorrect input type",
