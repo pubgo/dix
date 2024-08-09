@@ -17,15 +17,15 @@ type inType struct {
 
 func (v inType) Validate() error {
 	if v.isMap && !checkType(v.typ.Kind()) {
-		return fmt.Errorf("input map value type kind not support, kind=%s", v.typ.Kind().String())
+		return errors.Format("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if v.isList && !checkType(v.typ.Kind()) {
-		return fmt.Errorf("input list element value type kind not support, kind=%s", v.typ.Kind().String())
+		return errors.Format("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if !checkType(v.typ.Kind()) {
-		return fmt.Errorf("input value type kind not support, kind=%s", v.typ.Kind().String())
+		return errors.Format("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	return nil
