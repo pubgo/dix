@@ -1,4 +1,4 @@
-package dix_inter
+package dix_internal
 
 import (
 	"reflect"
@@ -26,3 +26,7 @@ type Graph struct {
 }
 
 var logger = log.GetLogger("dix")
+
+func SetLogLevel(lvl log.Level) {
+	logger = logger.WithLevel(lvl)
+}

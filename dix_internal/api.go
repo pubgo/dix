@@ -1,4 +1,4 @@
-package dix_inter
+package dix_internal
 
 // New Dix new
 func New(opts ...Option) *Dix {
