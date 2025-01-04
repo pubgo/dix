@@ -24,6 +24,7 @@ type (
 )
 
 type Conf struct {
+	Data string
 	Inline
 	A  *A
 	B  *B
