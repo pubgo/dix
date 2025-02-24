@@ -1,10 +1,11 @@
 package dix_internal
 
 import (
-	"container/list"
-	"github.com/pubgo/funk/log"
 	"reflect"
+	"slices"
 	"strings"
+
+	"github.com/pubgo/funk/generic"
 )
 
 // isCycle Check whether type circular dependency
@@ -24,41 +25,34 @@ func (x *Dix) isCycle() (string, bool) {
 		}
 	}
 
-	var check func(root reflect.Type, data map[reflect.Type]bool, nodes *list.List) bool
-	check = func(root reflect.Type, nodeTypes map[reflect.Type]bool, nodes *list.List) bool {
-		for typ := range nodeTypes {
-			nodes.PushBack(typ)
-			if root == typ {
+	var checkHasCycle func(root reflect.Type, data map[reflect.Type]bool, nodes *[]reflect.Type) bool
+	checkHasCycle = func(outT reflect.Type, inTypes map[reflect.Type]bool, nodePaths *[]reflect.Type) bool {
+		for inT := range inTypes {
+			if slices.ContainsFunc(*nodePaths, func(r reflect.Type) bool { return outT == inT }) {
 				return true
 			}
 
-			log.Debug().Msgf("root: %v, typ: %v, len:%d", root, typ, nodes.Len())
-			if check(root, types[typ], nodes) {
+			*nodePaths = append(*nodePaths, inT)
+			if checkHasCycle(outT, types[inT], nodePaths) {
 				return true
 			}
-			nodes.Remove(nodes.Back())
+			*nodePaths = (*nodePaths)[:len(*nodePaths)-1]
 		}
 		return false
 	}
 
-	nodes := list.New()
-	for root := range types {
-		nodes.PushBack(root)
-		if check(root, types[root], nodes) {
+	var nodes []reflect.Type
+	for outT := range types {
+		nodes = append(nodes, outT)
+		if checkHasCycle(outT, types[outT], &nodes) {
 			break
 		}
-		nodes.Remove(nodes.Back())
+		nodes = nodes[:len(nodes)-1]
 	}
 
-	if nodes.Len() == 0 {
+	if len(nodes) == 0 {
 		return "", false
 	}
 
-	var dep []string
-	for nodes.Len() != 0 {
-		dep = append(dep, nodes.Front().Value.(reflect.Type).String())
-		nodes.Remove(nodes.Front())
-	}
-
-	return strings.Join(dep, " -> "), true
+	return strings.Join(generic.Map(nodes, func(i int) string { return nodes[i].String() }), " -> "), true
 }
