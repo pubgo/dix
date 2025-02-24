@@ -1,6 +1,9 @@
 package dix_internal
 
-import "os"
+import (
+	"os"
+	"runtime/debug"
+)
 
 // New Dix new
 func New(opts ...Option) *Dix {
@@ -9,16 +12,13 @@ func New(opts ...Option) *Dix {
 
 func (x *Dix) Provide(param any) {
 	x.provide(param)
-	x.depCycleChecked.Store(false)
 }
 
 func (x *Dix) Inject(param any, opts ...Option) any {
-	if !x.depCycleChecked.CompareAndSwap(false, true) {
-		dep, ok := x.isCycle()
-		if ok {
-			logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
-			os.Exit(1)
-		}
+	if dep, ok := x.isCycle(); ok {
+		debug.PrintStack()
+		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
+		os.Exit(1)
 	}
 	return x.inject(param, opts...)
 }

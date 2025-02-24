@@ -2,12 +2,9 @@ package main
 
 import (
 	"fmt"
-	"strings"
-
+	
 	"github.com/pubgo/dix/di"
-	"github.com/pubgo/funk/generic"
 	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/try"
 )
 
 func main() {
@@ -32,18 +29,8 @@ func main() {
 		return new(B)
 	})
 
-	err := try.Try(func() error {
-		di.Provide(func(*A) *C {
-			return new(C)
-		})
-		return nil
+	di.Provide(func(*A) *C {
+		return new(C)
 	})
-
-	if !generic.IsNil(err) {
-		if strings.Contains(err.Error(), "provider circular dependency") {
-			return
-		}
-
-		panic(err)
-	}
+	di.Inject(func(*C) {})
 }

@@ -46,15 +46,15 @@ func reflectValueToString(values []reflect.Value) []string {
 	return data
 }
 
-func handleOutput(outType outputType, out reflect.Value) map[outputType]map[group][]value {
+func handleOutput(outType outputType, providerOutTyp reflect.Value) map[outputType]map[group][]value {
 	rr := make(map[outputType]map[group][]value)
-	if !out.IsValid() || out.IsZero() {
+	if !providerOutTyp.IsValid() || providerOutTyp.IsZero() {
 		return rr
 	}
 
-	switch out.Kind() {
+	switch providerOutTyp.Kind() {
 	case reflect.Map:
-		outType = out.Type().Elem()
+		outType = providerOutTyp.Type().Elem()
 		isList := outType.Kind() == reflect.Slice
 		if isList {
 			outType = outType.Elem()
@@ -64,13 +64,13 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 			rr[outType] = make(map[group][]value)
 		}
 
-		for _, k := range out.MapKeys() {
+		for _, k := range providerOutTyp.MapKeys() {
 			mapK := strings.TrimSpace(k.String())
 			if mapK == "" {
 				mapK = defaultKey
 			}
 
-			val := out.MapIndex(k)
+			val := providerOutTyp.MapIndex(k)
 			if !val.IsValid() || val.IsNil() {
 				continue
 			}
@@ -89,13 +89,13 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 			}
 		}
 	case reflect.Slice:
-		outType = out.Type().Elem()
+		outType = providerOutTyp.Type().Elem()
 		if rr[outType] == nil {
 			rr[outType] = make(map[group][]value)
 		}
 
-		for i := 0; i < out.Len(); i++ {
-			val := out.Index(i)
+		for i := 0; i < providerOutTyp.Len(); i++ {
+			val := providerOutTyp.Index(i)
 			if !val.IsValid() || val.IsNil() {
 				continue
 			}
@@ -103,8 +103,8 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 			rr[outType][defaultKey] = append(rr[outType][defaultKey], val)
 		}
 	case reflect.Struct:
-		for i := 0; i < out.NumField(); i++ {
-			for typ, vv := range handleOutput(out.Field(i).Type(), out.Field(i)) {
+		for i := 0; i < providerOutTyp.NumField(); i++ {
+			for typ, vv := range handleOutput(providerOutTyp.Field(i).Type(), providerOutTyp.Field(i)) {
 				if rr[typ] == nil {
 					rr[typ] = vv
 				} else {
@@ -119,8 +119,8 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 			rr[outType] = make(map[group][]value)
 		}
 
-		if out.IsValid() && !out.IsNil() {
-			rr[outType][defaultKey] = []value{out}
+		if providerOutTyp.IsValid() && !providerOutTyp.IsNil() {
+			rr[outType][defaultKey] = []value{providerOutTyp}
 		}
 	}
 	return rr

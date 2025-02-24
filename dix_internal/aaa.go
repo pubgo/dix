@@ -27,6 +27,6 @@ type Graph struct {
 
 var logger = log.GetLogger("dix")
 
-func SetLogLevel(lvl log.Level) {
-	logger = logger.WithLevel(lvl)
+func SetLog(setter func(logger log.Logger) log.Logger) {
+	logger = setter(logger)
 }

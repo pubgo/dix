@@ -38,9 +38,9 @@ type outType struct {
 }
 
 type node struct {
-	fn     reflect.Value
-	input  []*inType
-	output *outType
+	fn        reflect.Value
+	inputList []*inType
+	output    *outType
 }
 
 func (n node) call(in []reflect.Value) []reflect.Value {

@@ -22,7 +22,7 @@ func (x *Dix) providerGraph() string {
 		for _, n := range nodes {
 			fn := stack.CallerWithFunc(n.fn).String()
 			fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, fn, providerOutputType))
-			for _, in := range n.input {
+			for _, in := range n.inputList {
 				fPrintln(b, fmt.Sprintf("\t\t"+`"%s" -> "%s"`, in.typ, fn))
 			}
 		}

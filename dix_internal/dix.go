@@ -2,9 +2,10 @@ package dix_internal
 
 import (
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
-	"sync/atomic"
+	"time"
 
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
@@ -42,72 +43,71 @@ type Dix struct {
 	providers   map[outputType][]*node
 	objects     map[outputType]map[group][]value
 	initializer map[reflect.Value]bool
-
-	depCycleChecked atomic.Bool
 }
 
 func (x *Dix) Option() Options {
 	return x.option
 }
 
-func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
-	switch typ.Kind() {
+func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]value {
+	switch outTyp.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
 		assert.Must(errors.Err{
 			Msg:    "provider type kind error, the supported type kinds are <ptr,interface,func>",
-			Detail: fmt.Sprintf("type=%s kind=%s", typ, typ.Kind()),
+			Detail: fmt.Sprintf("type=%s kind=%s", outTyp, outTyp.Kind()),
 		})
 	}
 
-	if len(x.providers[typ]) == 0 {
+	if len(x.providers[outTyp]) == 0 {
 		logger.Warn().
-			Str("type", typ.String()).
-			Str("kind", typ.Kind().String()).
+			Str("type", outTyp.String()).
+			Str("kind", outTyp.Kind().String()).
 			Msg("provider not found, please check whether the provider imports or type error")
-		// return make(map[group][]value)
 	}
 
-	if x.objects[typ] == nil {
-		x.objects[typ] = make(map[group][]value)
+	if x.objects[outTyp] == nil {
+		x.objects[outTyp] = make(map[group][]value)
 	}
 
-	logger.Debug().
-		Str("type", typ.String()).
-		Str("kind", typ.Kind().String()).
-		Int("providers", len(x.providers[typ])).
-		Msg("eval type value")
-	for _, n := range x.providers[typ] {
+	for _, n := range x.providers[outTyp] {
 		if x.initializer[n.fn] {
 			continue
 		}
 
 		var input []reflect.Value
-		for _, in := range n.input {
-			val := x.getValue(in.typ, opt, in.isMap, in.isList, typ)
+		for _, in := range n.inputList {
+			val := x.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
 			input = append(input, val)
 		}
 
+		var now = time.Now()
+		var fnStack = stack.CallerWithFunc(n.fn)
 		fnCall := n.call(input)
+		logger.Debug().
+			Str("cost", time.Since(now).String()).
+			Str("provider", fnStack.String()).
+			Msgf("eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
+
 		x.initializer[n.fn] = true
 
 		objects := make(map[outputType]map[group][]value)
-		for k, oo := range handleOutput(typ, fnCall[0]) {
+		for outT, groupValue := range handleOutput(outTyp, fnCall[0]) {
 			if n.output.isMap {
-				if _, ok := objects[k]; ok {
+				if _, ok := objects[outT]; ok {
 					logger.Info().
-						Str("type", typ.String()).
-						Str("key", k.String()).
+						Str("type", outTyp.String()).
+						Str("key", outT.String()).
 						Msg("type value exists")
 				}
 			}
 
-			if objects[k] == nil {
-				objects[k] = make(map[group][]value)
+			if objects[outT] == nil {
+				objects[outT] = make(map[group][]value)
 			}
 
-			for g, o := range oo {
-				objects[k][g] = append(objects[k][g], o...)
+			for g, o := range groupValue {
+				objects[outT][g] = append(objects[outT][g], o...)
 			}
 		}
 
@@ -122,7 +122,7 @@ func (x *Dix) evalProvider(typ outputType, opt Options) map[group][]value {
 		}
 	}
 
-	return x.objects[typ]
+	return x.objects[outTyp]
 }
 
 func (x *Dix) getProviderStack(typ reflect.Type) []string {
@@ -134,9 +134,15 @@ func (x *Dix) getProviderStack(typ reflect.Type) []string {
 }
 
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) reflect.Value {
+	if typ.Kind() == reflect.Struct {
+		v := reflect.New(typ)
+		x.injectStruct(v.Elem(), opt)
+		return v.Elem()
+	}
+
+	valMap := x.getOutputTypeValues(typ, opt)
 	switch {
 	case isMap:
-		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap) == 0 {
 			logger.Panic().
 				Any("options", opt).
@@ -149,7 +155,6 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 
 		return makeMap(typ, valMap, isList)
 	case isList:
-		valMap := x.evalProvider(typ, opt)
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
 			err := &errors.Err{
 				Msg:    "provider value not found",
@@ -167,12 +172,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 		}
 
 		return makeList(typ, valMap[defaultKey])
-	case typ.Kind() == reflect.Struct:
-		v := reflect.New(typ)
-		x.injectStruct(v.Elem(), opt)
-		return v.Elem()
 	default:
-		valMap := x.evalProvider(typ, opt)
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
 			logger.Panic().
 				Any("options", opt).
@@ -319,7 +319,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 }
 
 func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType) {
-	n := &node{fn: fnVal, input: in}
+	n := &node{fn: fnVal, inputList: in}
 	switch outTyp := out; outTyp.Kind() {
 	case reflect.Slice:
 		n.output = &outType{isList: true, typ: outTyp.Elem()}
@@ -335,7 +335,6 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 		n.output = &outType{typ: outTyp}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Struct:
-		logger.Debug().Str("name", outTyp.Name()).Msg("struct info")
 		for i := 0; i < outTyp.NumField(); i++ {
 			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}
@@ -344,14 +343,14 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 	}
 }
 
-func (x *Dix) getAllProvideInput(typ reflect.Type) []*inType {
+func (x *Dix) getProvideAllInputs(typ reflect.Type) []*inType {
 	var input []*inType
 	switch inTye := typ; inTye.Kind() {
 	case reflect.Interface, reflect.Ptr, reflect.Func:
 		input = append(input, &inType{typ: inTye})
 	case reflect.Struct:
 		for j := 0; j < inTye.NumField(); j++ {
-			input = append(input, x.getAllProvideInput(inTye.Field(j).Type)...)
+			input = append(input, x.getProvideAllInputs(inTye.Field(j).Type)...)
 		}
 	case reflect.Map:
 		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
