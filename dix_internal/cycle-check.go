@@ -1,6 +1,7 @@
 package dix_internal
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
 	"strings"
@@ -28,7 +29,10 @@ func (x *Dix) isCycle() (string, bool) {
 	var checkHasCycle func(root reflect.Type, data map[reflect.Type]bool, nodes *[]reflect.Type) bool
 	checkHasCycle = func(outT reflect.Type, inTypes map[reflect.Type]bool, nodePaths *[]reflect.Type) bool {
 		for inT := range inTypes {
+			fmt.Printf("%v\n", *nodePaths)
+
 			if slices.ContainsFunc(*nodePaths, func(r reflect.Type) bool { return outT == inT }) {
+				*nodePaths = append(*nodePaths, inT)
 				return true
 			}
 
