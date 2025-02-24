@@ -32,7 +32,7 @@ func (x *Dix) isCycle() (string, bool) {
 				return true
 			}
 
-			log.Debug().Msgf("root: %v, typ: %v", root, typ)
+			log.Debug().Msgf("root: %v, typ: %v, len:%d", root, typ, nodes.Len())
 			if check(root, types[typ], nodes) {
 				return true
 			}
