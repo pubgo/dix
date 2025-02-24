@@ -2,6 +2,7 @@ package dix_internal
 
 import (
 	"container/list"
+	"github.com/pubgo/funk/log"
 	"reflect"
 	"strings"
 )
@@ -31,6 +32,7 @@ func (x *Dix) isCycle() (string, bool) {
 				return true
 			}
 
+			log.Debug().Msgf("root: %v, typ: %v", root, typ)
 			if check(root, types[typ], nodes) {
 				return true
 			}
