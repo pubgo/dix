@@ -2,6 +2,7 @@ package dix_internal
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -415,5 +416,6 @@ func (x *Dix) provide(param interface{}) {
 	dep, ok := x.isCycle()
 	if ok {
 		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
+		os.Exit(1)
 	}
 }
