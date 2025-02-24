@@ -2,9 +2,9 @@ package dix_internal
 
 import (
 	"fmt"
-	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
@@ -42,6 +42,8 @@ type Dix struct {
 	providers   map[outputType][]*node
 	objects     map[outputType]map[group][]value
 	initializer map[reflect.Value]bool
+
+	depCycleChecked atomic.Bool
 }
 
 func (x *Dix) Option() Options {
@@ -412,10 +414,4 @@ func (x *Dix) provide(param interface{}) {
 	// The return value can only have one
 	// TODO Add the second parameter, support for error
 	x.handleProvide(fnVal, typ.Out(0), input)
-
-	dep, ok := x.isCycle()
-	if ok {
-		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
-		os.Exit(1)
-	}
 }
