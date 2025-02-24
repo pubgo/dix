@@ -125,3 +125,39 @@ func handleOutput(outType outputType, out reflect.Value) map[outputType]map[grou
 	}
 	return rr
 }
+
+func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
+	visited := make(map[reflect.Type]bool)
+	recursionStack := make(map[reflect.Type]bool)
+
+	var cycle []reflect.Type
+
+	var dfs func(reflect.Type, []reflect.Type)
+	dfs = func(t reflect.Type, path []reflect.Type) {
+		if recursionStack[t] {
+			cycle = append([]reflect.Type(nil), path...)
+			return
+		}
+		if visited[t] {
+			return
+		}
+
+		visited[t] = true
+		recursionStack[t] = true
+		defer delete(recursionStack, t)
+
+		for dep := range graph[t] {
+			dfs(dep, append(path, dep))
+			if len(cycle) > 0 {
+				return
+			}
+		}
+	}
+
+	for t := range graph {
+		if !visited[t] {
+			dfs(t, []reflect.Type{t})
+		}
+	}
+	return cycle
+}

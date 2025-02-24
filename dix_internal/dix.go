@@ -2,11 +2,13 @@ package dix_internal
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
+	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
 )
@@ -336,10 +338,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}
 	default:
-		panic(&errors.Err{
-			Msg:    "incorrect output type",
-			Detail: fmt.Sprintf("ouTyp=%s kind=%s", outTyp, outTyp.Kind()),
-		})
+		log.Error().Msgf("incorrect output type, ouTyp=%s kind=%s fnVal=%s", outTyp, outTyp.Kind(), fnVal.String())
 	}
 }
 
@@ -361,10 +360,7 @@ func (x *Dix) getAllProvideInput(typ reflect.Type) []*inType {
 	case reflect.Slice:
 		input = append(input, &inType{typ: inTye.Elem(), isList: true})
 	default:
-		panic(&errors.Err{
-			Msg:    "incorrect input type",
-			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
-		})
+		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
 	}
 	return input
 }
@@ -383,10 +379,7 @@ func (x *Dix) getProvideInput(typ reflect.Type) []*inType {
 	case reflect.Slice:
 		input = append(input, &inType{typ: inTye.Elem(), isList: true})
 	default:
-		panic(&errors.Err{
-			Msg:    "incorrect input type",
-			Detail: fmt.Sprintf("inTyp=%s kind=%s", inTye, inTye.Kind()),
-		})
+		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
 	}
 	return input
 }
@@ -423,5 +416,6 @@ func (x *Dix) provide(param interface{}) {
 	dep, ok := x.isCycle()
 	if ok {
 		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
+		os.Exit(1)
 	}
 }

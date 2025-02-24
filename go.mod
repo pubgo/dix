@@ -1,6 +1,6 @@
 module github.com/pubgo/dix
 
-go 1.19
+go 1.22
 
 require github.com/pubgo/funk v0.5.46
 

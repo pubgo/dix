@@ -1,62 +1,42 @@
 package dix_internal
 
 import (
-	"container/list"
 	"reflect"
 	"strings"
 )
 
-// isCycle Check whether type circular dependency
-func (x *Dix) isCycle() (string, bool) {
-	types := make(map[reflect.Type]map[reflect.Type]bool)
-	for _, nodes := range x.providers {
+func (x *Dix) buildDependencyGraph() map[reflect.Type]map[reflect.Type]bool {
+	graph := make(map[reflect.Type]map[reflect.Type]bool)
+	for typ, nodes := range x.providers {
 		for _, n := range nodes {
-			if types[n.output.typ] == nil {
-				types[n.output.typ] = make(map[reflect.Type]bool)
+			if graph[typ] == nil {
+				graph[typ] = make(map[reflect.Type]bool)
 			}
-
-			for i := range n.input {
-				for _, v := range x.getAllProvideInput(n.input[i].typ) {
-					types[n.output.typ][v.typ] = true
+			for _, input := range n.input {
+				for _, provider := range x.getAllProvideInput(input.typ) {
+					graph[typ][provider.typ] = true
 				}
 			}
 		}
 	}
+	return graph
+}
 
-	var check func(root reflect.Type, data map[reflect.Type]bool, nodes *list.List) bool
-	check = func(root reflect.Type, nodeTypes map[reflect.Type]bool, nodes *list.List) bool {
-		for typ := range nodeTypes {
-			nodes.PushBack(typ)
-			if root == typ {
-				return true
-			}
+// isCycle Check whether type circular dependency
+func (x *Dix) isCycle() (string, bool) {
+	depGraph := x.buildDependencyGraph()
 
-			if check(root, types[typ], nodes) {
-				return true
-			}
-			nodes.Remove(nodes.Back())
-		}
-		return false
-	}
-
-	nodes := list.New()
-	for root := range types {
-		nodes.PushBack(root)
-		if check(root, types[root], nodes) {
-			break
-		}
-		nodes.Remove(nodes.Back())
-	}
-
-	if nodes.Len() == 0 {
+	cyclePath := detectCycle(depGraph)
+	if len(cyclePath) == 0 {
 		return "", false
 	}
 
-	var dep []string
-	for nodes.Len() != 0 {
-		dep = append(dep, nodes.Front().Value.(reflect.Type).String())
-		nodes.Remove(nodes.Front())
+	var pathStr strings.Builder
+	for i, t := range cyclePath {
+		if i > 0 {
+			pathStr.WriteString(" -> ")
+		}
+		pathStr.WriteString(t.String())
 	}
-
-	return strings.Join(dep, " -> "), true
+	return pathStr.String(), true
 }
