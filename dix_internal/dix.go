@@ -268,12 +268,14 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 	}
 }
 
-func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
-	defer recovery.Raise(func(err error) error {
+func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
+	defer recovery.Err(&gErr, func(err error) error {
 		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
 	})
 
-	assert.If(param == nil, "param is null")
+	if param == nil {
+		return errors.New("nil injection parameter")
+	}
 
 	var opt Options
 	for i := range opts {
@@ -315,7 +317,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) interface{} {
 	})
 
 	x.injectStruct(vp, opt)
-	return param
+	return nil
 }
 
 func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType) {

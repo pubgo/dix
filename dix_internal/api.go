@@ -1,8 +1,10 @@
 package dix_internal
 
 import (
-	"os"
-	"runtime/debug"
+	"reflect"
+
+	"github.com/pubgo/funk/assert"
+	"github.com/pubgo/funk/errors"
 )
 
 // New Dix new
@@ -16,11 +18,15 @@ func (x *Dix) Provide(param any) {
 
 func (x *Dix) Inject(param any, opts ...Option) any {
 	if dep, ok := x.isCycle(); ok {
-		debug.PrintStack()
-		logger.Fatal().Str("cycle", dep).Msg("provider circular dependency")
-		os.Exit(1)
+		logger.Error().
+			Str("cycle_path", dep).
+			Str("component", reflect.TypeOf(param).String()).
+			Msg("dependency cycle detected")
+		assert.Must(errors.New("circular dependency: " + dep))
 	}
-	return x.inject(param, opts...)
+
+	assert.Must(x.inject(param, opts...))
+	return param
 }
 
 func (x *Dix) Graph() *Graph {

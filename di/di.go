@@ -1,6 +1,8 @@
 package di
 
 import (
+	"reflect"
+	
 	"github.com/pubgo/dix/dix_internal"
 )
 
@@ -15,7 +17,12 @@ func Provide(data any) {
 //
 //	data: <*struct>或<func>
 func Inject[T any](data T, opts ...dix_internal.Option) T {
-	_ = _dix.Inject(data, opts...)
+	vp := reflect.ValueOf(data)
+	if vp.Kind() == reflect.Struct {
+		_ = _dix.Inject(&data, opts...)
+	} else {
+		_ = _dix.Inject(data, opts...)
+	}
 	return data
 }
 

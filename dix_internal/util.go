@@ -138,6 +138,7 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 			cycle = append([]reflect.Type(nil), path...)
 			return
 		}
+
 		if visited[t] {
 			return
 		}
