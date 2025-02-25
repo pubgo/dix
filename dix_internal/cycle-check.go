@@ -7,11 +7,14 @@ import (
 
 func (x *Dix) buildDependencyGraph() map[reflect.Type]map[reflect.Type]bool {
 	graph := make(map[reflect.Type]map[reflect.Type]bool)
+	// 预分配map容量以减少rehash
+	for outTyp := range x.providers {
+		graph[outTyp] = make(map[reflect.Type]bool)
+	}
+
+	// 构建依赖图
 	for outTyp, nodes := range x.providers {
 		for _, providerNode := range nodes {
-			if graph[outTyp] == nil {
-				graph[outTyp] = make(map[reflect.Type]bool)
-			}
 			for _, input := range providerNode.inputList {
 				for _, provider := range x.getProvideAllInputs(input.typ) {
 					graph[outTyp][provider.typ] = true

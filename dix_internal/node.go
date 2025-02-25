@@ -3,6 +3,7 @@ package dix_internal
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/recovery"
@@ -48,10 +49,31 @@ func (n node) call(in []reflect.Value) []reflect.Value {
 		return errors.WrapTag(err,
 			errors.T("msg", "failed to handle provider invoke"),
 			errors.T("fn_stack", stack.CallerWithFunc(n.fn).String()),
+			errors.T("fn_type", n.fn.Type().String()),
 			errors.T("input", fmt.Sprintf("%v", in)),
 			errors.T("input_data", reflectValueToString(in)),
+			errors.T("input_types", reflectTypesToString(n.inputList)),
+			errors.T("output_type", n.output.typ.String()),
 		)
 	})
 
 	return n.fn.Call(in)
+}
+
+// reflectTypesToString 将输入类型列表转换为可读字符串
+func reflectTypesToString(types []*inType) string {
+	var result strings.Builder
+	for i, t := range types {
+		if i > 0 {
+			result.WriteString(", ")
+		}
+		result.WriteString(t.typ.String())
+		if t.isMap {
+			result.WriteString("(map)")
+		}
+		if t.isList {
+			result.WriteString("(list)")
+		}
+	}
+	return result.String()
 }
