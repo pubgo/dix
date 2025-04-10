@@ -3,6 +3,7 @@ package dix_internal
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -128,12 +129,11 @@ func handleOutput(outType outputType, providerOutTyp reflect.Value) map[outputTy
 
 func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 	visited := make(map[reflect.Type]bool)
-	recursionStack := make(map[reflect.Type]bool)
 
-	var dfs func(reflect.Type, []reflect.Type) []reflect.Type
-	dfs = func(t reflect.Type, path []reflect.Type) []reflect.Type {
+	var dfs func(reflect.Type, map[reflect.Type]bool, []reflect.Type) []reflect.Type
+	dfs = func(t reflect.Type, recursionStack map[reflect.Type]bool, path []reflect.Type) []reflect.Type {
 		if recursionStack[t] {
-			return append([]reflect.Type(nil), path...)
+			return slices.Clone(path)
 		}
 
 		if visited[t] {
@@ -145,7 +145,7 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 		defer delete(recursionStack, t)
 
 		for dep := range graph[t] {
-			cycle := dfs(dep, append(path, dep))
+			cycle := dfs(dep, recursionStack, append(slices.Clone(path), dep))
 			if len(cycle) > 0 {
 				return cycle
 			}
@@ -158,7 +158,7 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 			continue
 		}
 
-		cycle := dfs(t, []reflect.Type{t})
+		cycle := dfs(t, make(map[reflect.Type]bool), []reflect.Type{t})
 		if len(cycle) > 0 {
 			return cycle
 		}
