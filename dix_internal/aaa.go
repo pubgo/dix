@@ -7,10 +7,10 @@ import (
 )
 
 const (
-	// defaultKey 默认的 namespace
+	// defaultKey default namespace
 	defaultKey = "default"
 
-	// InjectMethodPrefix 可以对对象进行 Inject, 只要这个对象的方法中包含了以`InjectMethodPrefix`为前缀的方法
+	// InjectMethodPrefix can inject objects, as long as the method of this object contains a prefix of `InjectMethodPrefix`
 	InjectMethodPrefix = "DixInject"
 )
 

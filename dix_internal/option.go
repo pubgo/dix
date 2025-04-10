@@ -3,7 +3,7 @@ package dix_internal
 type (
 	Option  func(opts *Options)
 	Options struct {
-		// 允许结果为nil
+		// AllowValuesNull allows result to be nil
 		AllowValuesNull bool
 	}
 )

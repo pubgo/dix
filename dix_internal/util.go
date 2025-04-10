@@ -27,7 +27,7 @@ func makeMap(typ reflect.Type, data map[string][]reflect.Value, valueList bool) 
 
 	mapVal := reflect.MakeMap(reflect.MapOf(reflect.TypeOf(""), typ))
 	for index, values := range data {
-		// 最后一个值作为默认值
+		// The last value as the default value
 		val := values[len(values)-1]
 		if valueList {
 			val = reflect.MakeSlice(typ, 0, len(values))
