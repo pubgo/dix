@@ -21,12 +21,12 @@ var _dix = dix_internal.New(dix_internal.WithValuesNull())
 //
 // For more usage details, see the documentation for the Container type.
 
-// Provide registers the object constructor.
+// Provide registers an object constructor
 func Provide(data any) {
 	_dix.Provide(data)
 }
 
-// Inject injects the object.
+// Inject injects objects
 //
 //	data: <*struct> or <func>
 func Inject[T any](data T, opts ...dix_internal.Option) T {

@@ -387,6 +387,11 @@ func (x *Dix) getProvideInput(typ reflect.Type) []*inType {
 	return input
 }
 
+// Provide registers the constructor with the container.
+// The constructor must be a function that returns at least one value (or an error).
+// Arguments of the constructor are treated as dependencies,
+// and return values are treated as results that can be injected elsewhere.
+// Provide panics if the constructor is not a function or does not have the required signature.
 func (x *Dix) provide(param interface{}) {
 	defer recovery.Raise(func(err error) error {
 		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))

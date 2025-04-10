@@ -7,7 +7,7 @@ import (
 	"github.com/pubgo/funk/stack"
 )
 
-// DotRenderer 实现 DOT 格式的图形渲染
+// DotRenderer implements DOT format graph rendering
 type DotRenderer struct {
 	buf    *bytes.Buffer
 	indent string

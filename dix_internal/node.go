@@ -60,7 +60,7 @@ func (n node) call(in []reflect.Value) []reflect.Value {
 	return n.fn.Call(in)
 }
 
-// reflectTypesToString 将输入类型列表转换为可读字符串
+// reflectTypesToString converts input type list to readable string
 func reflectTypesToString(types []*inType) string {
 	var result strings.Builder
 	for i, t := range types {
