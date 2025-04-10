@@ -130,17 +130,14 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 	visited := make(map[reflect.Type]bool)
 	recursionStack := make(map[reflect.Type]bool)
 
-	var cycle []reflect.Type
-
-	var dfs func(reflect.Type, []reflect.Type)
-	dfs = func(t reflect.Type, path []reflect.Type) {
+	var dfs func(reflect.Type, []reflect.Type) []reflect.Type
+	dfs = func(t reflect.Type, path []reflect.Type) []reflect.Type {
 		if recursionStack[t] {
-			cycle = append([]reflect.Type(nil), path...)
-			return
+			return append([]reflect.Type(nil), path...)
 		}
 
 		if visited[t] {
-			return
+			return nil
 		}
 
 		visited[t] = true
@@ -148,17 +145,23 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 		defer delete(recursionStack, t)
 
 		for dep := range graph[t] {
-			dfs(dep, append(path, dep))
+			cycle := dfs(dep, append(path, dep))
 			if len(cycle) > 0 {
-				return
+				return cycle
 			}
 		}
+		return nil
 	}
 
 	for t := range graph {
-		if !visited[t] {
-			dfs(t, []reflect.Type{t})
+		if visited[t] {
+			continue
+		}
+
+		cycle := dfs(t, []reflect.Type{t})
+		if len(cycle) > 0 {
+			return cycle
 		}
 	}
-	return cycle
+	return nil
 }
