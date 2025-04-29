@@ -1,4 +1,4 @@
-package dix_internal
+package dixinternal
 
 type (
 	Option  func(opts *Options)
