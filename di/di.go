@@ -3,10 +3,10 @@ package di
 import (
 	"reflect"
 
-	"github.com/pubgo/dix/dix_internal"
+	"github.com/pubgo/dix/dixinternal"
 )
 
-var _dix = dix_internal.New(dix_internal.WithValuesNull())
+var _dix = dixinternal.New(dixinternal.WithValuesNull())
 
 // Example:
 //
@@ -29,7 +29,7 @@ func Provide(data any) {
 // Inject injects objects
 //
 //	data: <*struct> or <func>
-func Inject[T any](data T, opts ...dix_internal.Option) T {
+func Inject[T any](data T, opts ...dixinternal.Option) T {
 	vp := reflect.ValueOf(data)
 	if vp.Kind() == reflect.Struct {
 		_ = _dix.Inject(&data, opts...)
@@ -40,6 +40,6 @@ func Inject[T any](data T, opts ...dix_internal.Option) T {
 }
 
 // Graph Dix graph
-func Graph() *dix_internal.Graph {
+func Graph() *dixinternal.Graph {
 	return _dix.Graph()
 }
