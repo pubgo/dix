@@ -15,12 +15,23 @@ All notable changes to this project will be documented in this file.
   - Provider type information
   - Error source location
   - Dependency chain information
+- **Comprehensive Interface Documentation**: Added detailed type support comments to all public and internal interfaces
+  - Provider interface methods now include detailed type support information
+  - Injector interface methods document supported injection patterns
+  - Container interface methods specify supported types and error conditions
+  - Public API functions include comprehensive usage examples and type constraints
 
 ### Technical Details
 - Modified `FuncProvider` struct to include `hasError` field
 - Updated `NewFuncProvider` to validate error return types
 - Enhanced `Invoke` method to handle error checking and propagation
 - Maintained backward compatibility with existing provider functions
+
+### Documentation
+- Enhanced interface documentation in `dixinternal/interfaces.go` with detailed type support information
+- Improved public API documentation in `dix.go` with comprehensive examples and usage patterns
+- Added detailed comments for Provider, Injector, Container, and Dependency interfaces
+- Documented supported and unsupported types for better developer experience
 
 ### Examples
 - Added comprehensive provider error handling examples in `example/provider-error/`
