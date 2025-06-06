@@ -49,10 +49,8 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 	case reflect.Slice:
 		isList = true
 		outputType = outputType.Elem()
-	case reflect.Ptr, reflect.Interface, reflect.Func:
-		// 支持的类型
-	case reflect.Struct:
-		// 结构体类型，需要特殊处理
+	case reflect.Ptr, reflect.Interface, reflect.Func: // 支持的单类型
+	case reflect.Struct: // 结构体类型，需要特殊处理
 	default:
 		return nil, NewValidationError("unsupported provider output type").
 			WithDetail("type", outputType.String()).
