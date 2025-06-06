@@ -15,6 +15,7 @@ type FuncProvider struct {
 	initialized  bool
 	isMap        bool
 	isList       bool
+	hasError     bool // 新增：标记是否返回 error
 }
 
 // NewFuncProvider 创建函数提供者
@@ -33,8 +34,24 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 		return nil, NewValidationError("provider function cannot have variadic parameters")
 	}
 
-	// 解析输出类型
+	// 检查返回值：支持 (T) 或 (T, error) 两种形式
+	hasError := false
 	outputType := fnType.Out(0)
+
+	if fnType.NumOut() == 2 {
+		// 检查第二个返回值是否为 error 类型
+		errorType := fnType.Out(1)
+		if errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			hasError = true
+		} else {
+			return nil, NewValidationError("second return value must be error type").
+				WithDetail("actual_type", errorType.String())
+		}
+	} else if fnType.NumOut() > 2 {
+		return nil, NewValidationError("provider function can have at most 2 return values (value, error)").
+			WithDetail("actual_count", fnType.NumOut())
+	}
+
 	isMap := false
 	isList := false
 
@@ -70,6 +87,7 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 		initialized:  false,
 		isMap:        isMap,
 		isList:       isList,
+		hasError:     hasError,
 	}, nil
 }
 
@@ -104,6 +122,20 @@ func (p *FuncProvider) Invoke(args []reflect.Value) ([]reflect.Value, error) {
 		Str("cost", time.Since(start).String()).
 		Str("provider", fnStack.String()).
 		Msgf("invoked provider %s", fnStack.Name)
+
+	// 检查 error 返回值
+	if p.hasError && len(results) >= 2 {
+		errorValue := results[1]
+		if !errorValue.IsNil() {
+			// 提取 error 并返回
+			if err, ok := errorValue.Interface().(error); ok {
+				return nil, WrapError(err, ErrorTypeProvider, "provider function returned error").
+					WithDetail("provider_type", p.outputType.String())
+			}
+		}
+		// 如果有 error 返回值但为 nil，只返回第一个值
+		return results[:1], nil
+	}
 
 	return results, nil
 }
@@ -226,7 +258,7 @@ func parseDependencies(fnType reflect.Type) ([]Dependency, error) {
 // isSupportedType 检查是否为支持的类型
 func isSupportedType(kind reflect.Kind) bool {
 	switch kind {
-	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
+	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
 		return true
 	default:
 		return false

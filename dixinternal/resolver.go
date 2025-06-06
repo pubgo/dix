@@ -351,9 +351,26 @@ func (r *ResolverImpl) extractSingleValue(outputType reflect.Type, result reflec
 		objects[outputType] = make(map[string][]reflect.Value)
 	}
 
-	if result.IsValid() && !result.IsNil() {
-		objects[outputType][defaultKey] = []reflect.Value{result}
+	// 检查值是否有效
+	if !result.IsValid() {
+		return
 	}
+
+	// 对于可以为 nil 的类型，检查是否为 nil
+	canBeNil := result.Kind() == reflect.Ptr ||
+		result.Kind() == reflect.Interface ||
+		result.Kind() == reflect.Slice ||
+		result.Kind() == reflect.Map ||
+		result.Kind() == reflect.Chan ||
+		result.Kind() == reflect.Func
+
+	if canBeNil && result.IsNil() {
+		return
+	}
+
+	// 对于基本类型，检查是否为零值（可选）
+	// 这里我们允许零值，因为零值也是有效的值
+	objects[outputType][defaultKey] = []reflect.Value{result}
 }
 
 // makeMap 创建Map

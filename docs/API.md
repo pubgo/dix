@@ -32,46 +32,79 @@ container := dix.New(dix.WithValuesNull())
 **返回：**
 - `Container` - 容器接口实例
 
-### 提供者注册
+#### `NewWithOptions(opts ...Option) Container`
 
-#### `Provide(container Container, provider any)`
-
-向容器注册依赖提供者。
+Creates a new container with configuration options.
 
 ```go
-// 注册简单类型
-dix.Provide(container, func() string {
-    return "Hello, World!"
+container := dix.NewWithOptions(
+    dix.WithLogger(logger),
+    dix.WithDebug(true),
+)
+```
+
+### 提供者注册
+
+#### `Provide(providers ...interface{}) error`
+Registers provider functions with the container.
+
+**Provider Function Signatures:**
+- `func() T` - Simple provider
+- `func() (T, error)` - Provider with error handling
+- `func(dep1 Dep1, dep2 Dep2) T` - Provider with dependencies
+- `func(dep1 Dep1, dep2 Dep2) (T, error)` - Provider with dependencies and error handling
+
+**Supported Types:**
+- Pointer types: `*T`
+- Interface types: `interface{}`
+- Struct types: `struct{}`
+- Map types: `map[K]V`
+- Slice types: `[]T`
+- Function types: `func(...) ...`
+
+```go
+// Simple provider
+err := container.Provide(func() *Database {
+    return &Database{Host: "localhost"}
 })
 
-// 注册接口实现
-dix.Provide(container, func() Logger {
+// Provider with error handling
+err := container.Provide(func() (*Config, error) {
+    config, err := loadConfig()
+    if err != nil {
+        return nil, fmt.Errorf("failed to load config: %w", err)
+    }
+    return config, nil
+})
+
+// Provider with dependencies
+err := container.Provide(func(config *Config) (*Database, error) {
+    db, err := sql.Open("postgres", config.DatabaseURL)
+    if err != nil {
+        return nil, fmt.Errorf("failed to connect to database: %w", err)
+    }
+    return &Database{DB: db}, nil
+})
+
+// Interface provider
+err := container.Provide(func() Logger {
     return &ConsoleLogger{}
 })
 
-// 注册带依赖的提供者
-dix.Provide(container, func(logger Logger) *UserService {
-    return &UserService{Logger: logger}
-})
-
-// 注册结构体提供者
-dix.Provide(container, func() Config {
+// Struct provider
+err := container.Provide(func() Config {
     return Config{
-        Database: DatabaseConfig{Host: "localhost"},
-        Redis:    RedisConfig{Addr: "127.0.0.1:6379"},
+        Host: "localhost",
+        Port: 8080,
     }
 })
 ```
 
-**参数：**
-- `container Container` - 目标容器
-- `provider any` - 提供者函数
-
-**提供者函数规则：**
-- 必须是函数类型
-- 可以有任意数量的参数（依赖）
-- 必须有至少一个返回值
-- 最后一个返回值可以是 `error`
+**Error Handling in Providers:**
+When a provider function returns an error as the second return value:
+- If the error is `nil`, the first return value is used as the provided instance
+- If the error is not `nil`, the provider invocation fails and the error is propagated
+- The error will be wrapped with additional context about the provider type and location
 
 ### 依赖注入
 
