@@ -31,6 +31,7 @@ func (inj *InjectorImpl) InjectStruct(target reflect.Value, opts Options) error 
 
 		// 跳过不可设置的字段
 		if !fieldValue.CanSet() && field.Type.Kind() != reflect.Struct {
+			logger.Debug().Msgf("skipping unsettable field: %s", field.Name)
 			continue
 		}
 
