@@ -3,19 +3,19 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/di"
+	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/recovery"
 )
 
 func main() {
 	defer recovery.Exit()
 	defer func() {
-		fmt.Println(diglobal.Graph())
+		fmt.Println(dixglobal.Graph())
 	}()
 
 	type handler func() string
 	type handlers []handler
-	diglobal.Provide(func() handlers {
+	dixglobal.Provide(func() handlers {
 		return handlers{
 			func() string {
 				return "hello"
@@ -23,7 +23,7 @@ func main() {
 		}
 	})
 
-	diglobal.Provide(func() handlers {
+	dixglobal.Provide(func() handlers {
 		return handlers{
 			func() string {
 				return "world"
@@ -31,15 +31,15 @@ func main() {
 		}
 	})
 
-	diglobal.Provide(func() handler {
+	dixglobal.Provide(func() handler {
 		return func() string {
 			return "world next"
 		}
 	})
 
-	fmt.Println(diglobal.Graph())
+	fmt.Println(dixglobal.Graph())
 
-	diglobal.Inject(func(handlers handlers, h handler) {
+	dixglobal.Inject(func(handlers handlers, h handler) {
 		// h为默认的, 最后一个注册的
 		fmt.Println("the last: default: ", h())
 		for i := range handlers {
@@ -52,14 +52,14 @@ func main() {
 		M map[string]handler
 	}
 
-	hh := diglobal.Inject(new(param))
+	hh := dixglobal.Inject(new(param))
 	//  default是最后一个
 	fmt.Println("default: ", hh.M["default"]())
 	for i := range hh.H {
 		fmt.Println("struct:", hh.H[i]())
 	}
 
-	diglobal.Inject(func(p param) {
+	dixglobal.Inject(func(p param) {
 		//  default是最后一个
 		fmt.Println("default struct: ", hh.M["default"]())
 		for i := range hh.H {

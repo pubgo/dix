@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/di"
+	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/pretty"
 	"github.com/pubgo/funk/recovery"
 )
@@ -46,11 +46,11 @@ type B struct {
 
 func main() {
 	defer recovery.Exit(func(err error) error {
-		fmt.Println(diglobal.Graph())
+		fmt.Println(dixglobal.Graph())
 		return err
 	})
 
-	diglobal.Provide(func() Conf {
+	dixglobal.Provide(func() Conf {
 		return Conf{
 			A: &A{Hello: "hello-a"},
 			B: &B{Hello: "hello-b"},
@@ -82,7 +82,7 @@ func main() {
 		}
 	})
 
-	diglobal.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D, dm map[string]*D, d5 map[string][]*D) {
+	dixglobal.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D, dm map[string]*D, d5 map[string][]*D) {
 		pretty.Println(a.Hello)
 		pretty.Println(b.Hello)
 		pretty.Println(cc)
@@ -94,5 +94,5 @@ func main() {
 		pretty.Println(d5)
 	})
 
-	fmt.Println(diglobal.Graph())
+	fmt.Println(dixglobal.Graph())
 }

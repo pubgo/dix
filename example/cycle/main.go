@@ -3,14 +3,14 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/di"
+	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/recovery"
 )
 
 func main() {
 	defer recovery.Exit()
 	defer func() {
-		fmt.Println(diglobal.Graph())
+		fmt.Println(dixglobal.Graph())
 	}()
 
 	type (
@@ -21,16 +21,16 @@ func main() {
 		C struct{}
 	)
 
-	diglobal.Provide(func(*B) *A {
+	dixglobal.Provide(func(*B) *A {
 		return new(A)
 	})
 
-	diglobal.Provide(func(*C) *B {
+	dixglobal.Provide(func(*C) *B {
 		return new(B)
 	})
 
-	diglobal.Provide(func(*A) *C {
+	dixglobal.Provide(func(*A) *C {
 		return new(C)
 	})
-	diglobal.Inject(func(*C) {})
+	dixglobal.Inject(func(*C) {})
 }
