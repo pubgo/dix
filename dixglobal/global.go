@@ -4,42 +4,59 @@ import (
 	"reflect"
 
 	"github.com/pubgo/dix/dixinternal"
+	"github.com/pubgo/funk/assert"
 )
 
-var _dix = dixinternal.New(dixinternal.WithValuesNull())
+var _container = dixinternal.New(dixinternal.WithValuesNull())
 
 // Example:
 //
-//	c := di.New()
-//	c.Provide(func() *Config { return &Config{Endpoint: "localhost:..."} }) // Configuration
-//	c.Provide(NewDB)                                                  // Database connection
-//	c.Provide(NewHTTPServer)                                          // Server
+//	Provide(func() *Config { return &Config{Endpoint: "localhost:..."} }) // Configuration
+//	Provide(NewDB)                                                        // Database connection
+//	Provide(NewHTTPServer)                                                // Server
 //
-//	c.Invoke(func(server *http.Server) { // Application startup
+//	Inject(func(server *http.Server) { // Application startup
 //		server.ListenAndServe()
 //	})
 //
 // For more usage details, see the documentation for the Container type.
 
 // Provide registers an object constructor
-func Provide(data any) {
-	_dix.Provide(data)
+func Provide(provider any) {
+	assert.Must(_container.Provide(provider))
 }
 
 // Inject injects objects
 //
-//	data: <*struct> or <func>
-func Inject[T any](data T, opts ...dixinternal.Option) T {
-	vp := reflect.ValueOf(data)
+//	target: <*struct> or <func>
+func Inject[T any](target T, opts ...dixinternal.Option) T {
+	vp := reflect.ValueOf(target)
 	if vp.Kind() == reflect.Struct {
-		_ = _dix.Inject(&data, opts...)
+		assert.Must(_container.Inject(&target, opts...))
 	} else {
-		_ = _dix.Inject(data, opts...)
+		assert.Must(_container.Inject(target, opts...))
 	}
-	return data
+	return target
 }
 
-// Graph Dix graph
+// Get retrieves an instance of the specified type
+func Get[T any](opts ...dixinternal.Option) T {
+	result, err := dixinternal.Get[T](_container, opts...)
+	assert.Must(err)
+	return result
+}
+
+// MustGet retrieves an instance of the specified type, panics on error
+func MustGet[T any](opts ...dixinternal.Option) T {
+	return dixinternal.MustGet[T](_container, opts...)
+}
+
+// Graph returns the dependency graph
 func Graph() *dixinternal.Graph {
-	return _dix.Graph()
+	return _container.Graph()
+}
+
+// Container returns the global container instance
+func Container() dixinternal.Container {
+	return _container
 }

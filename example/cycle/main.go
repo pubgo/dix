@@ -10,27 +10,39 @@ import (
 func main() {
 	defer recovery.Exit()
 	defer func() {
-		fmt.Println(dixglobal.Graph())
+		fmt.Println("\n=== Final Dependency Graph ===")
+		graph := dixglobal.Graph()
+		fmt.Printf("Providers:\n%s\n", graph.Providers)
+		fmt.Printf("Objects:\n%s\n", graph.Objects)
 	}()
 
 	type (
-		A struct{}
-
-		B struct{}
-
-		C struct{}
+		A struct{ Name string }
+		B struct{ Name string }
+		C struct{ Name string }
 	)
 
-	dixglobal.Provide(func(*B) *A {
-		return new(A)
+	fmt.Println("=== Registering Circular Dependencies ===")
+
+	// 这些提供者形成循环依赖：A -> B -> C -> A
+	fmt.Println("Registering A provider (depends on B)")
+	dixglobal.Provide(func(b *B) *A {
+		return &A{Name: "A depends on " + b.Name}
 	})
 
-	dixglobal.Provide(func(*C) *B {
-		return new(B)
+	fmt.Println("Registering B provider (depends on C)")
+	dixglobal.Provide(func(c *C) *B {
+		return &B{Name: "B depends on " + c.Name}
 	})
 
-	dixglobal.Provide(func(*A) *C {
-		return new(C)
+	fmt.Println("Registering C provider (depends on A)")
+	dixglobal.Provide(func(a *A) *C {
+		return &C{Name: "C depends on " + a.Name}
 	})
-	dixglobal.Inject(func(*C) {})
+
+	fmt.Println("\n=== Attempting to Inject (should detect cycle) ===")
+	// 尝试注入，这应该会检测到循环依赖并panic
+	dixglobal.Inject(func(c *C) {
+		fmt.Println("Successfully injected C:", c.Name)
+	})
 }

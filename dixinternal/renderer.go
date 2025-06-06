@@ -1,29 +1,28 @@
 package dixinternal
 
 import (
-	"bytes"
 	"fmt"
-
-	"github.com/pubgo/funk/stack"
+	"reflect"
+	"strings"
 )
 
-// DotRenderer implements DOT format graph rendering
+// DotRenderer DOT格式图形渲染器
 type DotRenderer struct {
-	buf    *bytes.Buffer
+	buf    strings.Builder
 	indent string
-	cache  map[string]string
 }
 
+// NewDotRenderer 创建新的DOT渲染器
 func NewDotRenderer() *DotRenderer {
 	return &DotRenderer{
-		buf:    &bytes.Buffer{},
 		indent: "",
-		cache:  make(map[string]string),
 	}
 }
 
 func (d *DotRenderer) writef(format string, args ...interface{}) {
-	_, _ = fmt.Fprintf(d.buf, d.indent+format+"\n", args...)
+	d.buf.WriteString(d.indent)
+	d.buf.WriteString(fmt.Sprintf(format, args...))
+	d.buf.WriteString("\n")
 }
 
 func (d *DotRenderer) RenderNode(name string, attrs map[string]string) {
@@ -41,7 +40,9 @@ func (d *DotRenderer) BeginSubgraph(name, label string) {
 }
 
 func (d *DotRenderer) EndSubgraph() {
-	d.indent = d.indent[:len(d.indent)-1]
+	if len(d.indent) > 0 {
+		d.indent = d.indent[:len(d.indent)-1]
+	}
 	d.writef("}")
 }
 
@@ -54,7 +55,7 @@ func (d *DotRenderer) formatAttrs(attrs map[string]string) string {
 		return ""
 	}
 
-	var result bytes.Buffer
+	var result strings.Builder
 	result.WriteString(" [")
 	first := true
 	for k, v := range attrs {
@@ -68,17 +69,19 @@ func (d *DotRenderer) formatAttrs(attrs map[string]string) string {
 	return result.String()
 }
 
-func (x *Dix) providerGraph() string {
-	d := NewDotRenderer()
+// RenderProviders 渲染提供者图
+func (d *DotRenderer) RenderProviders(providers map[reflect.Type][]Provider) string {
+	d.buf.Reset()
 	d.writef("digraph G {")
 	d.BeginSubgraph("cluster_providers", "providers")
 
-	for providerOutputType, nodes := range x.providers {
-		for _, n := range nodes {
-			fn := stack.CallerWithFunc(n.fn).String()
-			d.RenderEdge(fn, providerOutputType.String(), nil)
-			for _, in := range n.inputList {
-				d.RenderEdge(in.typ.String(), fn, nil)
+	for providerType, providerList := range providers {
+		for _, provider := range providerList {
+			providerName := fmt.Sprintf("provider_%p", provider)
+			d.RenderEdge(providerName, providerType.String(), nil)
+
+			for _, dep := range provider.Dependencies() {
+				d.RenderEdge(dep.Type().String(), providerName, nil)
 			}
 		}
 	}
@@ -88,15 +91,19 @@ func (x *Dix) providerGraph() string {
 	return d.String()
 }
 
-func (x *Dix) objectGraph() string {
-	d := NewDotRenderer()
+// RenderObjects 渲染对象图
+func (d *DotRenderer) RenderObjects(objects map[reflect.Type]map[string][]reflect.Value) string {
+	d.buf.Reset()
 	d.writef("digraph G {")
 	d.BeginSubgraph("cluster_objects", "objects")
 
-	for k, objects := range x.objects {
-		for g, values := range objects {
-			for _, v := range values {
-				d.RenderEdge(k.String(), fmt.Sprintf("%s -> %s", g, v.Type().String()), nil)
+	for typ, groups := range objects {
+		for group, values := range groups {
+			for i, val := range values {
+				objName := fmt.Sprintf("%s_%s_%d", typ.String(), group, i)
+				d.RenderEdge(typ.String(), objName, map[string]string{
+					"label": fmt.Sprintf("%s -> %s", group, val.Type().String()),
+				})
 			}
 		}
 	}
