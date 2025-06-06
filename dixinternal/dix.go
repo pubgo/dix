@@ -345,29 +345,6 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 	}
 }
 
-func (x *Dix) getProvideAllInputs(typ reflect.Type) []*inType {
-	var input []*inType
-	switch inTye := typ; inTye.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Func:
-		input = append(input, &inType{typ: inTye})
-	case reflect.Struct:
-		for j := 0; j < inTye.NumField(); j++ {
-			input = append(input, x.getProvideAllInputs(inTye.Field(j).Type)...)
-		}
-	case reflect.Map:
-		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
-		if tt.isList {
-			tt.typ = tt.typ.Elem()
-		}
-		input = append(input, tt)
-	case reflect.Slice:
-		input = append(input, &inType{typ: inTye.Elem(), isList: true})
-	default:
-		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
-	}
-	return input
-}
-
 func (x *Dix) getProvideInput(typ reflect.Type) []*inType {
 	var input []*inType
 	switch inTye := typ; inTye.Kind() {

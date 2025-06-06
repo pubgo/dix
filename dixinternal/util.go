@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+
+	"github.com/pubgo/funk/log"
 )
 
 func checkType(p reflect.Kind) bool {
@@ -164,4 +166,47 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 		}
 	}
 	return nil
+}
+
+func getProvideAllInputs(typ reflect.Type) []*inType {
+	var input []*inType
+	switch inTye := typ; inTye.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func:
+		input = append(input, &inType{typ: inTye})
+	case reflect.Struct:
+		for j := 0; j < inTye.NumField(); j++ {
+			input = append(input, getProvideAllInputs(inTye.Field(j).Type)...)
+		}
+	case reflect.Map:
+		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
+		if tt.isList {
+			tt.typ = tt.typ.Elem()
+		}
+		input = append(input, tt)
+	case reflect.Slice:
+		input = append(input, &inType{typ: inTye.Elem(), isList: true})
+	default:
+		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
+	}
+	return input
+}
+
+func buildDependencyGraph(providers map[outputType][]*node) map[reflect.Type]map[reflect.Type]bool {
+	graph := make(map[reflect.Type]map[reflect.Type]bool)
+	// Pre-allocate map capacity to reduce rehash
+	for outTyp := range providers {
+		graph[outTyp] = make(map[reflect.Type]bool)
+	}
+
+	// Build dependency graph
+	for outTyp, nodes := range providers {
+		for _, providerNode := range nodes {
+			for _, input := range providerNode.inputList {
+				for _, provider := range getProvideAllInputs(input.typ) {
+					graph[outTyp][provider.typ] = true
+				}
+			}
+		}
+	}
+	return graph
 }
