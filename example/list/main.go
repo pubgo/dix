@@ -10,12 +10,12 @@ import (
 func main() {
 	defer recovery.Exit()
 	defer func() {
-		fmt.Println(di.Graph())
+		fmt.Println(diglobal.Graph())
 	}()
 
 	type handler func() string
 	type handlers []handler
-	di.Provide(func() handlers {
+	diglobal.Provide(func() handlers {
 		return handlers{
 			func() string {
 				return "hello"
@@ -23,7 +23,7 @@ func main() {
 		}
 	})
 
-	di.Provide(func() handlers {
+	diglobal.Provide(func() handlers {
 		return handlers{
 			func() string {
 				return "world"
@@ -31,15 +31,15 @@ func main() {
 		}
 	})
 
-	di.Provide(func() handler {
+	diglobal.Provide(func() handler {
 		return func() string {
 			return "world next"
 		}
 	})
 
-	fmt.Println(di.Graph())
+	fmt.Println(diglobal.Graph())
 
-	di.Inject(func(handlers handlers, h handler) {
+	diglobal.Inject(func(handlers handlers, h handler) {
 		// h为默认的, 最后一个注册的
 		fmt.Println("the last: default: ", h())
 		for i := range handlers {
@@ -52,14 +52,14 @@ func main() {
 		M map[string]handler
 	}
 
-	hh := di.Inject(new(param))
+	hh := diglobal.Inject(new(param))
 	//  default是最后一个
 	fmt.Println("default: ", hh.M["default"]())
 	for i := range hh.H {
 		fmt.Println("struct:", hh.H[i]())
 	}
 
-	di.Inject(func(p param) {
+	diglobal.Inject(func(p param) {
 		//  default是最后一个
 		fmt.Println("default struct: ", hh.M["default"]())
 		for i := range hh.H {

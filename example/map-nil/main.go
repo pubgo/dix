@@ -12,15 +12,15 @@ func main() {
 	defer recovery.Exit()
 
 	defer func() {
-		fmt.Println(di.Graph())
+		fmt.Println(diglobal.Graph())
 	}()
 
-	di.Inject(func(errs map[string]*errors.Err) {
+	diglobal.Inject(func(errs map[string]*errors.Err) {
 		fmt.Println(errs)
 	})
 
 	type param struct {
 		ErrMap map[string]*errors.Err
 	}
-	fmt.Println(di.Inject(new(param)).ErrMap)
+	fmt.Println(diglobal.Inject(new(param)).ErrMap)
 }

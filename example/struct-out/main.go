@@ -46,11 +46,11 @@ type B struct {
 
 func main() {
 	defer recovery.Exit(func(err error) error {
-		fmt.Println(di.Graph())
+		fmt.Println(diglobal.Graph())
 		return err
 	})
 
-	di.Provide(func() Conf {
+	diglobal.Provide(func() Conf {
 		return Conf{
 			A: &A{Hello: "hello-a"},
 			B: &B{Hello: "hello-b"},
@@ -82,7 +82,7 @@ func main() {
 		}
 	})
 
-	di.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D, dm map[string]*D, d5 map[string][]*D) {
+	diglobal.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D, dm map[string]*D, d5 map[string][]*D) {
 		pretty.Println(a.Hello)
 		pretty.Println(b.Hello)
 		pretty.Println(cc)
@@ -94,5 +94,5 @@ func main() {
 		pretty.Println(d5)
 	})
 
-	fmt.Println(di.Graph())
+	fmt.Println(diglobal.Graph())
 }

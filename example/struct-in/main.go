@@ -25,22 +25,22 @@ type c struct {
 func main() {
 	defer recovery.Exit()
 
-	di.Provide(func() *c {
+	diglobal.Provide(func() *c {
 		return &c{C: "hello"}
 	})
 
-	arg := di.Inject(new(a))
+	arg := diglobal.Inject(new(a))
 	assert.If(arg.C.C != "hello", "not match")
 	fmt.Println(arg.C.C)
 	fmt.Println(arg.B.C.C)
-	fmt.Println(di.Graph())
+	fmt.Println(diglobal.Graph())
 
-	di.Provide(func(a a1, di *dix.Dix, dd map[string][]*dix.Dix) *a2 {
+	diglobal.Provide(func(a a1, di *dix.Dix, dd map[string][]*dix.Dix) *a2 {
 		fmt.Println(dd)
 		return &a2{Hello: "a2", di: di}
 	})
 
-	di.Inject(func(a *a2) {
+	diglobal.Inject(func(a *a2) {
 		fmt.Println(a.Hello)
 		fmt.Println(a.di.Option())
 	})

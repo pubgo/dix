@@ -29,13 +29,13 @@ func (h *handler) DixInjectB(err *errors.Err, errs []*errors.Err) {
 }
 
 func main() {
-	di.Provide(func() *errors.Err {
+	diglobal.Provide(func() *errors.Err {
 		return &errors.Err{Msg: "<ok>"}
 	})
 
-	di.Provide(func() *errors.Err {
+	diglobal.Provide(func() *errors.Err {
 		return &errors.Err{Msg: "<ok 1>"}
 	})
 
-	di.Inject(&handler{})
+	diglobal.Inject(&handler{})
 }

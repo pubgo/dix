@@ -12,23 +12,23 @@ func main() {
 	defer recovery.Exit()
 
 	defer func() {
-		fmt.Println(di.Graph())
+		fmt.Println(diglobal.Graph())
 	}()
 
-	di.Provide(func() map[string]*errors.Err {
+	diglobal.Provide(func() map[string]*errors.Err {
 		return map[string]*errors.Err{
 			"":      {Msg: "default msg"},
 			"hello": {Msg: "hello"},
 		}
 	})
 
-	di.Provide(func() map[string]*errors.Err {
+	diglobal.Provide(func() map[string]*errors.Err {
 		return map[string]*errors.Err{
 			"hello": {Msg: "hello1"},
 		}
 	})
 
-	di.Inject(func(err *errors.Err, errs map[string]*errors.Err, errMapList map[string][]*errors.Err) {
+	diglobal.Inject(func(err *errors.Err, errs map[string]*errors.Err, errMapList map[string][]*errors.Err) {
 		fmt.Println(err.Msg)
 		fmt.Println(errs)
 		fmt.Println(errMapList)
@@ -38,6 +38,6 @@ func main() {
 		ErrMap     map[string]*errors.Err
 		ErrMapList map[string][]*errors.Err
 	}
-	fmt.Println(di.Inject(new(param)).ErrMap)
-	fmt.Println(di.Inject(new(param)).ErrMapList)
+	fmt.Println(diglobal.Inject(new(param)).ErrMap)
+	fmt.Println(diglobal.Inject(new(param)).ErrMapList)
 }

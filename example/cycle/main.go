@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	
+
 	"github.com/pubgo/dix/di"
 	"github.com/pubgo/funk/recovery"
 )
@@ -10,7 +10,7 @@ import (
 func main() {
 	defer recovery.Exit()
 	defer func() {
-		fmt.Println(di.Graph())
+		fmt.Println(diglobal.Graph())
 	}()
 
 	type (
@@ -21,16 +21,16 @@ func main() {
 		C struct{}
 	)
 
-	di.Provide(func(*B) *A {
+	diglobal.Provide(func(*B) *A {
 		return new(A)
 	})
 
-	di.Provide(func(*C) *B {
+	diglobal.Provide(func(*C) *B {
 		return new(B)
 	})
 
-	di.Provide(func(*A) *C {
+	diglobal.Provide(func(*A) *C {
 		return new(C)
 	})
-	di.Inject(func(*C) {})
+	diglobal.Inject(func(*C) {})
 }

@@ -11,12 +11,12 @@ import (
 func main() {
 	defer recovery.Exit()
 	defer func() {
-		fmt.Println(di.Graph())
+		fmt.Println(diglobal.Graph())
 	}()
 
 	type handler func() string
 
-	di.Inject(func(handlers []handler) {
+	diglobal.Inject(func(handlers []handler) {
 		log.Printf("handlers: %d", len(handlers))
 		for i := range handlers {
 			fmt.Println("fn:", handlers[i]())
@@ -27,18 +27,18 @@ func main() {
 		H []handler
 	}
 
-	hh := di.Inject(new(param))
+	hh := diglobal.Inject(new(param))
 	log.Printf("handlers: %d", len(hh.H))
 	for i := range hh.H {
 		fmt.Println("struct:", hh.H[i]())
 	}
 
-	di.Inject(func(p param) {
+	diglobal.Inject(func(p param) {
 		log.Printf("handlers: %d", len(p.H))
 		for i := range p.H {
 			fmt.Println("struct struct:", p.H[i]())
 		}
 	})
 
-	fmt.Println(di.Graph())
+	fmt.Println(diglobal.Graph())
 }

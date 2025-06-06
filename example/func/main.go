@@ -11,13 +11,13 @@ func main() {
 	defer recovery.Exit()
 
 	type handler func() string
-	di.Provide(func() handler {
+	diglobal.Provide(func() handler {
 		return func() string {
 			return "hello"
 		}
 	})
 
-	di.Provide(func() handler {
+	diglobal.Provide(func() handler {
 		return func() string {
 			return "world"
 		}
@@ -28,18 +28,18 @@ func main() {
 		List []handler
 	}
 
-	fmt.Println(di.Graph())
+	fmt.Println(diglobal.Graph())
 
-	fmt.Println("struct: ", di.Inject(new(param)).H())
-	di.Inject(func(h handler, list []handler) {
+	fmt.Println("struct: ", diglobal.Inject(new(param)).H())
+	diglobal.Inject(func(h handler, list []handler) {
 		fmt.Println("inject: ", h())
 		fmt.Println("inject: ", list)
 	})
 
-	di.Inject(func(p param) {
+	diglobal.Inject(func(p param) {
 		fmt.Println("inject struct: ", p.H())
 		fmt.Println("inject struct: ", p.List)
 	})
 
-	fmt.Println(di.Graph())
+	fmt.Println(diglobal.Graph())
 }
