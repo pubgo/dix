@@ -2,8 +2,9 @@ package dix
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/errors"
 	"reflect"
+
+	"github.com/pubgo/funk/errors"
 
 	"github.com/pubgo/dix/dixinternal"
 )
@@ -122,11 +123,23 @@ func New(opts ...Option) Container {
 // 返回值：
 //   - T: 如果target是函数，返回零值（nil）；如果是结构体，返回注入后的结构体
 //   - error: 注入失败时的错误信息
-func Inject[T any](container Container, target T, opts ...Option) (T, error) {
+func Inject[T any](container Container, target T, opts ...Option) (result T, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			err = errors.Wrap(panicErr, "dix: inject failed with panic")
+		}
+	}()
+
 	vp := reflect.ValueOf(target)
 	if vp.Kind() == reflect.Struct {
 		if err := container.Inject(&target, opts...); err != nil {
-			return target, fmt.Errorf("dix: inject failed: %w", err)
+			return target, errors.Wrap(err, "dix: inject failed")
 		}
 		return target, nil
 	} else {
@@ -173,7 +186,7 @@ func InjectMust[T any](container Container, target T, opts ...Option) T {
 //	dix.Provide(container, func() (*Config, error) {
 //	    config, err := loadConfig()
 //	    if err != nil {
-//	        return nil, fmt.Errorf("failed to load config: %w", err)
+//	        return nil, errors.Wrap(err, "failed to load config")
 //	    }
 //	    return config, nil
 //	})
@@ -182,7 +195,7 @@ func InjectMust[T any](container Container, target T, opts ...Option) T {
 //	dix.Provide(container, func(config *Config) (*Database, error) {
 //	    db, err := sql.Open("postgres", config.DatabaseURL)
 //	    if err != nil {
-//	        return nil, fmt.Errorf("failed to connect: %w", err)
+//	        return nil, errors.Wrap(err, "failed to connect")
 //	    }
 //	    return &Database{DB: db}, nil
 //	})
@@ -191,6 +204,18 @@ func InjectMust[T any](container Container, target T, opts ...Option) T {
 //   - container: 依赖注入容器
 //   - provider: 提供者函数
 func Provide(container Container, provider any) {
+	defer func() {
+		if r := recover(); r != nil {
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			panic(errors.Wrap(panicErr, "dix: provide failed with panic"))
+		}
+	}()
+
 	errors.Must(container.Provide(provider))
 }
 

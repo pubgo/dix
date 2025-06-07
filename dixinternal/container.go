@@ -1,6 +1,7 @@
 package dixinternal
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -65,14 +66,27 @@ func (c *ContainerImpl) Provide(provider interface{}) error {
 	if err := c.cycleDetector.ValidateNoCycles(providers); err != nil {
 		// 如果发现循环依赖，移除刚添加的提供者
 		c.removeProvider(funcProvider)
-		return err
+		return WrapError(err, ErrorTypeCyclicDep, "provider registration failed due to cycle detection")
 	}
 
 	return nil
 }
 
 // Inject 执行依赖注入
-func (c *ContainerImpl) Inject(target interface{}, opts ...Option) error {
+func (c *ContainerImpl) Inject(target interface{}, opts ...Option) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			err = WrapError(panicErr, ErrorTypeInjection, "dependency injection failed with panic").
+				WithDetail("panic_value", r)
+		}
+	}()
+
 	// 合并选项
 	mergedOpts := c.options
 	for _, opt := range opts {
@@ -82,7 +96,7 @@ func (c *ContainerImpl) Inject(target interface{}, opts ...Option) error {
 	// 检查循环依赖
 	providers := c.getAllProviders()
 	if err := c.cycleDetector.ValidateNoCycles(providers); err != nil {
-		return err
+		return WrapError(err, ErrorTypeCyclicDep, "injection failed due to cycle detection")
 	}
 
 	// 执行注入

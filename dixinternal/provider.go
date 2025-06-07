@@ -1,6 +1,7 @@
 package dixinternal
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -95,7 +96,7 @@ func (p *FuncProvider) Type() reflect.Type {
 	return p.outputType
 }
 
-func (p *FuncProvider) Invoke(args []reflect.Value) ([]reflect.Value, error) {
+func (p *FuncProvider) Invoke(args []reflect.Value) (results []reflect.Value, err error) {
 	if len(args) != len(p.dependencies) {
 		return nil, NewInvocationError("argument count mismatch").
 			WithDetail("expected", len(p.dependencies)).
@@ -110,11 +111,23 @@ func (p *FuncProvider) Invoke(args []reflect.Value) ([]reflect.Value, error) {
 				Str("provider", fnStack.String()).
 				Interface("panic", r).
 				Msg("provider function panicked")
+
+			// 将 panic 转换为错误
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			err = WrapError(panicErr, ErrorTypeInvocation, "provider function panicked").
+				WithDetail("provider_type", p.outputType.String()).
+				WithDetail("panic_value", r).
+				WithDetail("provider_location", fnStack.String())
 		}
 	}()
 
 	start := time.Now()
-	results := p.fn.Call(args)
+	results = p.fn.Call(args)
 
 	// 记录调用信息
 	fnStack := stack.CallerWithFunc(p.fn)

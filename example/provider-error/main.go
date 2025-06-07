@@ -1,11 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 
 	"github.com/pubgo/dix"
+	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/recovery"
 )
 
@@ -73,7 +73,7 @@ func main() {
 
 		// 模拟连接测试
 		if err := db.Connect(); err != nil {
-			return nil, fmt.Errorf("failed to connect to database: %w", err)
+			return nil, errors.Wrap(err, "failed to connect to database")
 		}
 
 		return db, nil // 成功返回

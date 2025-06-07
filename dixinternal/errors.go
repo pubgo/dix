@@ -16,18 +16,18 @@ type DixError struct {
 
 func (e *DixError) Error() string {
 	var parts []string
-	parts = append(parts, fmt.Sprintf("[%s] %s", e.Type, e.Message))
+	parts = append(parts, "["+string(e.Type)+"] "+e.Message)
 
 	if len(e.Details) > 0 {
 		var details []string
 		for k, v := range e.Details {
-			details = append(details, fmt.Sprintf("%s=%v", k, v))
+			details = append(details, k+"="+fmt.Sprintf("%v", v))
 		}
-		parts = append(parts, fmt.Sprintf("details: %s", strings.Join(details, ", ")))
+		parts = append(parts, "details: "+strings.Join(details, ", "))
 	}
 
 	if e.Cause != nil {
-		parts = append(parts, fmt.Sprintf("cause: %v", e.Cause))
+		parts = append(parts, "cause: "+e.Cause.Error())
 	}
 
 	return strings.Join(parts, "; ")

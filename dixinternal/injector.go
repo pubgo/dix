@@ -1,6 +1,7 @@
 package dixinternal
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 )
@@ -18,7 +19,21 @@ func NewInjector(resolver Resolver) *InjectorImpl {
 }
 
 // InjectStruct 注入结构体
-func (inj *InjectorImpl) InjectStruct(target reflect.Value, opts Options) error {
+func (inj *InjectorImpl) InjectStruct(target reflect.Value, opts Options) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			err = WrapError(panicErr, ErrorTypeInjection, "struct injection failed with panic").
+				WithDetail("panic_value", r).
+				WithDetail("struct_type", target.Type().String())
+		}
+	}()
+
 	if target.Kind() != reflect.Struct {
 		return NewValidationError("target must be a struct").
 			WithDetail("actual_kind", target.Kind().String())
@@ -48,7 +63,21 @@ func (inj *InjectorImpl) InjectStruct(target reflect.Value, opts Options) error 
 }
 
 // InjectFunc 注入函数
-func (inj *InjectorImpl) InjectFunc(fn reflect.Value, opts Options) error {
+func (inj *InjectorImpl) InjectFunc(fn reflect.Value, opts Options) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			err = WrapError(panicErr, ErrorTypeInjection, "function injection failed with panic").
+				WithDetail("panic_value", r).
+				WithDetail("function_type", fn.Type().String())
+		}
+	}()
+
 	if fn.Kind() != reflect.Func {
 		return NewValidationError("target must be a function").
 			WithDetail("actual_kind", fn.Kind().String())
@@ -83,7 +112,21 @@ func (inj *InjectorImpl) InjectFunc(fn reflect.Value, opts Options) error {
 }
 
 // InjectTarget 注入目标对象（统一入口）
-func (inj *InjectorImpl) InjectTarget(target interface{}, opts Options) error {
+func (inj *InjectorImpl) InjectTarget(target interface{}, opts Options) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			var panicErr error
+			if e, ok := r.(error); ok {
+				panicErr = e
+			} else {
+				panicErr = fmt.Errorf("panic: %v", r)
+			}
+			err = WrapError(panicErr, ErrorTypeInjection, "target injection failed with panic").
+				WithDetail("panic_value", r).
+				WithDetail("target_type", fmt.Sprintf("%T", target))
+		}
+	}()
+
 	if target == nil {
 		return NewValidationError("injection target cannot be nil")
 	}
@@ -105,9 +148,9 @@ func (inj *InjectorImpl) InjectTarget(target interface{}, opts Options) error {
 	}
 
 	// 注入方法（以DixInject开头的方法）
-	err := inj.injectMethods(targetValue, opts)
+	err = inj.injectMethods(targetValue, opts)
 	if err != nil {
-		return err
+		return WrapError(err, ErrorTypeInjection, "failed to inject methods")
 	}
 
 	// 解引用到实际值
@@ -135,7 +178,9 @@ func (inj *InjectorImpl) injectField(fieldValue reflect.Value, field reflect.Str
 		// 解析并设置值
 		val, err := inj.resolver.Resolve(field.Type, opts)
 		if err != nil {
-			return err
+			return WrapError(err, ErrorTypeInjection, "failed to resolve field value").
+				WithDetail("field_name", field.Name).
+				WithDetail("field_type", field.Type.String())
 		}
 		if val.IsValid() {
 			fieldValue.Set(val)
@@ -152,7 +197,9 @@ func (inj *InjectorImpl) injectField(fieldValue reflect.Value, field reflect.Str
 		dep := NewDependency(elemType, true, isList)
 		val, err := inj.resolveAsMap(dep, opts)
 		if err != nil {
-			return err
+			return WrapError(err, ErrorTypeInjection, "failed to resolve map field").
+				WithDetail("field_name", field.Name).
+				WithDetail("field_type", field.Type.String())
 		}
 		if val.IsValid() {
 			fieldValue.Set(val)
@@ -164,7 +211,9 @@ func (inj *InjectorImpl) injectField(fieldValue reflect.Value, field reflect.Str
 		dep := NewDependency(elemType, false, true)
 		val, err := inj.resolveAsList(dep, opts)
 		if err != nil {
-			return err
+			return WrapError(err, ErrorTypeInjection, "failed to resolve slice field").
+				WithDetail("field_name", field.Name).
+				WithDetail("field_type", field.Type.String())
 		}
 		if val.IsValid() {
 			fieldValue.Set(val)
@@ -213,7 +262,7 @@ func (inj *InjectorImpl) resolveAsMap(dep Dependency, opts Options) (reflect.Val
 	// 如果不是ResolverImpl，使用通用方法
 	val, err := inj.resolver.Resolve(dep.Type(), opts)
 	if err != nil {
-		return reflect.Value{}, err
+		return reflect.Value{}, WrapError(err, ErrorTypeInjection, "failed to resolve dependency for map")
 	}
 
 	// 创建包含单个值的Map
@@ -233,7 +282,7 @@ func (inj *InjectorImpl) resolveAsList(dep Dependency, opts Options) (reflect.Va
 	// 如果不是ResolverImpl，使用通用方法
 	val, err := inj.resolver.Resolve(dep.Type(), opts)
 	if err != nil {
-		return reflect.Value{}, err
+		return reflect.Value{}, WrapError(err, ErrorTypeInjection, "failed to resolve dependency for list")
 	}
 
 	// 创建包含单个值的Slice
