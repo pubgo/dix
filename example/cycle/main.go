@@ -2,13 +2,20 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/recovery"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer recovery.Exit(func(err error) error {
+		if strings.Contains(err.Error(), "circular dependency detected") {
+			return nil
+		}
+		return err
+	})
+	
 	defer func() {
 		fmt.Println("\n=== Final Dependency Graph ===")
 		graph := dixglobal.Graph()
@@ -36,13 +43,8 @@ func main() {
 	})
 
 	fmt.Println("Registering C provider (depends on A)")
+
 	dixglobal.Provide(func(a *A) *C {
 		return &C{Name: "C depends on " + a.Name}
-	})
-
-	fmt.Println("\n=== Attempting to Inject (should detect cycle) ===")
-	// 尝试注入，这应该会检测到循环依赖并panic
-	dixglobal.Inject(func(c *C) {
-		fmt.Println("Successfully injected C:", c.Name)
 	})
 }

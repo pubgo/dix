@@ -139,7 +139,7 @@ func main() {
 	// 示例1：正常获取实例
 	fmt.Println("=== 正常实例获取 ===")
 	var userService *UserService
-	err := dix.Inject(container, func(us *UserService) {
+	_, err := dix.Inject(container, func(us *UserService) {
 		userService = us
 	})
 	if err != nil {
@@ -171,7 +171,7 @@ func main() {
 
 	// 演示配置错误
 	fmt.Println("尝试注入 Config (期望错误):")
-	err = dix.Inject(errorContainer, func(c *Config) {
+	_, err = dix.Inject(errorContainer, func(c *Config) {
 		// 这个函数不会被调用，因为提供者会失败
 	})
 	if err != nil {
@@ -180,7 +180,7 @@ func main() {
 
 	// 演示数据库错误
 	fmt.Println("尝试注入 Logger (期望错误):")
-	err = dix.Inject(errorContainer, func(l Logger) {
+	_, err = dix.Inject(errorContainer, func(l Logger) {
 		// 这个函数不会被调用，因为提供者会失败
 	})
 	if err != nil {
@@ -207,7 +207,7 @@ func main() {
 	// 成功的提供者
 	fmt.Println("获取成功的Logger:")
 	var logger Logger
-	err = dix.Inject(mixedContainer, func(l Logger) {
+	_, err = dix.Inject(mixedContainer, func(l Logger) {
 		logger = l
 	})
 	if err != nil {
@@ -218,7 +218,7 @@ func main() {
 
 	// 失败的提供者
 	fmt.Println("尝试获取失败的Config:")
-	err = dix.Inject(mixedContainer, func(c *Config) {
+	_, err = dix.Inject(mixedContainer, func(c *Config) {
 		// 不会执行到这里
 	})
 	if err != nil {

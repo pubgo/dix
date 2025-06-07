@@ -89,27 +89,6 @@ func (c *ContainerImpl) Inject(target interface{}, opts ...Option) error {
 	return c.injector.InjectTarget(target, mergedOpts)
 }
 
-// get 获取指定类型的实例（内部方法）
-func (c *ContainerImpl) get(typ reflect.Type, opts ...Option) (interface{}, error) {
-	// 合并选项
-	mergedOpts := c.options
-	for _, opt := range opts {
-		opt(&mergedOpts)
-	}
-
-	// 解析依赖
-	value, err := c.resolver.Resolve(typ, mergedOpts)
-	if err != nil {
-		return nil, err
-	}
-
-	if !value.IsValid() {
-		return nil, NewNotFoundError(typ)
-	}
-
-	return value.Interface(), nil
-}
-
 // Graph 获取依赖关系图
 func (c *ContainerImpl) Graph() *Graph {
 	renderer := NewDotRenderer()

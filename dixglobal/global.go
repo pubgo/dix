@@ -1,10 +1,10 @@
 package dixglobal
 
 import (
+	"github.com/pubgo/funk/errors"
 	"reflect"
 
 	"github.com/pubgo/dix/dixinternal"
-	"github.com/pubgo/funk/assert"
 )
 
 var _container = dixinternal.New(dixinternal.WithValuesNull())
@@ -35,7 +35,7 @@ var _container = dixinternal.New(dixinternal.WithValuesNull())
 
 // Provide registers an object constructor
 func Provide(provider any) {
-	assert.Must(_container.Provide(provider))
+	errors.Must(_container.Provide(provider))
 }
 
 // Inject 统一的依赖注入方法
@@ -57,9 +57,9 @@ func Provide(provider any) {
 func Inject[T any](target T, opts ...dixinternal.Option) T {
 	vp := reflect.ValueOf(target)
 	if vp.Kind() == reflect.Struct {
-		assert.Must(_container.Inject(&target, opts...))
+		errors.Must(_container.Inject(&target, opts...))
 	} else {
-		assert.Must(_container.Inject(target, opts...))
+		errors.Must(_container.Inject(target, opts...))
 	}
 	return target
 }

@@ -1,8 +1,11 @@
 package dix
 
 import (
+	"fmt"
+	"github.com/pubgo/funk/errors"
+	"reflect"
+
 	"github.com/pubgo/dix/dixinternal"
-	"github.com/pubgo/funk/assert"
 )
 
 const (
@@ -28,15 +31,12 @@ func New(opts ...Option) Container {
 
 // Inject 统一的依赖注入方法
 //
-// 这是框架的核心方法，支持多种输入类型，提供了统一的依赖注入接口。
-// 一个方法处理所有依赖注入需求，包括获取实例和注入依赖。
+// 这是框架的核心方法，按照最原始的设计，只支持函数和结构体类型。
+// 提供了统一的依赖注入接口，简化API设计。
 //
 // 支持的输入类型：
 //   - 函数：func(deps...) - 解析函数参数并调用函数
 //   - 结构体指针：&struct{} - 注入到结构体字段
-//   - 接口：interface{} - 支持接口类型注入
-//   - 切片：[]T - 注入所有匹配的实例
-//   - 映射：map[string]T - 注入带名称的实例
 //
 // 函数注入规则：
 //   - 函数只能有入参，不能有出参
@@ -62,33 +62,44 @@ func New(opts ...Option) Container {
 //
 // 示例：
 //
-//	// 函数注入（替代传统启动函数）
-//	err := dix.Inject(container, func(logger Logger, db *Database, handlers []Handler) {
+//	// 函数注入
+//	_, err := dix.Inject(container, func(logger Logger, db *Database, handlers []Handler) {
 //	    // 使用注入的依赖启动服务器
 //	    startServer(logger, db, handlers)
 //	})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 //	// 结构体注入
 //	type Service struct {
 //	    Logger Logger
 //	    DB     *Database
 //	}
-//	var service Service
-//	err := dix.Inject(container, &service)
+//	service, err := dix.Inject(container, &Service{})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 //	// 获取单个依赖实例
 //	var logger Logger
-//	err := dix.Inject(container, func(l Logger) {
+//	_, err := dix.Inject(container, func(l Logger) {
 //	    logger = l
 //	})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 //	// 批量获取多个依赖实例
 //	var logger Logger
 //	var db *Database
 //	var handlers []Handler
-//	err := dix.Inject(container, func(l Logger, d *Database, h []Handler) {
+//	_, err := dix.Inject(container, func(l Logger, d *Database, h []Handler) {
 //	    logger, db, handlers = l, d, h
 //	})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 //	// 方法注入示例
 //	type UserService struct {
@@ -98,18 +109,33 @@ func New(opts ...Option) Container {
 //	func (s *UserService) DixInjectLogger(logger Logger) { s.logger = logger }
 //	func (s *UserService) DixInjectDatabase(db *Database) { s.db = db }
 //
-//	var service UserService
-//	err := dix.Inject(container, &service)
+//	service, err := dix.Inject(container, &UserService{})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
 //
 // 参数：
 //   - container: 依赖注入容器
-//   - target: 注入目标（函数、结构体指针、接口等）
+//   - target: 注入目标（函数或结构体指针）
 //   - opts: 注入选项（可选）
 //
 // 返回值：
+//   - T: 如果target是函数，返回零值（nil）；如果是结构体，返回注入后的结构体
 //   - error: 注入失败时的错误信息
-func Inject(container Container, target interface{}, opts ...Option) error {
-	return container.Inject(target, opts...)
+func Inject[T any](container Container, target T, opts ...Option) (T, error) {
+	vp := reflect.ValueOf(target)
+	if vp.Kind() == reflect.Struct {
+		if err := container.Inject(&target, opts...); err != nil {
+			return target, fmt.Errorf("dix: inject failed: %w", err)
+		}
+		return target, nil
+	} else {
+		return target, container.Inject(target, opts...)
+	}
+}
+
+func InjectMust[T any](container Container, target T, opts ...Option) T {
+	return errors.Must1(Inject(container, target, opts...))
 }
 
 // Provide 注册依赖提供者
@@ -165,7 +191,7 @@ func Inject(container Container, target interface{}, opts ...Option) error {
 //   - container: 依赖注入容器
 //   - provider: 提供者函数
 func Provide(container Container, provider any) {
-	assert.Must(container.Provide(provider))
+	errors.Must(container.Provide(provider))
 }
 
 // GetGraph 获取依赖关系图
@@ -174,7 +200,3 @@ func Provide(container Container, provider any) {
 func GetGraph(container Container) *Graph {
 	return container.Graph()
 }
-
-// 为了向后兼容，保留旧的类型别名
-// Deprecated: 使用 Container 替代
-type Dix = Container
