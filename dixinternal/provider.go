@@ -103,6 +103,18 @@ func (p *FuncProvider) Invoke(args []reflect.Value) (results []reflect.Value, er
 			WithDetail("actual", len(args))
 	}
 
+	// 收集入参信息用于错误记录
+	argTypes := make([]string, len(args))
+	argValues := make([]interface{}, len(args))
+	for i, arg := range args {
+		argTypes[i] = arg.Type().String()
+		if arg.IsValid() && arg.CanInterface() {
+			argValues[i] = arg.Interface()
+		} else {
+			argValues[i] = "<invalid_or_unexportable>"
+		}
+	}
+
 	defer func() {
 		if r := recover(); r != nil {
 			// 记录调用栈信息
@@ -110,6 +122,9 @@ func (p *FuncProvider) Invoke(args []reflect.Value) (results []reflect.Value, er
 			logger.Error().
 				Str("provider", fnStack.String()).
 				Interface("panic", r).
+				Strs("input_types", argTypes).
+				Interface("input_values", argValues).
+				Str("expected_output_type", p.outputType.String()).
 				Msg("provider function panicked")
 
 			// 将 panic 转换为错误
@@ -122,7 +137,10 @@ func (p *FuncProvider) Invoke(args []reflect.Value) (results []reflect.Value, er
 			err = WrapError(panicErr, ErrorTypeInvocation, "provider function panicked").
 				WithDetail("provider_type", p.outputType.String()).
 				WithDetail("panic_value", r).
-				WithDetail("provider_location", fnStack.String())
+				WithDetail("provider_location", fnStack.String()).
+				WithDetail("input_types", argTypes).
+				WithDetail("input_values", argValues).
+				WithDetail("expected_output_type", p.outputType.String())
 		}
 	}()
 
@@ -141,9 +159,23 @@ func (p *FuncProvider) Invoke(args []reflect.Value) (results []reflect.Value, er
 		errorValue := results[1]
 		if !errorValue.IsNil() {
 			// 提取 error 并返回
-			if err, ok := errorValue.Interface().(error); ok {
-				return nil, WrapError(err, ErrorTypeProvider, "provider function returned error").
-					WithDetail("provider_type", p.outputType.String())
+			if providerErr, ok := errorValue.Interface().(error); ok {
+				// 记录 provider 返回 error 的详细信息
+				fnStack := stack.CallerWithFunc(p.fn)
+				logger.Error().
+					Str("provider", fnStack.String()).
+					Err(providerErr).
+					Strs("input_types", argTypes).
+					Interface("input_values", argValues).
+					Str("expected_output_type", p.outputType.String()).
+					Msg("provider function returned error")
+
+				return nil, WrapError(providerErr, ErrorTypeProvider, "provider function returned error").
+					WithDetail("provider_type", p.outputType.String()).
+					WithDetail("provider_location", fnStack.String()).
+					WithDetail("input_types", argTypes).
+					WithDetail("input_values", argValues).
+					WithDetail("expected_output_type", p.outputType.String())
 			}
 		}
 		// 如果有 error 返回值但为 nil，只返回第一个值

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
+	"github.com/pubgo/funk/errors"
 )
 
 // DixError 依赖注入相关错误
@@ -110,6 +112,7 @@ func NewConfigurationError(message string) *DixError {
 
 // WrapError 包装现有错误
 func WrapError(err error, errType ErrorType, message string) *DixError {
+	err = errors.WrapCaller(err, 1)
 	return NewDixError(errType, message).WithCause(err)
 }
 
