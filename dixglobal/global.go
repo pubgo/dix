@@ -19,6 +19,18 @@ var _container = dixinternal.New(dixinternal.WithValuesNull())
 //		server.ListenAndServe()
 //	})
 //
+//	// 或者使用结构体注入
+//	type App struct {
+//		Server *http.Server
+//		DB     *Database
+//	}
+//	var app App
+//	Inject(&app) // 结构体字段注入
+//
+//	// 获取依赖实例的用法
+//	var logger Logger
+//	Inject(func(l Logger) { logger = l }) // 获取单个依赖
+//
 // For more usage details, see the documentation for the Container type.
 
 // Provide registers an object constructor
@@ -26,9 +38,22 @@ func Provide(provider any) {
 	assert.Must(_container.Provide(provider))
 }
 
-// Inject injects objects
+// Inject 统一的依赖注入方法
 //
-//	target: <*struct> or <func>
+// 支持多种注入目标类型：
+//   - 函数：解析参数并调用函数
+//   - 结构体指针：注入到结构体字段
+//   - 接口、切片、映射等其他类型
+//
+// 这个方法既可以注入依赖，也可以获取实例，提供统一的 API。
+//
+// 获取依赖实例的用法：
+//   - 获取单个依赖：var logger Logger; Inject(func(l Logger) { logger = l })
+//   - 获取多个依赖：var logger Logger; var db *DB; Inject(func(l Logger, d *DB) { logger, db = l, d })
+//
+// 参数：
+//   - target: 注入目标（函数、结构体指针等）
+//   - opts: 可选配置
 func Inject[T any](target T, opts ...dixinternal.Option) T {
 	vp := reflect.ValueOf(target)
 	if vp.Kind() == reflect.Struct {
@@ -37,18 +62,6 @@ func Inject[T any](target T, opts ...dixinternal.Option) T {
 		assert.Must(_container.Inject(target, opts...))
 	}
 	return target
-}
-
-// Get retrieves an instance of the specified type
-func Get[T any](opts ...dixinternal.Option) T {
-	result, err := dixinternal.Get[T](_container, opts...)
-	assert.Must(err)
-	return result
-}
-
-// MustGet retrieves an instance of the specified type, panics on error
-func MustGet[T any](opts ...dixinternal.Option) T {
-	return dixinternal.MustGet[T](_container, opts...)
 }
 
 // Graph returns the dependency graph

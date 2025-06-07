@@ -135,16 +135,19 @@ func main() {
 		}
 	})
 
-	fmt.Println("\n=== Get API Demonstration ===")
-	// 使用Get API获取实例
-	a := dixglobal.Get[*A]()
-	fmt.Println("Get A:", a.Hello)
-
-	b := dixglobal.Get[*B]()
-	fmt.Println("Get B:", b.Hello)
-
-	c1 := dixglobal.Get[*C1]()
-	fmt.Println("Get C1:", c1.Name)
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var a *A
+	var b *B
+	var c1 *C1
+	dixglobal.Inject(func(aInst *A, bInst *B, c1Inst *C1) {
+		a = aInst
+		b = bInst
+		c1 = c1Inst
+	})
+	fmt.Println("A:", a.Hello)
+	fmt.Println("B:", b.Hello)
+	fmt.Println("C1:", c1.Name)
 
 	fmt.Println("\n=== Final Dependency Graph ===")
 	finalGraph := dixglobal.Graph()

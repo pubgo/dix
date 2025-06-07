@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/pubgo/dix"
 	"github.com/pubgo/funk/recovery"
@@ -96,14 +97,17 @@ func main() {
 
 	fmt.Println("\n=== Successful Provider Chain ===")
 
-	// 获取用户服务（应该成功）
-	userService, err := dix.Get[*UserService](container)
+	// 示例1：正常获取实例
+	fmt.Println("=== 正常实例获取 ===")
+	var userService *UserService
+	err := dix.Inject(container, func(us *UserService) {
+		userService = us
+	})
 	if err != nil {
-		fmt.Printf("Error getting user service: %v\n", err)
+		log.Printf("注入失败: %v", err)
 		return
 	}
-
-	fmt.Printf("Successfully created user service with config: %+v\n", userService.Config)
+	fmt.Printf("UserService 实例获取成功: %p\n", userService)
 
 	// 测试数据库查询
 	results, err := userService.DB.Query("SELECT * FROM users")
@@ -131,16 +135,25 @@ func main() {
 		return &PostgresDB{host: "localhost", port: 5432}, nil
 	})
 
-	// 尝试获取配置（应该失败）
-	_, err = dix.Get[*Config](errorContainer)
+	// 示例2：错误提供者
+	fmt.Println("\n=== 错误提供者演示 ===")
+
+	// 演示配置错误
+	fmt.Println("尝试注入 Config (期望错误):")
+	err = dix.Inject(errorContainer, func(c *Config) {
+		// 这个函数不会被调用，因为提供者会失败
+	})
 	if err != nil {
-		fmt.Printf("Expected error when getting config: %v\n", err)
+		log.Printf("预期的配置错误: %v", err)
 	}
 
-	// 尝试获取数据库（应该失败，因为配置失败）
-	_, err = dix.Get[Database](errorContainer)
+	// 演示数据库错误
+	fmt.Println("尝试注入 Database (期望错误):")
+	err = dix.Inject(errorContainer, func(d Database) {
+		// 这个函数不会被调用，因为提供者会失败
+	})
 	if err != nil {
-		fmt.Printf("Expected error when getting database: %v\n", err)
+		log.Printf("预期的数据库错误: %v", err)
 	}
 
 	fmt.Println("\n=== Mixed Success/Error Demo ===")
@@ -158,18 +171,28 @@ func main() {
 		return nil, errors.New("failed to get integer value")
 	})
 
-	// 获取成功的值
-	strValue, err := dix.Get[*string](mixedContainer)
+	// 示例3：混合场景
+	fmt.Println("\n=== 混合提供者演示 ===")
+
+	// 成功的提供者
+	fmt.Println("获取成功的字符串:")
+	var str *string
+	err = dix.Inject(mixedContainer, func(s *string) {
+		str = s
+	})
 	if err != nil {
-		fmt.Printf("Unexpected error getting string: %v\n", err)
+		log.Printf("字符串注入失败: %v", err)
 	} else {
-		fmt.Printf("Successfully got string value: %s\n", *strValue)
+		fmt.Printf("字符串注入成功: %s\n", *str)
 	}
 
-	// 获取失败的值
-	_, err = dix.Get[*int](mixedContainer)
+	// 失败的提供者
+	fmt.Println("尝试获取失败的int:")
+	err = dix.Inject(mixedContainer, func(i *int) {
+		// 不会执行到这里
+	})
 	if err != nil {
-		fmt.Printf("Expected error getting int: %v\n", err)
+		log.Printf("预期的int错误: %v", err)
 	}
 
 	fmt.Println("\n=== Dependency Graph ===")

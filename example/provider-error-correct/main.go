@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/pubgo/dix"
@@ -135,23 +136,17 @@ func main() {
 		return service, nil
 	})
 
-	// 获取用户服务（应该成功）
-	userService, err := dix.Get[*UserService](container)
+	// 示例1：正常获取实例
+	fmt.Println("=== 正常实例获取 ===")
+	var userService *UserService
+	err := dix.Inject(container, func(us *UserService) {
+		userService = us
+	})
 	if err != nil {
-		fmt.Printf("Error getting user service: %v\n", err)
+		log.Printf("注入失败: %v", err)
 		return
 	}
-
-	fmt.Printf("Successfully created user service\n")
-	userService.Logger.Log("Testing database query...")
-
-	// 测试数据库查询
-	results, err := userService.DB.Query("SELECT * FROM users")
-	if err != nil {
-		fmt.Printf("Query error: %v\n", err)
-	} else {
-		fmt.Printf("Query results: %v\n", results)
-	}
+	fmt.Printf("UserService 实例获取成功，配置: %+v\n", userService.Config)
 
 	fmt.Println("\n=== Error Provider Demo ===")
 
@@ -171,16 +166,25 @@ func main() {
 		return &ConsoleLogger{prefix: "ERROR"}, nil
 	})
 
-	// 尝试获取配置（应该失败）
-	_, err = dix.Get[*Config](errorContainer)
+	// 示例2：错误提供者
+	fmt.Println("\n=== 错误提供者演示 ===")
+
+	// 演示配置错误
+	fmt.Println("尝试注入 Config (期望错误):")
+	err = dix.Inject(errorContainer, func(c *Config) {
+		// 这个函数不会被调用，因为提供者会失败
+	})
 	if err != nil {
-		fmt.Printf("Expected error when getting config: %v\n", err)
+		log.Printf("预期的配置错误: %v", err)
 	}
 
-	// 尝试获取日志（应该失败，因为配置失败）
-	_, err = dix.Get[Logger](errorContainer)
+	// 演示数据库错误
+	fmt.Println("尝试注入 Logger (期望错误):")
+	err = dix.Inject(errorContainer, func(l Logger) {
+		// 这个函数不会被调用，因为提供者会失败
+	})
 	if err != nil {
-		fmt.Printf("Expected error when getting logger: %v\n", err)
+		log.Printf("预期的Logger错误: %v", err)
 	}
 
 	fmt.Println("\n=== Mixed Success/Error Demo ===")
@@ -197,18 +201,28 @@ func main() {
 		return nil, errors.New("failed to load configuration")
 	})
 
-	// 获取成功的值
-	logger, err := dix.Get[Logger](mixedContainer)
+	// 示例3：混合场景
+	fmt.Println("\n=== 混合提供者演示 ===")
+
+	// 成功的提供者
+	fmt.Println("获取成功的Logger:")
+	var logger Logger
+	err = dix.Inject(mixedContainer, func(l Logger) {
+		logger = l
+	})
 	if err != nil {
-		fmt.Printf("Unexpected error getting logger: %v\n", err)
+		log.Printf("Logger 注入失败: %v", err)
 	} else {
-		logger.Log("Successfully got logger from mixed container")
+		logger.Log("Logger 注入成功!")
 	}
 
-	// 获取失败的值
-	_, err = dix.Get[*Config](mixedContainer)
+	// 失败的提供者
+	fmt.Println("尝试获取失败的Config:")
+	err = dix.Inject(mixedContainer, func(c *Config) {
+		// 不会执行到这里
+	})
 	if err != nil {
-		fmt.Printf("Expected error getting config: %v\n", err)
+		log.Printf("预期的Config错误: %v", err)
 	}
 
 	fmt.Println("\n=== Dependency Graph ===")

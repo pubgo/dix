@@ -89,14 +89,17 @@ func main() {
 		}
 	})
 
-	fmt.Println("\n=== Get API ===")
-	// 使用Get API获取实例
-	defaultHandler := dixglobal.Get[handler]()
-	fmt.Println("Get default handler:", defaultHandler())
-
-	handlersList := dixglobal.Get[handlers]()
-	fmt.Printf("Get handlers list length: %d\n", len(handlersList))
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var defaultHandler handler
+	var handlersList handlers
+	dixglobal.Inject(func(h handler, hs handlers) {
+		defaultHandler = h
+		handlersList = hs
+	})
+	fmt.Println("获取默认handler:", defaultHandler())
+	fmt.Printf("handlers列表长度: %d\n", len(handlersList))
 	for i, fn := range handlersList {
-		fmt.Printf("  Get handlers[%d]: %s\n", i, fn())
+		fmt.Printf("  handlers[%d]: %s\n", i, fn())
 	}
 }

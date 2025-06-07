@@ -39,16 +39,17 @@ type Container interface {
 	//   - 错误会被包装并包含提供者类型和位置信息
 	Provide(provider interface{}) error
 
-	// Inject 执行依赖注入
+	// Inject 统一的依赖注入方法
+	//
+	// 这是框架的核心方法，支持多种输入类型，提供了统一的依赖注入接口。
+	// 它既可以进行依赖注入，也可以获取依赖实例。
 	//
 	// 支持的注入目标：
+	//   - 函数：func(deps...) - 解析函数参数并调用函数
 	//   - 结构体指针：&struct{} - 注入到结构体字段
-	//   - 函数：func(deps...) - 调用函数并注入依赖
-	//
-	// 结构体注入规则：
-	//   - 字段必须是导出的（首字母大写）
-	//   - 支持嵌套结构体注入
-	//   - 支持方法注入（DixInject前缀的方法）
+	//   - 接口：interface{} - 支持接口类型注入
+	//   - 切片：[]T - 注入所有匹配的实例
+	//   - 映射：map[string]T - 注入带名称的实例
 	//
 	// 函数注入规则：
 	//   - 函数只能有入参，不能有出参
@@ -59,19 +60,18 @@ type Container interface {
 	//   - 示例：func(logger Logger, db *Database, handlers []Handler) - 有效
 	//   - 示例：func() error - 无效（有出参）
 	//   - 示例：func(name string) - 无效（参数为基本类型）
+	//
+	// 结构体注入规则：
+	//   - 字段必须是导出的（首字母大写）
+	//   - 支持嵌套结构体注入
+	//   - 支持方法注入（DixInject前缀的方法）
+	//
+	// 获取依赖实例的用法：
+	//   - 获取单个依赖：var logger Logger; container.Inject(func(l Logger) { logger = l })
+	//   - 批量获取依赖：var logger Logger; var db *DB; container.Inject(func(l Logger, d *DB) { logger, db = l, d })
+	//
+	// 这种设计使得一个方法就能处理所有的依赖注入需求，提供了更加统一和灵活的API。
 	Inject(target interface{}, opts ...Option) error
-
-	// Get 获取指定类型的实例
-	//
-	// 支持获取的类型：
-	//   - 单个实例：reflect.TypeOf((*T)(nil)).Elem()
-	//   - 切片：reflect.TypeOf([]T{})
-	//   - 映射：reflect.TypeOf(map[string]T{})
-	//
-	// 返回值：
-	//   - interface{} - 请求的实例，需要类型断言
-	//   - error - 获取失败时的错误信息
-	Get(typ reflect.Type, opts ...Option) (interface{}, error)
 
 	// Graph 获取依赖关系图
 	//

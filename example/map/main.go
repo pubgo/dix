@@ -76,13 +76,16 @@ func main() {
 		fmt.Println("]")
 	}
 
-	fmt.Println("\n=== Get API ===")
-	// 使用Get API获取实例
-	defaultErr := dixglobal.Get[*errors.Err]()
-	fmt.Println("Get default error:", defaultErr.Msg)
-
-	errMap := dixglobal.Get[map[string]*errors.Err]()
-	fmt.Println("Get error map:")
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var defaultErr *errors.Err
+	var errMap map[string]*errors.Err
+	dixglobal.Inject(func(err *errors.Err, em map[string]*errors.Err) {
+		defaultErr = err
+		errMap = em
+	})
+	fmt.Println("获取默认error:", defaultErr.Msg)
+	fmt.Println("错误映射:")
 	for key, err := range errMap {
 		fmt.Printf("  '%s': %s\n", key, err.Msg)
 	}

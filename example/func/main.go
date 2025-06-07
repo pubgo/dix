@@ -58,9 +58,13 @@ func main() {
 		}
 	})
 
-	// 使用新的Get API
-	h := dixglobal.Get[handler]()
-	fmt.Println("Get API result:", h())
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var h handler
+	dixglobal.Inject(func(handler handler) {
+		h = handler
+	})
+	fmt.Println("获取handler:", h())
 
 	fmt.Println("\n=== Final Dependency Graph ===")
 	finalGraph := dixglobal.Graph()

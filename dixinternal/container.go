@@ -89,8 +89,8 @@ func (c *ContainerImpl) Inject(target interface{}, opts ...Option) error {
 	return c.injector.InjectTarget(target, mergedOpts)
 }
 
-// Get 获取指定类型的实例
-func (c *ContainerImpl) Get(typ reflect.Type, opts ...Option) (interface{}, error) {
+// get 获取指定类型的实例（内部方法）
+func (c *ContainerImpl) get(typ reflect.Type, opts ...Option) (interface{}, error) {
 	// 合并选项
 	mergedOpts := c.options
 	for _, opt := range opts {

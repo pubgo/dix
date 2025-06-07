@@ -47,12 +47,15 @@ func main() {
 		}
 	}
 
-	fmt.Println("\n=== Get API with Empty Map ===")
-	// 使用Get API获取空映射
-	errMap := dixglobal.Get[map[string]*errors.Err]()
-	fmt.Printf("Get API - error map size: %d\n", len(errMap))
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取空映射
+	var errMap map[string]*errors.Err
+	dixglobal.Inject(func(em map[string]*errors.Err) {
+		errMap = em
+	})
+	fmt.Printf("error映射大小: %d\n", len(errMap))
 	if len(errMap) == 0 {
-		fmt.Println("Get API returned empty map")
+		fmt.Println("返回空映射")
 	}
 
 	fmt.Println("\n=== Dependency Graph (should show no providers) ===")

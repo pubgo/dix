@@ -59,10 +59,23 @@ func main() {
 	h := &handler{}
 	dixglobal.Inject(h)
 
-	fmt.Println("\n=== Get API Demonstration ===")
-	// 使用Get API获取实例
-	defaultErr := dixglobal.Get[*errors.Err]()
-	fmt.Println("Get default error:", defaultErr.Msg)
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var defaultErr *errors.Err
+	dixglobal.Inject(func(err *errors.Err) {
+		defaultErr = err
+	})
+	fmt.Println("获取默认error:", defaultErr.Msg)
+
+	// 批量获取多个依赖
+	var singleErr *errors.Err
+	var errorList []*errors.Err
+	dixglobal.Inject(func(err *errors.Err, errs []*errors.Err) {
+		singleErr = err
+		errorList = errs
+	})
+	fmt.Printf("批量获取依赖: 单个error=%s, 列表长度=%d\n",
+		singleErr.Msg, len(errorList))
 
 	fmt.Println("\n=== Final Dependency Graph ===")
 	finalGraph := dixglobal.Graph()

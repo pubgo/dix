@@ -60,12 +60,15 @@ func main() {
 		}
 	})
 
-	fmt.Println("\n=== Get API with Empty List ===")
-	// 使用Get API获取空列表
-	handlers := dixglobal.Get[[]handler]()
-	log.Printf("Get API - handlers count: %d", len(handlers))
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取空列表
+	var handlers []handler
+	dixglobal.Inject(func(h []handler) {
+		handlers = h
+	})
+	log.Printf("handlers数量: %d", len(handlers))
 	if len(handlers) == 0 {
-		fmt.Println("Get API returned empty list")
+		fmt.Println("返回空列表")
 	}
 
 	fmt.Println("\n=== Dependency Graph (should show no providers) ===")

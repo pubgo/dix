@@ -69,7 +69,7 @@ func main() {
 
 	fmt.Println("\n=== Struct Injection ===")
 	h := dixglobal.Inject(new(Handler))
-	assert.If(h.Cli.name != "hello", "inject error")
+	assert.If(h.Cli.name != "default-redis", "inject error")
 	assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 
 	fmt.Println("Struct injection successful:")
@@ -81,7 +81,7 @@ func main() {
 
 	fmt.Println("\n=== Struct Parameter Injection ===")
 	dixglobal.Inject(func(h Handler) {
-		assert.If(h.Cli.name != "hello", "inject error")
+		assert.If(h.Cli.name != "default-redis", "inject error")
 		assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 
 		fmt.Println("Struct parameter injection successful:")
@@ -92,17 +92,20 @@ func main() {
 		}
 	})
 
-	fmt.Println("\n=== Get API Demonstration ===")
-	// 使用Get API获取实例
-	redis := dixglobal.Get[*Redis]()
-	fmt.Println("Get Redis:", redis.name)
-
-	redisMap := dixglobal.Get[map[string]*Redis]()
-	fmt.Printf("Get Redis map with %d entries:\n", len(redisMap))
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var redis *Redis
+	var redisMap map[string]*Redis
+	var logger *log.Logger
+	dixglobal.Inject(func(r *Redis, rm map[string]*Redis, l *log.Logger) {
+		redis = r
+		redisMap = rm
+		logger = l
+	})
+	fmt.Println("Redis名称:", redis.name)
+	fmt.Printf("Redis映射包含 %d 个条目:\n", len(redisMap))
 	for key, r := range redisMap {
 		fmt.Printf("  '%s': %s\n", key, r.name)
 	}
-
-	logger := dixglobal.Get[*log.Logger]()
-	logger.Println("Get API demonstration completed")
+	logger.Println("依赖获取演示完成")
 }

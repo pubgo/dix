@@ -1,31 +1,19 @@
-# Dix - 现代化 Go 依赖注入框架
-
-[![Go Version](https://img.shields.io/badge/go-%3E%3D1.18-blue.svg)](https://golang.org/)
-[![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Go Doc](https://godoc.org/github.com/pubgo/dix?status.svg)](https://godoc.org/github.com/pubgo/dix)
+[![Build Status](https://travis-ci.com/pubgo/dix.svg?branch=master)](https://travis-ci.com/pubgo/dix)
 [![Go Report Card](https://goreportcard.com/badge/github.com/pubgo/dix)](https://goreportcard.com/report/github.com/pubgo/dix)
-[![Coverage Status](https://coveralls.io/repos/github/pubgo/dix/badge.svg)](https://coveralls.io/github/pubgo/dix)
 
-**Dix** 是一个现代化的 Go 依赖注入框架，采用模块化架构设计，提供类型安全的泛型 API 和高性能的依赖管理能力。
+# Dix - 现代化的 Go 依赖注入框架
 
-## ✨ 特性
+## 🎯 核心设计理念
 
-### 🚀 现代化设计
-- **泛型支持**：完全的 Go 1.18+ 泛型 API，编译时类型安全
-- **模块化架构**：清晰的分层设计，易于扩展和维护
-- **零反射**：高性能实现，避免运行时反射开销
-- **函数式 API**：简洁直观的函数式接口设计
+Dix 采用**统一的 Inject 方法设计**，通过单一接口支持多种依赖注入模式：
 
-### 🔧 强大功能
-- **循环依赖检测**：智能检测和报告循环依赖问题
-- **多种注入方式**：支持构造函数、结构体字段、方法注入
-- **灵活提供者**：支持函数、值、接口等多种提供者类型
-- **命名空间隔离**：支持多容器实例，避免全局状态污染
+- ✅ **函数注入** - 解析函数参数并调用
+- ✅ **结构体注入** - 注入到结构体字段  
+- ✅ **方法注入** - 自动调用 DixInject 前缀方法
+- ✅ **获取依赖实例** - 通过函数参数获取依赖实例
 
-### 📊 高性能
-- **预编译优化**：依赖图预编译，运行时零开销
-- **内存池化**：智能内存管理，减少 GC 压力
-- **并发安全**：线程安全的容器操作
-- **懒加载**：按需实例化，优化启动性能
+> **设计优势**: `Inject` 方法的入参可以是函数、指针、接口、map、list 等，**一个方法涵盖所有依赖注入需求**，提供更加统一和灵活的 API。
 
 ## 🚀 快速开始
 
@@ -35,7 +23,7 @@
 go get github.com/pubgo/dix
 ```
 
-### 基础用法
+### 基本用法
 
 ```go
 package main
@@ -45,7 +33,6 @@ import (
     "github.com/pubgo/dix"
 )
 
-// 定义接口和实现
 type Logger interface {
     Log(msg string)
 }
@@ -73,14 +60,24 @@ func main() {
         return &UserService{Logger: logger}
     })
     
-    // 获取实例（泛型 API）
-    service := dix.MustGet[*UserService](container)
+    // 方式1: 结构体注入
+    var service UserService
+    dix.Inject(container, &service)
     service.Logger.Log("Hello, Dix!")
     
-    // 或者使用依赖注入
-    var injectedService UserService
-    dix.Inject(container, &injectedService)
-    injectedService.Logger.Log("Hello from injection!")
+    // 方式2: 函数注入
+    dix.Inject(container, func(service *UserService) {
+        service.Logger.Log("Hello from function injection!")
+    })
+    
+    // 方式3: 获取依赖实例的用法
+    var logger Logger
+    var userService *UserService
+    dix.Inject(container, func(l Logger, us *UserService) {
+        logger = l
+        userService = us
+    })
+    logger.Log("Hello from unified injection!")
 }
 ```
 
@@ -103,9 +100,17 @@ func main() {
         return &UserService{Logger: logger}
     })
     
-    // 直接获取实例
-    service := dixglobal.Get[*UserService]()
-    service.Logger.Log("Hello from global container!")
+    // 统一的注入方式
+    dixglobal.Inject(func(service *UserService) {
+        service.Logger.Log("Hello from global container!")
+    })
+    
+    // 获取依赖实例的用法
+    var service *UserService
+    dixglobal.Inject(func(s *UserService) {
+        service = s
+    })
+    service.Logger.Log("Got service via injection!")
 }
 ```
 
@@ -114,7 +119,7 @@ func main() {
 ### 核心文档
 - [📖 API 文档](docs/API.md) - 完整的 API 参考和使用示例
 - [🏗️ 架构设计](docs/ARCHITECTURE.md) - 深入了解框架架构和设计理念
-- [🔄 迁移指南](docs/MIGRATION.md) - 从旧版本迁移到 v2.0 的详细指南
+- [🔄 迁移指南](docs/MIGRATION.md) - 从旧版本迁移的详细指南
 - [📋 更新日志](docs/CHANGELOG.md) - 版本更新历史和变更记录
 
 ### 示例代码
@@ -155,13 +160,23 @@ dix.Provide(container, func(db Database, logger Logger) *UserService {
 dix.Provide(container, &Config{Port: 8080})
 ```
 
-### 注入方式
+### 统一的注入方式
 
-#### 1. 泛型获取（推荐）
+#### 1. 函数注入（推荐）
 ```go
-// 类型安全的实例获取
-logger := dix.MustGet[Logger](container)
-service, err := dix.Get[*UserService](container)
+// 直接使用依赖
+dix.Inject(container, func(db Database, logger Logger) {
+    // 使用注入的依赖
+    logger.Log("Database connected")
+})
+
+// 获取依赖实例的用法
+var logger Logger
+var service *UserService
+dix.Inject(container, func(l Logger, s *UserService) {
+    logger = l    // 获取 Logger 实例
+    service = s   // 获取 UserService 实例
+})
 ```
 
 #### 2. 结构体注入
@@ -175,12 +190,24 @@ var handler Handler
 dix.Inject(container, &handler)
 ```
 
-#### 3. 函数注入
+#### 3. 方法注入
 ```go
-dix.Inject(container, func(db Database, logger Logger) {
-    // 使用注入的依赖
-    logger.Log("Database connected")
-})
+type Service struct {
+    logger Logger
+    db     Database
+}
+
+// DixInject 前缀的方法会被自动调用
+func (s *Service) DixInjectLogger(logger Logger) {
+    s.logger = logger
+}
+
+func (s *Service) DixInjectDatabase(db Database) {
+    s.db = db
+}
+
+var service Service
+dix.Inject(container, &service)
 ```
 
 ## 🔧 高级特性
@@ -192,8 +219,10 @@ dix.Inject(container, func(db Database, logger Logger) {
 dix.Provide(container, func(b B) A { return A{} })
 dix.Provide(container, func(a A) B { return B{} })
 
-// 获取时会报告循环依赖错误
-_, err := dix.Get[A](container)
+// 注入时会报告循环依赖错误
+err := dix.Inject(container, func(a A) {
+    // 这里会触发循环依赖错误
+})
 // err: circular dependency detected: A -> B -> A
 ```
 
@@ -205,8 +234,12 @@ dix.Provide(container, func() Handler { return &HTTPHandler{} })
 dix.Provide(container, func() Handler { return &GRPCHandler{} })
 
 // 获取所有实例
-handlers := dix.MustGet[[]Handler](container)
-fmt.Printf("Registered %d handlers\n", len(handlers))
+dix.Inject(container, func(handlers []Handler) {
+    fmt.Printf("Registered %d handlers\n", len(handlers))
+    for i, handler := range handlers {
+        fmt.Printf("Handler %d: %T\n", i, handler)
+    }
+})
 ```
 
 ### 映射注入
@@ -217,10 +250,11 @@ dix.Provide(container, func() Handler { return &HTTPHandler{} })
 dix.Provide(container, func() Handler { return &GRPCHandler{} })
 
 // 获取映射
-handlerMap := dix.MustGet[map[string]Handler](container)
-for name, handler := range handlerMap {
-    fmt.Printf("Handler %s: %T\n", name, handler)
-}
+dix.Inject(container, func(handlerMap map[string]Handler) {
+    for name, handler := range handlerMap {
+        fmt.Printf("Handler %s: %T\n", name, handler)
+    }
+})
 ```
 
 ### 依赖图可视化
@@ -228,91 +262,52 @@ for name, handler := range handlerMap {
 ```go
 // 查看依赖关系图
 graph := dix.GetGraph(container)
-fmt.Printf("Providers: %s\n", graph.Providers)
-fmt.Printf("Objects: %s\n", graph.Objects)
+fmt.Printf("Providers:\n%s\n", graph.Providers)
+fmt.Printf("Objects:\n%s\n", graph.Objects)
 ```
 
-## 🏗️ 架构层次
+## 📋 API 对比
 
-Dix 采用分层架构设计：
+### 统一设计的优势
 
-```
-┌─────────────────────────────────────┐
-│           Public API                │  ← dix 包：用户友好的 API
-├─────────────────────────────────────┤
-│         Global Container            │  ← dixglobal 包：全局容器
-├─────────────────────────────────────┤
-│        Internal Core                │  ← dixinternal 包：核心实现
-└─────────────────────────────────────┘
-```
-
-### API 层次选择
-
-- **简单应用**：使用 `dixglobal` 包的全局容器
-- **复杂应用**：使用 `dix` 包的容器实例
-- **库开发**：使用 `dixinternal` 包的底层 API
-
-## 🚀 性能优势
-
-### v2.0 vs v1.x 性能对比
-
-| 指标 | v1.x | v2.0 | 改进 |
-|------|------|------|------|
-| **代码行数** | 1,200+ | 373 | -69% |
-| **内存使用** | 基准 | -30% | 更少内存分配 |
-| **启动时间** | 基准 | -40% | 预编译优化 |
-| **运行时性能** | 基准 | +25% | 零反射实现 |
-
-### 优化特性
-
-- **预编译依赖图**：启动时构建，运行时零开销
-- **类型缓存**：避免重复类型解析
-- **内存池化**：减少 GC 压力
-- **并发优化**：线程安全的高效实现
-
-## 🔄 迁移指南
-
-从 v1.x 迁移到 v2.0？查看我们的[详细迁移指南](docs/MIGRATION.md)。
-
-### 主要 API 变化
-
-| v1.x | v2.0 |
-|------|------|
-| `dix.NewDix()` | `dix.New()` |
-| `container.Provide(fn)` | `dix.Provide(container, fn)` |
+| 传统方式 | Dix 统一方式 |
+|---------|-------------|
+| `container.Get(&target)` | `dix.Inject(container, func(t Target) { target = t })` |
 | `container.Inject(target)` | `dix.Inject(container, target)` |
-| `container.Get(&target)` | `dix.Get[T](container)` |
+| `container.Call(fn)` | `dix.Inject(container, fn)` |
+
+**统一的 Inject 方法支持:**
+- ✅ 函数：`func(deps...) { ... }`
+- ✅ 结构体指针：`&struct{}`
+- ✅ 接口类型：`interface{}`
+- ✅ 切片类型：`[]T`
+- ✅ 映射类型：`map[string]T`
+
+## 🌟 特性亮点
+
+- **🎯 统一 API**: 一个 `Inject` 方法处理所有依赖注入场景
+- **🔒 类型安全**: 编译时类型检查，运行时错误详细
+- **⚡ 高性能**: 优化的依赖解析和缓存机制
+- **🔍 循环检测**: 自动检测和报告循环依赖
+- **📊 可视化**: 依赖关系图生成和分析
+- **🧩 模块化**: 清晰的架构分层和组件解耦
+- **🛡️ 错误友好**: 详细的错误信息和调试支持
+
+## 💡 设计思路
+
+Dix 的核心设计理念是**简化和统一**：
+
+1. **统一接口**: `Inject` 方法可以处理所有类型的依赖注入需求
+2. **类型灵活**: 支持函数、指针、接口、集合等多种类型
+3. **功能全面**: 既能注入依赖，也能获取实例，满足所有需求
+4. **使用简单**: 学习成本低，API 直观易懂
+
+这种设计让开发者只需要掌握一个方法，就能处理所有的依赖注入场景，大大简化了框架的使用复杂度。
 
 ## 🤝 贡献
 
-我们欢迎社区贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何参与项目开发。
+欢迎提交 Issue 和 Pull Request！
 
-### 开发环境
+## �� 许可证
 
-```bash
-# 克隆项目
-git clone https://github.com/pubgo/dix.git
-cd dix
-
-# 安装依赖
-go mod tidy
-
-# 运行测试
-go test ./...
-
-# 运行示例
-go run example/basic/main.go
-```
-
-## 📄 许可证
-
-本项目采用 [Apache 2.0 许可证](LICENSE)。
-
-## 🙏 致谢
-
-- 设计灵感来源于 [uber-go/dig](https://github.com/uber-go/dig)
-- 感谢所有贡献者的支持和反馈
-
----
-
-**Dix** - 让依赖注入变得简单而强大 🚀
+MIT License

@@ -42,13 +42,16 @@ func main() {
 		fmt.Println("Injected error message:", err.Msg)
 	})
 
-	fmt.Println("\n=== Get API Demonstration ===")
-	// 使用Get API获取实例
-	h := dixglobal.Get[*handler]()
-	fmt.Printf("Get handler: %p\n", h)
-
-	err := dixglobal.Get[*errors.Err]()
-	fmt.Println("Get error:", err.Msg)
+	fmt.Println("\n=== 通过 Inject 获取依赖实例演示 ===")
+	// 使用 Inject 方法获取依赖实例
+	var h *handler
+	var err *errors.Err
+	dixglobal.Inject(func(handler *handler, error *errors.Err) {
+		h = handler
+		err = error
+	})
+	fmt.Printf("handler地址: %p\n", h)
+	fmt.Println("error信息:", err.Msg)
 
 	fmt.Println("\n=== Final Dependency Graph ===")
 	finalGraph := dixglobal.Graph()
