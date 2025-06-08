@@ -2,6 +2,7 @@ package dixinternal
 
 import (
 	"fmt"
+	"github.com/samber/lo"
 	"reflect"
 	"time"
 
@@ -73,9 +74,20 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 			isList = true
 			outputType = outputType.Elem()
 		}
+
+		if !isMapListSupportedType(outputType.Kind()) {
+			return nil, NewValidationError("unsupported provider output type").
+				WithDetail("type", outputType.String()).
+				WithDetail("kind", outputType.Kind().String())
+		}
 	case reflect.Slice:
 		isList = true
 		outputType = outputType.Elem()
+		if !isMapListSupportedType(outputType.Kind()) {
+			return nil, NewValidationError("unsupported provider output type").
+				WithDetail("type", outputType.String()).
+				WithDetail("kind", outputType.Kind().String())
+		}
 	case reflect.Ptr, reflect.Interface, reflect.Func: // 支持的单类型
 	case reflect.Struct: // 结构体类型，需要特殊处理
 	default:
@@ -747,6 +759,15 @@ func isSupportedType(kind reflect.Kind) bool {
 	}
 }
 
+func isMapListSupportedType(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Interface, reflect.Ptr, reflect.Func:
+		return true
+	default:
+		return false
+	}
+}
+
 // isInjectableFieldType 检查字段类型是否可注入
 func isInjectableFieldType(fieldType reflect.Type) bool {
 	switch fieldType.Kind() {
@@ -765,27 +786,22 @@ func extractStructFieldTypes(structType reflect.Type) []reflect.Type {
 		return types
 	}
 
-	// 使用map避免重复类型
-	seen := make(map[reflect.Type]bool)
-
 	for i := 0; i < structType.NumField(); i++ {
 		field := structType.Field(i)
-		if field.IsExported() && isInjectableFieldType(field.Type) && !seen[field.Type] {
-			types = append(types, field.Type)
-			seen[field.Type] = true
+		if !field.IsExported() || !isInjectableFieldType(field.Type) {
+			continue
+		}
 
-			// 递归处理嵌套结构体
-			if field.Type.Kind() == reflect.Struct {
-				nestedTypes := extractStructFieldTypes(field.Type)
-				for _, nestedType := range nestedTypes {
-					if !seen[nestedType] {
-						types = append(types, nestedType)
-						seen[nestedType] = true
-					}
-				}
+		types = append(types, field.Type)
+
+		// 递归处理嵌套结构体
+		if field.Type.Kind() == reflect.Struct {
+			nestedTypes := extractStructFieldTypes(field.Type)
+			for _, nestedType := range nestedTypes {
+				types = append(types, nestedType)
 			}
 		}
 	}
 
-	return types
+	return lo.Uniq(types)
 }
