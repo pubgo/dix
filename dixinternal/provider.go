@@ -17,15 +17,15 @@ type inType struct {
 }
 
 func (v inType) Validate() error {
-	if v.isMap && !checkType(v.typ.Kind()) {
+	if v.isMap && !isMapListSupportedType(v.typ.Kind()) {
 		return errors.Format("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
-	if v.isList && !checkType(v.typ.Kind()) {
+	if v.isList && !isMapListSupportedType(v.typ.Kind()) {
 		return errors.Format("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
-	if !checkType(v.typ.Kind()) {
+	if !isMapListSupportedType(v.typ.Kind()) {
 		return errors.Format("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
@@ -38,13 +38,16 @@ type outType struct {
 	isList bool
 }
 
-type node struct {
+type providerFn struct {
 	fn        reflect.Value
 	inputList []*inType
 	output    *outType
+
+	hasError    bool
+	initialized bool
 }
 
-func (n node) call(in []reflect.Value) []reflect.Value {
+func (n providerFn) call(in []reflect.Value) []reflect.Value {
 	defer recovery.Raise(func(err error) error {
 		return errors.WrapTag(err,
 			errors.T("msg", "failed to handle provider invoke"),

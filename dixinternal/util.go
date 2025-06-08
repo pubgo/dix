@@ -9,15 +9,6 @@ import (
 	"github.com/pubgo/funk/log"
 )
 
-func checkType(p reflect.Kind) bool {
-	switch p {
-	case reflect.Interface, reflect.Ptr, reflect.Func:
-		return true
-	default:
-		return false
-	}
-}
-
 func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
 	val := reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
 	return reflect.Append(val, data...)
@@ -191,7 +182,7 @@ func getProvideAllInputs(typ reflect.Type) []*inType {
 	return input
 }
 
-func buildDependencyGraph(providers map[outputType][]*node) map[reflect.Type]map[reflect.Type]bool {
+func buildDependencyGraph(providers map[outputType][]*providerFn) map[reflect.Type]map[reflect.Type]bool {
 	graph := make(map[reflect.Type]map[reflect.Type]bool)
 	// Pre-allocate map capacity to reduce rehash
 	for outTyp := range providers {
@@ -209,4 +200,33 @@ func buildDependencyGraph(providers map[outputType][]*node) map[reflect.Type]map
 		}
 	}
 	return graph
+}
+
+// isSupportedType 检查是否为支持的类型
+func isSupportedType(kind reflect.Kind) bool {
+	switch kind {
+	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
+		return true
+	default:
+		return false
+	}
+}
+
+func isMapListSupportedType(p reflect.Kind) bool {
+	switch p {
+	case reflect.Interface, reflect.Ptr, reflect.Func:
+		return true
+	default:
+		return false
+	}
+}
+
+// isInjectableFieldType 检查字段类型是否可注入
+func isInjectableFieldType(fieldType reflect.Type) bool {
+	switch fieldType.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
+		return true
+	default:
+		return false
+	}
 }

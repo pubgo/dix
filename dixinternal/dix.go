@@ -27,10 +27,9 @@ func newDix(opts ...Option) *Dix {
 	option.Check()
 
 	c := &Dix{
-		option:      option,
-		providers:   make(map[outputType][]*node),
-		objects:     make(map[outputType]map[group][]value),
-		initializer: map[reflect.Value]bool{},
+		option:    option,
+		providers: make(map[outputType][]*providerFn),
+		objects:   make(map[outputType]map[group][]value),
 	}
 
 	c.provide(func() *Dix { return c })
@@ -39,10 +38,9 @@ func newDix(opts ...Option) *Dix {
 }
 
 type Dix struct {
-	option      Options
-	providers   map[outputType][]*node
-	objects     map[outputType]map[group][]value
-	initializer map[reflect.Value]bool
+	option    Options
+	providers map[outputType][]*providerFn
+	objects   map[outputType]map[group][]value
 }
 
 func (x *Dix) Option() Options {
@@ -71,7 +69,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 	}
 
 	for _, n := range x.providers[outTyp] {
-		if x.initializer[n.fn] {
+		if n.initialized {
 			continue
 		}
 
@@ -89,7 +87,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 			Str("provider", fnStack.String()).
 			Msgf("eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
-		x.initializer[n.fn] = true
+		n.initialized = true
 
 		objects := make(map[outputType]map[group][]value)
 		for outT, groupValue := range handleOutput(outTyp, fnCall[0]) {
@@ -234,7 +232,30 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 	for _, in := range inTypes {
 		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()))
 	}
-	vp.Call(input)
+
+	var hasErrorReturn bool
+	if vp.Type().NumOut() == 1 {
+		// 如果有一个返回值，必须是 error 类型
+		errorType := vp.Type().Out(0)
+		if !errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			panic(&errors.Err{
+				Msg:    "injectable function can only return error type",
+				Detail: fmt.Sprintf("return_type=%s", errorType.String()),
+			})
+		}
+		hasErrorReturn = true
+	}
+
+	results := vp.Call(input)
+	// 如果函数有 error 返回值，检查并处理
+	if hasErrorReturn && len(results) > 0 {
+		errorValue := results[0]
+		if !errorValue.IsNil() {
+			if funcErr, ok := errorValue.Interface().(error); ok {
+				panic(errors.Wrapf(funcErr, "injected function returned error"))
+			}
+		}
+	}
 }
 
 func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
@@ -321,7 +342,20 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
 }
 
 func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType) {
-	n := &node{fn: fnVal, inputList: in}
+	hasError := false
+	if fnVal.Type().NumOut() == 2 {
+		errorType := fnVal.Type().Out(1)
+		if errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			hasError = true
+		} else {
+			panic(&errors.Err{
+				Msg:    "second return value must be error type",
+				Detail: fmt.Sprintf("actual_type=%s", errorType.String()),
+			})
+		}
+	}
+
+	n := &providerFn{fn: fnVal, inputList: in, hasError: hasError}
 	switch outTyp := out; outTyp.Kind() {
 	case reflect.Slice:
 		n.output = &outType{isList: true, typ: outTyp.Elem()}
