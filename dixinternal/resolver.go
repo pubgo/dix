@@ -37,8 +37,18 @@ func NewResolver() *ResolverImpl {
 
 // AddProvider 添加提供者
 func (r *ResolverImpl) AddProvider(provider Provider) {
-	typ := provider.Type()
-	r.providers[typ] = append(r.providers[typ], provider)
+	// 为 provider 能提供的所有类型注册
+	providedTypes := provider.ProvidedTypes()
+
+	for _, typ := range providedTypes {
+		r.providers[typ] = append(r.providers[typ], provider)
+	}
+
+	// 向后兼容：如果没有 ProvidedTypes，使用传统的 PrimaryType() 方法
+	if len(providedTypes) == 0 {
+		typ := provider.PrimaryType()
+		r.providers[typ] = append(r.providers[typ], provider)
+	}
 }
 
 // GetProviders 获取指定类型的提供者
@@ -48,18 +58,13 @@ func (r *ResolverImpl) GetProviders(typ reflect.Type) []Provider {
 
 // Resolve 解析单个依赖
 func (r *ResolverImpl) Resolve(typ reflect.Type, opts Options) (reflect.Value, error) {
-	// 处理结构体类型
-	if typ.Kind() == reflect.Struct {
-		return r.resolveStruct(typ, opts)
-	}
-
-	// 获取类型的所有值
+	// 优先尝试通过 provider 获取类型的值
 	values, err := r.getTypeValues(typ, opts)
 	if err != nil {
 		return reflect.Value{}, err
 	}
 
-	// 返回最后一个值作为默认值
+	// 如果找到了 provider 提供的值，返回最后一个值作为默认值
 	if defaultValues, ok := values[defaultKey]; ok && len(defaultValues) > 0 {
 		val := defaultValues[len(defaultValues)-1]
 		if val.IsZero() && !opts.AllowValuesNull {
@@ -69,6 +74,12 @@ func (r *ResolverImpl) Resolve(typ reflect.Type, opts Options) (reflect.Value, e
 		return val, nil
 	}
 
+	// 如果没有找到 provider，且是结构体类型，才尝试通过字段注入创建
+	if typ.Kind() == reflect.Struct {
+		return r.resolveStruct(typ, opts)
+	}
+
+	// 其他情况：没有 provider 且不是结构体
 	if !opts.AllowValuesNull {
 		return reflect.Value{}, NewNotFoundError(typ)
 	}
@@ -192,47 +203,154 @@ func (r *ResolverImpl) getTypeValues(typ reflect.Type, opts Options) (map[string
 		r.objects[typ] = make(map[string][]reflect.Value)
 	}
 
-	// 如果没有提供者，发出警告
-	if len(r.providers[typ]) == 0 {
+	// 首先尝试调用直接的提供者
+	if len(r.providers[typ]) > 0 {
+		err := r.invokeDirectProviders(typ, opts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 如果还没有找到该类型的值，尝试从其他提供者的输出中查找
+	if len(r.objects[typ][defaultKey]) == 0 {
+		err := r.invokeIndirectProviders(typ, opts)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// 如果仍然没有找到，发出警告
+	if len(r.objects[typ][defaultKey]) == 0 {
 		logger.Warn().
 			Str("type", typ.String()).
 			Str("kind", typ.Kind().String()).
 			Msg("no providers found for type")
-		return r.objects[typ], nil
-	}
-
-	// 调用所有未初始化的提供者
-	for _, provider := range r.providers[typ] {
-		if provider.IsInitialized() {
-			continue
-		}
-
-		// 解析提供者的依赖
-		args, err := r.ResolveAll(provider.Dependencies(), opts)
-		if err != nil {
-			return nil, WrapError(err, ErrorTypeProvider, "failed to resolve provider dependencies").
-				WithDetail("provider_type", typ.String())
-		}
-
-		// 调用提供者
-		results, err := provider.Invoke(args)
-		if err != nil {
-			return nil, WrapError(err, ErrorTypeInvocation, "provider invocation failed").
-				WithDetail("provider_type", typ.String())
-		}
-
-		// 处理提供者的输出
-		if len(results) > 0 {
-			err = r.handleProviderOutput(typ, results[0], provider)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		provider.SetInitialized(true)
 	}
 
 	return r.objects[typ], nil
+}
+
+// invokeDirectProviders 调用直接的提供者
+func (r *ResolverImpl) invokeDirectProviders(typ reflect.Type, opts Options) error {
+	for _, provider := range r.providers[typ] {
+		// 检查 provider 是否能提供该类型
+		if provider.CanProvide(typ) {
+			// 对于多类型 provider，即使已初始化，也可能需要为新类型提供实例
+			if provider.IsInitialized() {
+				// 检查是否已经有该类型的缓存
+				if r.objects[typ] != nil && len(r.objects[typ][defaultKey]) > 0 {
+					continue // 已经有缓存，跳过
+				}
+				// 没有缓存，需要重新提供
+			}
+
+			err := r.invokeProviderForType(provider, typ, opts)
+			if err != nil {
+				return err
+			}
+		} else {
+			// 传统单类型 provider
+			if provider.IsInitialized() {
+				continue
+			}
+
+			err := r.invokeProvider(provider, typ, opts)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// invokeProviderForType 为特定类型调用提供者
+func (r *ResolverImpl) invokeProviderForType(provider Provider, targetType reflect.Type, opts Options) error {
+	wasInitialized := provider.IsInitialized()
+
+	// 如果还没初始化，先标记为已初始化，避免无限递归
+	if !wasInitialized {
+		provider.SetInitialized(true)
+	}
+
+	// 解析提供者的依赖
+	args, err := r.ResolveAll(provider.Dependencies(), opts)
+	if err != nil {
+		return WrapError(err, ErrorTypeProvider, "failed to resolve provider dependencies").
+			WithDetail("provider_type", provider.PrimaryType().String()).
+			WithDetail("target_type", targetType.String())
+	}
+
+	// 使用 ProvideFor 方法为特定类型提供实例
+	result, err := provider.ProvideFor(targetType, args)
+	if err != nil {
+		return WrapError(err, ErrorTypeInvocation, "provider failed to provide for type").
+			WithDetail("provider_type", provider.PrimaryType().String()).
+			WithDetail("target_type", targetType.String())
+	}
+
+	// 直接将结果添加到对象缓存中
+	if r.objects[targetType] == nil {
+		r.objects[targetType] = make(map[string][]reflect.Value)
+	}
+
+	if result.IsValid() && !result.IsZero() {
+		r.objects[targetType][defaultKey] = append(r.objects[targetType][defaultKey], result)
+	}
+
+	return nil
+}
+
+// invokeIndirectProviders 从其他提供者的输出中查找类型
+func (r *ResolverImpl) invokeIndirectProviders(typ reflect.Type, opts Options) error {
+	// 遍历所有其他类型的提供者
+	for providerType, providers := range r.providers {
+		if providerType == typ {
+			continue // 跳过我们已经处理过的直接提供者
+		}
+
+		for _, provider := range providers {
+			if provider.IsInitialized() {
+				continue
+			}
+
+			err := r.invokeProvider(provider, providerType, opts)
+			if err != nil {
+				return err
+			}
+
+			// 不要在找到第一个匹配后就返回，继续调用所有提供者
+			// 这样可以收集到所有可能产生该类型的实例
+		}
+	}
+	return nil
+}
+
+// invokeProvider 调用单个提供者
+func (r *ResolverImpl) invokeProvider(provider Provider, providerType reflect.Type, opts Options) error {
+	// 解析提供者的依赖
+	args, err := r.ResolveAll(provider.Dependencies(), opts)
+	if err != nil {
+		return WrapError(err, ErrorTypeProvider, "failed to resolve provider dependencies").
+			WithDetail("provider_type", providerType.String())
+	}
+
+	// 调用提供者
+	results, err := provider.Invoke(args)
+	if err != nil {
+		return WrapError(err, ErrorTypeInvocation, "provider invocation failed").
+			WithDetail("provider_type", providerType.String())
+	}
+
+	// 处理提供者的输出
+	if len(results) > 0 {
+		err = r.handleProviderOutput(providerType, results[0], provider)
+		if err != nil {
+			return err
+		}
+	}
+
+	provider.SetInitialized(true)
+	return nil
 }
 
 // handleProviderOutput 处理提供者输出
@@ -331,6 +449,18 @@ func (r *ResolverImpl) extractSliceValues(outputType reflect.Type, result reflec
 func (r *ResolverImpl) extractStructValues(result reflect.Value, objects map[reflect.Type]map[string][]reflect.Value) {
 	for i := 0; i < result.NumField(); i++ {
 		field := result.Field(i)
+		fieldType := result.Type().Field(i)
+
+		// 跳过不导出的字段
+		if !fieldType.IsExported() {
+			continue
+		}
+
+		// 跳过无效字段
+		if !field.IsValid() {
+			continue
+		}
+
 		fieldObjects := r.extractValues(field.Type(), field, nil)
 
 		for typ, groupValues := range fieldObjects {

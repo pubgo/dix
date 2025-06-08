@@ -50,6 +50,12 @@ func (inj *InjectorImpl) InjectStruct(target reflect.Value, opts Options) (err e
 			continue
 		}
 
+		// 只对支持的字段类型进行注入
+		if !isInjectableFieldType(field.Type) {
+			logger.Debug().Msgf("skipping non-injectable field: %s (type: %s)", field.Name, field.Type.String())
+			continue
+		}
+
 		err := inj.injectField(fieldValue, field, opts)
 		if err != nil {
 			return WrapError(err, ErrorTypeInjection, "failed to inject struct field").
@@ -84,8 +90,19 @@ func (inj *InjectorImpl) InjectFunc(fn reflect.Value, opts Options) (err error) 
 	}
 
 	fnType := fn.Type()
-	if fnType.NumOut() != 0 {
-		return NewValidationError("injectable function must have no return values").
+
+	// 检查返回值：允许没有返回值或者只有一个 error 返回值
+	var hasErrorReturn bool
+	if fnType.NumOut() == 1 {
+		// 如果有一个返回值，必须是 error 类型
+		errorType := fnType.Out(0)
+		if !errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			return NewValidationError("injectable function can only return error type").
+				WithDetail("return_type", errorType.String())
+		}
+		hasErrorReturn = true
+	} else if fnType.NumOut() > 1 {
+		return NewValidationError("injectable function can have at most one return value (error)").
 			WithDetail("return_count", fnType.NumOut())
 	}
 
@@ -94,8 +111,8 @@ func (inj *InjectorImpl) InjectFunc(fn reflect.Value, opts Options) (err error) 
 			WithDetail("parameter_count", fnType.NumIn())
 	}
 
-	// 解析函数参数依赖
-	dependencies, err := parseDependencies(fnType)
+	// 解析函数参数依赖（对于普通函数注入，不需要结构体字段展开）
+	dependencies, err := parseBasicDependencies(fnType)
 	if err != nil {
 		return WrapError(err, ErrorTypeValidation, "failed to parse function dependencies")
 	}
@@ -107,7 +124,18 @@ func (inj *InjectorImpl) InjectFunc(fn reflect.Value, opts Options) (err error) 
 	}
 
 	// 调用函数
-	fn.Call(args)
+	results := fn.Call(args)
+
+	// 如果函数有 error 返回值，检查并处理
+	if hasErrorReturn && len(results) > 0 {
+		errorValue := results[0]
+		if !errorValue.IsNil() {
+			if funcErr, ok := errorValue.Interface().(error); ok {
+				return WrapError(funcErr, ErrorTypeInjection, "injected function returned error")
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -178,6 +206,11 @@ func (inj *InjectorImpl) injectField(fieldValue reflect.Value, field reflect.Str
 		// 解析并设置值
 		val, err := inj.resolver.Resolve(field.Type, opts)
 		if err != nil {
+			// 如果无法解析，尝试从结构体字段依赖中获取
+			if structFieldVal := inj.tryResolveFromStructFields(field.Type, opts); structFieldVal.IsValid() {
+				fieldValue.Set(structFieldVal)
+				return nil
+			}
 			return WrapError(err, ErrorTypeInjection, "failed to resolve field value").
 				WithDetail("field_name", field.Name).
 				WithDetail("field_type", field.Type.String())
@@ -220,13 +253,20 @@ func (inj *InjectorImpl) injectField(fieldValue reflect.Value, field reflect.Str
 		}
 
 	default:
-		return NewValidationError("unsupported field type for injection").
-			WithDetail("field_name", field.Name).
-			WithDetail("field_type", field.Type.String()).
-			WithDetail("field_kind", field.Type.Kind().String())
+		// 对于不支持的字段类型，直接跳过而不是报错
+		logger.Debug().Msgf("skipping field with unsupported type: %s (type: %s)", field.Name, field.Type.String())
+		return nil
 	}
 
 	return nil
+}
+
+// tryResolveFromStructFields 尝试从结构体字段依赖中解析类型
+func (inj *InjectorImpl) tryResolveFromStructFields(fieldType reflect.Type, opts Options) reflect.Value {
+	// 这是一个辅助方法，用于处理结构体字段的递归依赖解析
+	// 在实际实现中，这可能需要与resolver的内部实现更紧密地集成
+	// 目前先返回零值，表示无法解析
+	return reflect.Value{}
 }
 
 // injectMethods 注入方法

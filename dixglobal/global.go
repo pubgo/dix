@@ -1,8 +1,9 @@
 package dixglobal
 
 import (
-	"github.com/pubgo/funk/errors"
 	"reflect"
+
+	"github.com/pubgo/funk/errors"
 
 	"github.com/pubgo/dix/dixinternal"
 )
@@ -17,6 +18,14 @@ var _container = dixinternal.New(dixinternal.WithValuesNull())
 //
 //	Inject(func(server *http.Server) { // Application startup
 //		server.ListenAndServe()
+//	})
+//
+//	// 或者带错误处理的函数注入
+//	Inject(func(server *http.Server, db *Database) error {
+//		if err := db.Connect(); err != nil {
+//			return err
+//		}
+//		return server.ListenAndServe()
 //	})
 //
 //	// 或者使用结构体注入

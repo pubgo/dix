@@ -41,7 +41,7 @@ func main() {
 		L *log.Logger
 	}) *Redis {
 		p.L.Println("Initializing Redis instance")
-		return &Redis{name: "hello"}
+		return &Redis{name: "default-redis"}
 	})
 
 	// 注册Redis映射提供者

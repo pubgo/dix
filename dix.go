@@ -36,11 +36,11 @@ func New(opts ...Option) Container {
 // 提供了统一的依赖注入接口，简化API设计。
 //
 // 支持的输入类型：
-//   - 函数：func(deps...) - 解析函数参数并调用函数
+//   - 函数：func(deps...) 或 func(deps...) error - 解析函数参数并调用函数
 //   - 结构体指针：&struct{} - 注入到结构体字段
 //
 // 函数注入规则：
-//   - 函数只能有入参，不能有出参
+//   - 函数可以没有返回值，或者有一个 error 返回值
 //   - 函数参数类型必须在容器中已注册
 //   - 支持的参数类型：指针(*T)、接口(interface{})、结构体(struct{})、切片([]T)、映射(map[string]T)
 //   - 不支持基本类型参数：string, int, bool 等
@@ -63,10 +63,19 @@ func New(opts ...Option) Container {
 //
 // 示例：
 //
-//	// 函数注入
+//	// 函数注入（无返回值）
 //	_, err := dix.Inject(container, func(logger Logger, db *Database, handlers []Handler) {
 //	    // 使用注入的依赖启动服务器
 //	    startServer(logger, db, handlers)
+//	})
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//
+//	// 函数注入（error 返回值）
+//	_, err := dix.Inject(container, func(logger Logger, db *Database) error {
+//	    // 执行可能失败的初始化操作
+//	    return initializeSystem(logger, db)
 //	})
 //	if err != nil {
 //	    log.Fatal(err)

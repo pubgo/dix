@@ -88,11 +88,25 @@ type Container interface {
 //
 // 提供者负责创建和管理特定类型的实例。
 // 支持的提供者类型包括函数提供者、值提供者等。
+//
+// 重要设计改进：
+//   - Provider 现在可以暴露多个类型，而不仅仅是单一类型
+//   - 当 provider 返回结构体时，可以同时提供结构体类型及其字段类型
+//   - 这解决了"结构体 provider 无法被类型匹配"的根本问题
 type Provider interface {
-	// Type 返回提供的类型
+	// ProvidedTypes 返回此提供者能够提供的所有类型
 	//
-	// 返回此提供者能够创建的实例类型。
-	// 对于泛型类型，返回具体的类型信息。
+	// 返回此提供者能够创建的所有实例类型列表。
+	// 这是核心改进：从单一类型扩展为多类型支持。
+	//
+	// 类型提供规则：
+	//   - 主要类型：provider 函数的直接返回类型
+	//   - 字段类型：如果返回结构体，还包括结构体的所有导出字段类型
+	//   - 嵌套类型：递归包括嵌套结构体的字段类型
+	//
+	// 示例：
+	//   func() AppConfig { return AppConfig{Logger: logger, DB: db} }
+	//   能提供的类型：[AppConfig, Logger, Database]
 	//
 	// 支持的类型：
 	//   - 指针类型：*T
@@ -106,7 +120,33 @@ type Provider interface {
 	//   - 函数只能有入参，不能有出参
 	//   - 函数入参支持的类型：指针(*T)、接口(interface{})、Map(map[K]V)、Slice([]T)、结构体(struct{})
 	//   - 不支持基本类型入参：string, int, bool 等
-	Type() reflect.Type
+	ProvidedTypes() []reflect.Type
+
+	// PrimaryType 返回主要提供的类型
+	//
+	// 返回 provider 函数的直接返回类型。
+	// 这是为了保持向后兼容性而保留的方法。
+	//
+	// 对于结构体类型的 provider，这会返回结构体类型本身，
+	// 而 ProvidedTypes() 会返回结构体及其所有字段类型。
+	PrimaryType() reflect.Type
+
+	// CanProvide 检查是否能提供指定类型
+	//
+	// 检查此提供者是否能够创建指定类型的实例。
+	// 这比遍历 ProvidedTypes() 更高效。
+	//
+	// 参数：
+	//   - typ: 要检查的类型
+	//
+	// 返回值：
+	//   - bool: true 表示能提供，false 表示不能提供
+	//
+	// 检查逻辑：
+	//   - 精确类型匹配
+	//   - 接口类型匹配（实现关系）
+	//   - 嵌入类型匹配（组合关系）
+	CanProvide(typ reflect.Type) bool
 
 	// Invoke 调用提供者函数
 	//
@@ -117,6 +157,11 @@ type Provider interface {
 	//   - []reflect.Value: 提供者函数的返回值列表
 	//   - error: 调用失败时的错误信息
 	//
+	// 多类型支持：
+	//   - 调用后，返回的主要结果可以用于提取不同类型的值
+	//   - 如果主要结果是结构体，可以从中提取字段值来满足不同类型的需求
+	//   - 这使得一次调用可以服务于多种类型的依赖请求
+	//
 	// 错误处理：
 	//   - 如果提供者函数返回 (T, error)，当 error 不为 nil 时调用失败
 	//   - 如果提供者函数发生 panic，会被捕获并转换为错误
@@ -125,7 +170,34 @@ type Provider interface {
 	// 性能优化：
 	//   - 调用时间会被记录用于性能分析
 	//   - 支持并发调用（如果提供者函数是线程安全的）
+	//   - 结果可以被缓存用于多种类型的请求
 	Invoke(args []reflect.Value) ([]reflect.Value, error)
+
+	// ProvideFor 为指定类型提供实例
+	//
+	// 这是新增的核心方法，用于为特定类型提供实例。
+	// 它封装了 Invoke 调用和结果提取的逻辑。
+	//
+	// 参数：
+	//   - typ: 要提供的目标类型
+	//   - args: 依赖参数的反射值列表
+	//
+	// 返回值：
+	//   - reflect.Value: 目标类型的实例
+	//   - error: 提供失败时的错误信息
+	//
+	// 提供逻辑：
+	//   - 如果目标类型是主要类型，直接返回 Invoke 的结果
+	//   - 如果目标类型是字段类型，从结构体结果中提取对应字段
+	//   - 如果目标类型是接口，检查结果是否实现该接口
+	//   - 支持递归提取嵌套结构体的字段
+	//
+	// 错误情况：
+	//   - 目标类型不在 ProvidedTypes() 列表中
+	//   - Invoke 调用失败
+	//   - 结果类型转换失败
+	//   - 字段提取失败
+	ProvideFor(typ reflect.Type, args []reflect.Value) (reflect.Value, error)
 
 	// Dependencies 返回依赖的类型列表
 	//
@@ -313,7 +385,7 @@ type Injector interface {
 	//   - opts: 注入选项
 	//
 	// 函数注入规则：
-	//   - 函数只能有入参，不能有出参
+	//   - 函数可以没有返回值，或者有一个 error 返回值
 	//   - 函数参数类型必须在容器中已注册
 	//   - 支持的参数类型：
 	//     * 指针类型：*T
@@ -324,29 +396,32 @@ type Injector interface {
 	//   - 不支持基本类型参数：string, int, bool 等
 	//   - 支持可变参数：func(handlers ...Handler)
 	//
-	// 函数限制：
-	//   - 函数不能有返回值（包括 error）
-	//   - 函数参数不能是基本类型
+	// 函数返回值规则：
+	//   - 无返回值：func(deps...) - 常规注入函数
+	//   - 一个 error 返回值：func(deps...) error - 可以报告执行错误
+	//   - 不能有其他类型的返回值
 	//
 	// 错误处理：
 	//   - 参数解析失败时返回详细错误信息
 	//   - 函数调用 panic 会被捕获并转换为错误
-	//   - 如果函数有返回值，注册时会被拒绝
+	//   - 如果函数返回 error，该错误会被包装并向上传播
+	//   - 如果函数有非 error 类型的返回值，注册时会被拒绝
 	//
 	// 示例：
-	//   // 有效的启动函数
+	//   // 有效的启动函数（无返回值）
 	//   func StartServer(logger Logger, db *Database, handlers []Handler) {
 	//       // 使用注入的依赖启动服务器
 	//   }
 	//
-	//   // 有效的回调函数
-	//   func ProcessRequest(ctx Context, service *UserService) {
-	//       // 处理请求
+	//   // 有效的回调函数（error 返回值）
+	//   func ProcessRequest(ctx Context, service *UserService) error {
+	//       // 处理请求，可能返回错误
+	//       return service.Process(ctx)
 	//   }
 	//
-	//   // 无效的函数（有返回值）
-	//   func InvalidFunc(logger Logger) error {
-	//       return nil // 不允许有返回值
+	//   // 无效的函数（非 error 返回值）
+	//   func InvalidFunc(logger Logger) string {
+	//       return "not allowed" // 只允许 error 返回值
 	//   }
 	//
 	//   // 无效的函数（基本类型参数）

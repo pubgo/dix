@@ -29,14 +29,48 @@ func (cd *CycleDetectorImpl) buildDependencyGraph(providers map[reflect.Type][]P
 		graph[outputType] = make(map[reflect.Type]bool)
 	}
 
+	// 跟踪已处理的 provider，避免重复处理多类型 provider
+	processedProviders := make(map[Provider]bool)
+
 	// 构建依赖关系图
-	for outputType, providerList := range providers {
+	for _, providerList := range providers {
 		for _, provider := range providerList {
-			for _, dep := range provider.Dependencies() {
-				// 递归获取所有依赖类型
-				depTypes := cd.getAllDependencyTypes(dep)
-				for _, depType := range depTypes {
-					graph[outputType][depType] = true
+			// 跳过已处理的 provider，避免多类型 provider 被重复处理
+			if processedProviders[provider] {
+				continue
+			}
+			processedProviders[provider] = true
+
+			// 获取该 provider 能提供的所有类型
+			providedTypes := provider.ProvidedTypes()
+			if len(providedTypes) == 0 {
+				// 向后兼容：使用 PrimaryType
+				providedTypes = []reflect.Type{provider.PrimaryType()}
+			}
+
+			// 为每个提供的类型建立依赖关系
+			for _, providedType := range providedTypes {
+				if graph[providedType] == nil {
+					graph[providedType] = make(map[reflect.Type]bool)
+				}
+
+				for _, dep := range provider.Dependencies() {
+					// 递归获取所有依赖类型
+					depTypes := cd.getAllDependencyTypes(dep)
+					for _, depType := range depTypes {
+						// 避免自依赖（同一个 provider 提供的类型之间不应该有依赖关系）
+						isProvidedBySameProvider := false
+						for _, pt := range providedTypes {
+							if pt == depType {
+								isProvidedBySameProvider = true
+								break
+							}
+						}
+
+						if !isProvidedBySameProvider {
+							graph[providedType][depType] = true
+						}
+					}
 				}
 			}
 		}

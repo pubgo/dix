@@ -132,19 +132,42 @@ func (c *ContainerImpl) getAllProviders() map[reflect.Type][]Provider {
 
 // removeProvider 移除提供者（用于回滚）
 func (c *ContainerImpl) removeProvider(provider Provider) {
-	typ := provider.Type()
-	providers := c.resolver.providers[typ]
+	// 移除该 provider 在所有其能提供的类型下的注册
+	providedTypes := provider.ProvidedTypes()
 
-	for i, p := range providers {
-		if p == provider {
-			// 移除该提供者
-			c.resolver.providers[typ] = append(providers[:i], providers[i+1:]...)
-			break
+	for _, typ := range providedTypes {
+		providers := c.resolver.providers[typ]
+
+		for i, p := range providers {
+			if p == provider {
+				// 移除该提供者
+				c.resolver.providers[typ] = append(providers[:i], providers[i+1:]...)
+				break
+			}
+		}
+
+		// 如果该类型没有提供者了，删除整个条目
+		if len(c.resolver.providers[typ]) == 0 {
+			delete(c.resolver.providers, typ)
 		}
 	}
 
-	// 如果该类型没有提供者了，删除整个条目
-	if len(c.resolver.providers[typ]) == 0 {
-		delete(c.resolver.providers, typ)
+	// 向后兼容：如果没有 ProvidedTypes，使用传统的 PrimaryType() 方法
+	if len(providedTypes) == 0 {
+		typ := provider.PrimaryType()
+		providers := c.resolver.providers[typ]
+
+		for i, p := range providers {
+			if p == provider {
+				// 移除该提供者
+				c.resolver.providers[typ] = append(providers[:i], providers[i+1:]...)
+				break
+			}
+		}
+
+		// 如果该类型没有提供者了，删除整个条目
+		if len(c.resolver.providers[typ]) == 0 {
+			delete(c.resolver.providers, typ)
+		}
 	}
 }
