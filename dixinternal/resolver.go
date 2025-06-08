@@ -25,6 +25,7 @@ func SetLog(setter func(logger log.Logger) log.Logger) {
 type ResolverImpl struct {
 	providers map[reflect.Type][]Provider
 	objects   map[reflect.Type]map[string][]reflect.Value
+	resolving map[reflect.Type]bool // 用于防止递归解析同一类型
 }
 
 // NewResolver 创建新的解析器
@@ -32,6 +33,7 @@ func NewResolver() *ResolverImpl {
 	return &ResolverImpl{
 		providers: make(map[reflect.Type][]Provider),
 		objects:   make(map[reflect.Type]map[string][]reflect.Value),
+		resolving: make(map[reflect.Type]bool),
 	}
 }
 
@@ -198,10 +200,26 @@ func (r *ResolverImpl) resolveAsList(dep Dependency, opts Options) (reflect.Valu
 
 // getTypeValues 获取类型的所有值
 func (r *ResolverImpl) getTypeValues(typ reflect.Type, opts Options) (map[string][]reflect.Value, error) {
+	// 防止递归解析同一类型
+	if r.resolving[typ] {
+		return map[string][]reflect.Value{}, nil // 返回空结果，避免死循环
+	}
+
 	// 检查是否已有缓存的对象
 	if r.objects[typ] == nil {
 		r.objects[typ] = make(map[string][]reflect.Value)
 	}
+
+	// 如果已有缓存，直接返回
+	if len(r.objects[typ][defaultKey]) > 0 {
+		return r.objects[typ], nil
+	}
+
+	// 标记正在解析
+	r.resolving[typ] = true
+	defer func() {
+		delete(r.resolving, typ)
+	}()
 
 	// 首先尝试调用直接的提供者
 	if len(r.providers[typ]) > 0 {
@@ -235,13 +253,9 @@ func (r *ResolverImpl) invokeDirectProviders(typ reflect.Type, opts Options) err
 	for _, provider := range r.providers[typ] {
 		// 检查 provider 是否能提供该类型
 		if provider.CanProvide(typ) {
-			// 对于多类型 provider，即使已初始化，也可能需要为新类型提供实例
-			if provider.IsInitialized() {
-				// 检查是否已经有该类型的缓存
-				if r.objects[typ] != nil && len(r.objects[typ][defaultKey]) > 0 {
-					continue // 已经有缓存，跳过
-				}
-				// 没有缓存，需要重新提供
+			// 对于多类型 provider，检查是否已经有该类型的缓存
+			if r.objects[typ] != nil && len(r.objects[typ][defaultKey]) > 0 {
+				continue // 已经有缓存，跳过
 			}
 
 			err := r.invokeProviderForType(provider, typ, opts)
