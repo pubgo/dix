@@ -40,7 +40,8 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 	hasError := false
 	outputType := fnType.Out(0)
 
-	if fnType.NumOut() == 2 {
+	switch {
+	case fnType.NumOut() == 2:
 		// 检查第二个返回值是否为 error 类型
 		errorType := fnType.Out(1)
 		if errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
@@ -49,14 +50,21 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 			return nil, NewValidationError("second return value must be error type").
 				WithDetail("actual_type", errorType.String())
 		}
-	} else if fnType.NumOut() > 2 {
+	case fnType.NumOut() > 2:
 		return nil, NewValidationError("provider function can have at most 2 return values (value, error)").
 			WithDetail("actual_count", fnType.NumOut())
+	}
+
+	// 解析依赖（包括输入参数和输出结构体字段）
+	dependencies, err := parseDependencies(fnType)
+	if err != nil {
+		return nil, WrapError(err, ErrorTypeProvider, "failed to parse dependencies")
 	}
 
 	isMap := false
 	isList := false
 
+	// outputType 支持的类型是: []T, map[string]T, map[string][]T
 	switch outputType.Kind() {
 	case reflect.Map:
 		isMap = true
@@ -76,24 +84,16 @@ func NewFuncProvider(fn reflect.Value) (*FuncProvider, error) {
 			WithDetail("kind", outputType.Kind().String())
 	}
 
-	// 解析依赖（包括输入参数和输出结构体字段）
-	dependencies, err := parseDependencies(fnType)
-	if err != nil {
-		return nil, WrapError(err, ErrorTypeProvider, "failed to parse dependencies")
-	}
-
 	// 收集所有能提供的类型
 	var providedTypes []reflect.Type
-
-	// 主要类型
-	providedTypes = append(providedTypes, outputType)
 
 	// 如果输出类型是结构体，收集其字段类型作为可提供的类型
 	// 注意：输出类型不是依赖，依赖只来自函数的输入参数
 	if outputType.Kind() == reflect.Struct {
 		// 收集结构体字段类型作为可提供的类型
-		fieldTypes := extractStructFieldTypes(outputType)
-		providedTypes = append(providedTypes, fieldTypes...)
+		providedTypes = extractStructFieldTypes(outputType)
+	} else {
+		providedTypes = []reflect.Type{outputType}
 	}
 
 	return &FuncProvider{

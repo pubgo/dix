@@ -2,8 +2,13 @@ package dixinternal
 
 import (
 	"fmt"
+	"github.com/pubgo/funk/errors"
 	"reflect"
 )
+
+func New(opts ...Option) Container {
+	return NewContainer(opts...)
+}
 
 // ContainerImpl 容器实现
 type ContainerImpl struct {
@@ -35,7 +40,7 @@ func NewContainer(opts ...Option) Container {
 	}
 
 	// 注册容器自身
-	containerProvider, _ := NewFuncProvider(reflect.ValueOf(func() Container { return container }))
+	containerProvider := errors.Must1(NewFuncProvider(reflect.ValueOf(func() Container { return container })))
 	resolver.AddProvider(containerProvider)
 
 	return container
