@@ -206,20 +206,20 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 }
 
 func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
-	var inTypes []*inType
+	var inTypes []*providerInputType
 	for i := 0; i < vp.Type().NumIn(); i++ {
 		switch inTyp := vp.Type().In(i); inTyp.Kind() {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
-			inTypes = append(inTypes, &inType{typ: inTyp})
+			inTypes = append(inTypes, &providerInputType{typ: inTyp})
 		case reflect.Map:
 			isList := inTyp.Elem().Kind() == reflect.Slice
 			typ := inTyp.Elem()
 			if isList {
 				typ = typ.Elem()
 			}
-			inTypes = append(inTypes, &inType{typ: typ, isMap: true, isList: isList})
+			inTypes = append(inTypes, &providerInputType{typ: typ, isMap: true, isList: isList})
 		case reflect.Slice:
-			inTypes = append(inTypes, &inType{typ: inTyp.Elem(), isList: true})
+			inTypes = append(inTypes, &providerInputType{typ: inTyp.Elem(), isList: true})
 		default:
 			panic(&errors.Err{
 				Msg:    "incorrect input type",
@@ -341,7 +341,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
 	return nil
 }
 
-func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType) {
+func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*providerInputType) {
 	hasError := false
 	if fnVal.Type().NumOut() == 2 {
 		errorType := fnVal.Type().Out(1)
@@ -358,17 +358,17 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 	n := &providerFn{fn: fnVal, inputList: in, hasError: hasError}
 	switch outTyp := out; outTyp.Kind() {
 	case reflect.Slice:
-		n.output = &outType{isList: true, typ: outTyp.Elem()}
+		n.output = &providerOutputType{isList: true, typ: outTyp.Elem()}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Map:
-		n.output = &outType{isMap: true, typ: outTyp.Elem()}
+		n.output = &providerOutputType{isMap: true, typ: outTyp.Elem()}
 		if n.output.typ.Kind() == reflect.Slice {
 			n.output.isList = true
 			n.output.typ = n.output.typ.Elem()
 		}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Ptr, reflect.Interface, reflect.Func:
-		n.output = &outType{typ: outTyp}
+		n.output = &providerOutputType{typ: outTyp}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Struct:
 		for i := 0; i < outTyp.NumField(); i++ {
@@ -379,19 +379,19 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*inType)
 	}
 }
 
-func (x *Dix) getProvideInput(typ reflect.Type) []*inType {
-	var input []*inType
+func (x *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
+	var input []*providerInputType
 	switch inTye := typ; inTye.Kind() {
 	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
-		input = append(input, &inType{typ: inTye})
+		input = append(input, &providerInputType{typ: inTye})
 	case reflect.Map:
-		tt := &inType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
+		tt := &providerInputType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
 		if tt.isList {
 			tt.typ = tt.typ.Elem()
 		}
 		input = append(input, tt)
 	case reflect.Slice:
-		input = append(input, &inType{typ: inTye.Elem(), isList: true})
+		input = append(input, &providerInputType{typ: inTye.Elem(), isList: true})
 	default:
 		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
 	}
@@ -423,7 +423,7 @@ func (x *Dix) provide(param interface{}) {
 	assert.If(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
 	assert.If(typ.NumOut() == 0, "the func of provider output num should not be zero")
 
-	var input []*inType
+	var input []*providerInputType
 	for i := 0; i < typ.NumIn(); i++ {
 		input = append(input, x.getProvideInput(typ.In(i))...)
 	}

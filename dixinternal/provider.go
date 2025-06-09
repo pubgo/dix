@@ -10,13 +10,13 @@ import (
 	"github.com/pubgo/funk/stack"
 )
 
-type inType struct {
+type providerInputType struct {
 	typ    reflect.Type
 	isMap  bool
 	isList bool
 }
 
-func (v inType) Validate() error {
+func (v providerInputType) Validate() error {
 	if v.isMap && !isMapListSupportedType(v.typ.Kind()) {
 		return errors.Format("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
@@ -32,7 +32,7 @@ func (v inType) Validate() error {
 	return nil
 }
 
-type outType struct {
+type providerOutputType struct {
 	typ    reflect.Type
 	isMap  bool
 	isList bool
@@ -40,8 +40,8 @@ type outType struct {
 
 type providerFn struct {
 	fn        reflect.Value
-	inputList []*inType
-	output    *outType
+	inputList []*providerInputType
+	output    *providerOutputType
 
 	hasError    bool
 	initialized bool
@@ -64,7 +64,7 @@ func (n providerFn) call(in []reflect.Value) []reflect.Value {
 }
 
 // reflectTypesToString converts input type list to readable string
-func reflectTypesToString(types []*inType) string {
+func reflectTypesToString(types []*providerInputType) string {
 	var result strings.Builder
 	for i, t := range types {
 		if i > 0 {
