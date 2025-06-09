@@ -210,7 +210,7 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 	for i := 0; i < vp.Type().NumIn(); i++ {
 		switch inTyp := vp.Type().In(i); inTyp.Kind() {
 		case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
-			inTypes = append(inTypes, &providerInputType{typ: inTyp})
+			inTypes = append(inTypes, &providerInputType{typ: inTyp, isStruct: inTyp.Kind() == reflect.Struct})
 		case reflect.Map:
 			isList := inTyp.Elem().Kind() == reflect.Slice
 			typ := inTyp.Elem()
@@ -371,6 +371,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 		n.output = &providerOutputType{typ: outTyp}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Struct:
+		n.output.isStruct = true
 		for i := 0; i < outTyp.NumField(); i++ {
 			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}

@@ -11,9 +11,10 @@ import (
 )
 
 type providerInputType struct {
-	typ    reflect.Type
-	isMap  bool
-	isList bool
+	typ      reflect.Type
+	isMap    bool
+	isList   bool
+	isStruct bool
 }
 
 func (v providerInputType) Validate() error {
@@ -33,9 +34,10 @@ func (v providerInputType) Validate() error {
 }
 
 type providerOutputType struct {
-	typ    reflect.Type
-	isMap  bool
-	isList bool
+	typ      reflect.Type
+	isMap    bool
+	isList   bool
+	isStruct bool
 }
 
 type providerFn struct {
