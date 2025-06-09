@@ -6,7 +6,7 @@ replace github.com/pubgo/dix v0.3.20 => ../
 
 require (
 	github.com/pubgo/dix v0.3.20
-	github.com/pubgo/funk v0.5.65-alpha.4
+	github.com/pubgo/funk v0.5.65-alpha.5
 )
 
 require (
