@@ -87,6 +87,15 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 			Str("provider", fnStack.String()).
 			Msgf("eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
+		if n.hasError && len(fnCall) > 1 && !fnCall[1].IsNil() {
+			if err, ok := fnCall[1].Interface().(error); ok && err != nil {
+				panic(&errors.Err{
+					Msg:    fmt.Sprintf("failed to do provider, err=%s", err.Error()),
+					Detail: fmt.Sprintf("func=%s", fnStack.String()),
+				})
+			}
+		}
+
 		n.initialized = true
 
 		objects := make(map[outputType]map[group][]value)
@@ -206,6 +215,21 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 }
 
 func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
+	assert.If(vp.Type().NumOut() > 1, "func output num should <=1")
+	assert.If(vp.Type().NumIn() == 0, "func input num should not be zero")
+	var hasErrorReturn bool
+	if vp.Type().NumOut() == 1 {
+		// 如果有一个返回值，必须是 error 类型
+		errorType := vp.Type().Out(0)
+		if !errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
+			panic(&errors.Err{
+				Msg:    "injectable function can only return error type",
+				Detail: fmt.Sprintf("return_type=%s", errorType.String()),
+			})
+		}
+		hasErrorReturn = true
+	}
+
 	var inTypes []*providerInputType
 	for i := 0; i < vp.Type().NumIn(); i++ {
 		switch inTyp := vp.Type().In(i); inTyp.Kind() {
@@ -233,27 +257,12 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()))
 	}
 
-	var hasErrorReturn bool
-	if vp.Type().NumOut() == 1 {
-		// 如果有一个返回值，必须是 error 类型
-		errorType := vp.Type().Out(0)
-		if !errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-			panic(&errors.Err{
-				Msg:    "injectable function can only return error type",
-				Detail: fmt.Sprintf("return_type=%s", errorType.String()),
-			})
-		}
-		hasErrorReturn = true
-	}
-
 	results := vp.Call(input)
 	// 如果函数有 error 返回值，检查并处理
-	if hasErrorReturn && len(results) > 0 {
+	if hasErrorReturn && len(results) > 0 && !results[0].IsNil() {
 		errorValue := results[0]
-		if !errorValue.IsNil() {
-			if funcErr, ok := errorValue.Interface().(error); ok {
-				panic(errors.Wrapf(funcErr, "injected function returned error"))
-			}
+		if funcErr, ok := errorValue.Interface().(error); ok {
+			panic(errors.Wrapf(funcErr, "injected function returned error"))
 		}
 	}
 }
@@ -310,8 +319,6 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
 	})
 
 	if vp.Kind() == reflect.Func {
-		assert.If(vp.Type().NumOut() != 0, "func output num should be zero")
-		assert.If(vp.Type().NumIn() == 0, "func input num should not be zero")
 		x.injectFunc(vp, opt)
 		return nil
 	}
@@ -350,7 +357,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 		} else {
 			panic(&errors.Err{
 				Msg:    "second return value must be error type",
-				Detail: fmt.Sprintf("actual_type=%s", errorType.String()),
+				Detail: fmt.Sprintf("actual_type=%s, fn=%v", errorType.String(), fnVal.String()),
 			})
 		}
 	}
@@ -423,6 +430,7 @@ func (x *Dix) provide(param interface{}) {
 	typ := fnVal.Type()
 	assert.If(typ.IsVariadic(), "the func of provider variable parameters are not allowed")
 	assert.If(typ.NumOut() == 0, "the func of provider output num should not be zero")
+	assert.If(typ.NumOut() > 2, "the func of provider output num should >= two")
 
 	var input []*providerInputType
 	for i := 0; i < typ.NumIn(); i++ {
