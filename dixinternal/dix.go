@@ -87,6 +87,8 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 			Bool("initialized", n.initialized).
 			Msgf("start eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
+		n.initialized = true
+
 		fnCall := n.call(input)
 		logger.Debug().
 			Str("cost", time.Since(now).String()).
@@ -101,8 +103,6 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 				})
 			}
 		}
-
-		n.initialized = true
 
 		objects := make(map[outputType]map[group][]value)
 		for outT, groupValue := range handleOutput(outTyp, fnCall[0]) {
