@@ -73,6 +73,8 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 			continue
 		}
 
+		n.initialized = true
+
 		var input []reflect.Value
 		for _, in := range n.inputList {
 			val := x.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
@@ -86,8 +88,6 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 			Str("provider", fnStack.String()).
 			Bool("initialized", n.initialized).
 			Msgf("start eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
-
-		n.initialized = true
 
 		fnCall := n.call(input)
 		logger.Debug().
