@@ -81,11 +81,17 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 
 		var now = time.Now()
 		var fnStack = stack.CallerWithFunc(n.fn)
+
+		logger.Debug().
+			Str("provider", fnStack.String()).
+			Bool("initialized", n.initialized).
+			Msgf("start eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
+
 		fnCall := n.call(input)
 		logger.Debug().
 			Str("cost", time.Since(now).String()).
 			Str("provider", fnStack.String()).
-			Msgf("eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
+			Msgf("eval provider ok, func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
 		if n.hasError && len(fnCall) > 1 && !fnCall[1].IsNil() {
 			if err, ok := fnCall[1].Interface().(error); ok && err != nil {
