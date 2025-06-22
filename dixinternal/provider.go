@@ -34,10 +34,10 @@ func (v providerInputType) Validate() error {
 }
 
 type providerOutputType struct {
-	typ      reflect.Type
-	isMap    bool
-	isList   bool
-	isStruct bool
+	typ    reflect.Type
+	isMap  bool
+	isList bool
+	// isStruct bool
 }
 
 type providerFn struct {

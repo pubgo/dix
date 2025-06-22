@@ -378,7 +378,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 		n.output = &providerOutputType{typ: outTyp}
 		x.providers[n.output.typ] = append(x.providers[n.output.typ], n)
 	case reflect.Struct:
-		n.output.isStruct = true
+		// n.output.isStruct = true
 		for i := 0; i < outTyp.NumField(); i++ {
 			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
 		}
