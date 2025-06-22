@@ -45,8 +45,7 @@ type providerFn struct {
 	inputList []*providerInputType
 	output    *providerOutputType
 
-	hasError    bool
-	initialized bool
+	hasError bool
 }
 
 func (n providerFn) call(in []reflect.Value) []reflect.Value {

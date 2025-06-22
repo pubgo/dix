@@ -27,9 +27,10 @@ func newDix(opts ...Option) *Dix {
 	option.Check()
 
 	c := &Dix{
-		option:    option,
-		providers: make(map[outputType][]*providerFn),
-		objects:   make(map[outputType]map[group][]value),
+		option:      option,
+		providers:   make(map[outputType][]*providerFn),
+		objects:     make(map[outputType]map[group][]value),
+		initializer: map[reflect.Value]bool{},
 	}
 
 	c.provide(func() *Dix { return c })
@@ -38,9 +39,10 @@ func newDix(opts ...Option) *Dix {
 }
 
 type Dix struct {
-	option    Options
-	providers map[outputType][]*providerFn
-	objects   map[outputType]map[group][]value
+	option      Options
+	providers   map[outputType][]*providerFn
+	objects     map[outputType]map[group][]value
+	initializer map[reflect.Value]bool
 }
 
 func (x *Dix) Option() Options {
@@ -69,11 +71,9 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 	}
 
 	for _, n := range x.providers[outTyp] {
-		if n.initialized {
+		if x.initializer[n.fn] {
 			continue
 		}
-
-		n.initialized = true
 
 		var input []reflect.Value
 		for _, in := range n.inputList {
@@ -86,10 +86,10 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 
 		logger.Debug().
 			Str("provider", fnStack.String()).
-			Bool("initialized", n.initialized).
 			Msgf("start eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
 		fnCall := n.call(input)
+		x.initializer[n.fn] = true
 		logger.Debug().
 			Str("cost", time.Since(now).String()).
 			Str("provider", fnStack.String()).
