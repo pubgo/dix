@@ -2,7 +2,7 @@ module github.com/pubgo/dix
 
 go 1.22
 
-require github.com/pubgo/funk v0.5.65-alpha.4
+require github.com/pubgo/funk v0.5.65-beta.1
 
 require (
 	github.com/alecthomas/repr v0.2.0 // indirect
