@@ -203,14 +203,14 @@ func buildDependencyGraph(providers map[outputType][]*providerFn) map[reflect.Ty
 }
 
 // isSupportedType 检查是否为支持的类型
-func isSupportedType(kind reflect.Kind) bool {
-	switch kind {
-	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
-		return true
-	default:
-		return false
-	}
-}
+// func isSupportedType(kind reflect.Kind) bool {
+// 	switch kind {
+// 	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
+// 		return true
+// 	default:
+// 		return false
+// 	}
+// }
 
 func isMapListSupportedType(p reflect.Kind) bool {
 	switch p {
@@ -222,11 +222,11 @@ func isMapListSupportedType(p reflect.Kind) bool {
 }
 
 // isInjectableFieldType 检查字段类型是否可注入
-func isInjectableFieldType(fieldType reflect.Type) bool {
-	switch fieldType.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
-		return true
-	default:
-		return false
-	}
-}
+// func isInjectableFieldType(fieldType reflect.Type) bool {
+// 	switch fieldType.Kind() {
+// 	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct, reflect.Map, reflect.Slice:
+// 		return true
+// 	default:
+// 		return false
+// 	}
+// }
