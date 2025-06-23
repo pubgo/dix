@@ -31,7 +31,7 @@ func (d *DotRenderer) RenderNode(name string, attrs map[string]string) {
 }
 
 func (d *DotRenderer) RenderEdge(from, to string, attrs map[string]string) {
-	d.writef("%s -> %s%s", from, to, d.formatAttrs(attrs))
+	d.writef(`"%s" -> "%s" %s`, from, to, d.formatAttrs(attrs))
 }
 
 func (d *DotRenderer) BeginSubgraph(name, label string) {
