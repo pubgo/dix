@@ -18,15 +18,15 @@ type providerInputType struct {
 }
 
 func (v providerInputType) Validate() error {
-	if v.isMap && !isMapListSupportedType(v.typ.Kind()) {
+	if v.isMap && !isMapListSupportedType(v.typ) {
 		return errors.Format("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
-	if v.isList && !isMapListSupportedType(v.typ.Kind()) {
+	if v.isList && !isMapListSupportedType(v.typ) {
 		return errors.Format("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
-	if !isMapListSupportedType(v.typ.Kind()) {
+	if !isMapListSupportedType(v.typ) {
 		return errors.Format("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 

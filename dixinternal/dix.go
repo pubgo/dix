@@ -386,7 +386,16 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 	case reflect.Struct:
 		// n.output.isStruct = true
 		for i := 0; i < outTyp.NumField(); i++ {
-			x.handleProvide(fnVal, outTyp.Field(i).Type, in)
+			if !outTyp.Field(i).IsExported() {
+				continue
+			}
+
+			typ := outTyp.Field(i).Type
+			if !isSupportedType(typ) {
+				continue
+			}
+
+			x.handleProvide(fnVal, typ, in)
 		}
 	default:
 		log.Error().Msgf("incorrect output type, ouTyp=%s kind=%s fnVal=%s", outTyp, outTyp.Kind(), fnVal.String())
