@@ -15,7 +15,8 @@ func (o Options) Merge(opt Options) Options {
 	return opt
 }
 
-func (o Options) Check() {
+func (o Options) Validate() error {
+	return nil
 }
 
 func WithValuesNull() Option {

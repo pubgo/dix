@@ -24,7 +24,9 @@ func newDix(opts ...Option) *Dix {
 		opts[i](&option)
 	}
 
-	option.Check()
+	if err := option.Validate(); err != nil {
+		panic(err)
+	}
 
 	c := &Dix{
 		option:      option,
