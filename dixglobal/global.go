@@ -10,12 +10,11 @@ var _dix = dixinternal.New(dixinternal.WithValuesNull())
 
 // Example:
 //
-//	c := di.New()
-//	c.Provide(func() *Config { return &Config{Endpoint: "localhost:..."} }) // Configuration
-//	c.Provide(NewDB)                                                  // Database connection
-//	c.Provide(NewHTTPServer)                                          // Server
+//	dixglobal.Provide(func() *Config { return &Config{Endpoint: "localhost:..."} }) // Configuration
+//	dixglobal.Provide(NewDB)                                                  // Database connection
+//	dixglobal.Provide(NewHTTPServer)                                          // Server
 //
-//	c.Invoke(func(server *http.Server) { // Application startup
+//	dixglobal.Invoke(func(server *http.Server) { // Application startup
 //		server.ListenAndServe()
 //	})
 //
