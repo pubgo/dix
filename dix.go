@@ -2,7 +2,7 @@ package dix
 
 import (
 	"reflect"
-	
+
 	"github.com/pubgo/dix/dixinternal"
 )
 
