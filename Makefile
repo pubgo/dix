@@ -1,4 +1,4 @@
-.PHONY: test
+.PHONY: test, lint
 test:
 	@go test -race -v ./... -cover
 
