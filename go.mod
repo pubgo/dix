@@ -2,7 +2,10 @@ module github.com/pubgo/dix
 
 go 1.22
 
-require github.com/pubgo/funk v0.5.65-beta.1
+require (
+	github.com/pubgo/funk v0.5.65
+	github.com/samber/lo v1.47.0
+)
 
 require (
 	github.com/alecthomas/repr v0.2.0 // indirect
@@ -12,7 +15,6 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/phuslu/goid v1.0.0 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
-	github.com/samber/lo v1.47.0 // indirect
 	golang.org/x/exp v0.0.0-20230811145659-89c5cff77bcb // indirect
 	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
