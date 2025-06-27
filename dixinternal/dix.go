@@ -174,7 +174,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 		return r.WithValue(makeMap(typ, valMap, isList))
 	case isList:
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
-			return r.WithErr(errors.NewErr(&errors.Err{
+			return r.WrapErr(&errors.Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 				Tags: errors.Maps{
@@ -185,13 +185,13 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 					"options":   opt,
 					"providers": x.getProviderStack(typ),
 				}.Tags(),
-			}))
+			})
 		}
 
 		return r.WithValue(makeList(typ, valMap[defaultKey]))
 	default:
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
-			return r.WithErr(errors.NewErr(&errors.Err{
+			return r.WrapErr(&errors.Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
 				Tags: errors.Maps{
@@ -202,12 +202,12 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 					"options":   opt,
 					"providers": x.getProviderStack(typ),
 				}.Tags(),
-			}))
+			})
 		} else {
 			// 最后一个value
 			val := valList[len(valList)-1]
 			if val.IsZero() {
-				return r.WithErr(errors.NewErr(&errors.Err{
+				return r.WrapErr(&errors.Err{
 					Msg:    "provider value is nil",
 					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
 					Tags: errors.Maps{
@@ -219,7 +219,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 						"options":   opt,
 						"providers": x.getProviderStack(typ),
 					}.Tags(),
-				}))
+				})
 			}
 			return r.WithValue(val)
 		}
@@ -237,10 +237,10 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) (r result.Error) {
 		// 如果有一个返回值，必须是 error 类型
 		errorType := vp.Type().Out(0)
 		if !errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-			return result.ErrOf(errors.NewErr(&errors.Err{
+			return r.WrapErr(&errors.Err{
 				Msg:    "injectable function can only return error type",
 				Detail: fmt.Sprintf("return_type=%s", errorType.String()),
-			}))
+			})
 		}
 		hasErrorReturn = true
 	}
@@ -260,10 +260,10 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) (r result.Error) {
 		case reflect.Slice:
 			inTypes = append(inTypes, &providerInputType{typ: inTyp.Elem(), isList: true})
 		default:
-			return result.ErrOf(errors.NewErr(&errors.Err{
+			return r.WrapErr(&errors.Err{
 				Msg:    "incorrect input type",
 				Detail: fmt.Sprintf("inTyp=%s kind=%s", inTyp, inTyp.Kind()),
-			}))
+			})
 		}
 	}
 
@@ -319,10 +319,10 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 				return
 			}
 		default:
-			return result.ErrOf(errors.NewErr(&errors.Err{
+			return r.WrapErr(&errors.Err{
 				Msg:    "incorrect input type",
 				Detail: fmt.Sprintf("inTyp=%s kind=%s", field.Type, field.Type.Kind()),
-			}))
+			})
 		}
 	}
 	return
@@ -345,10 +345,10 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr result.Error) {
 
 	vp := reflect.ValueOf(param)
 	if !vp.IsValid() || vp.IsNil() {
-		return result.ErrOf(errors.NewErr(&errors.Err{
+		return gErr.WrapErr(&errors.Err{
 			Msg:  "param should not be invalid or nil",
 			Tags: errors.Tags{errors.T("param", param)},
-		}))
+		})
 	}
 
 	if vp.Kind() == reflect.Func {
@@ -393,10 +393,10 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 		if errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 			hasError = true
 		} else {
-			return result.ErrOf(errors.NewErr(&errors.Err{
+			return r.WrapErr(&errors.Err{
 				Msg:    "second return value must be error type",
 				Detail: fmt.Sprintf("actual_type=%s, fn=%v", errorType.String(), fnVal.String()),
-			}))
+			})
 		}
 	}
 

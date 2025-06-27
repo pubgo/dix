@@ -3,7 +3,7 @@ module github.com/pubgo/dix
 go 1.23.0
 
 require (
-	github.com/pubgo/funk v0.5.66-alpha.2
+	github.com/pubgo/funk  v0.5.66-alpha.3
 	github.com/samber/lo v1.51.0
 )
 
