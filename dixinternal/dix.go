@@ -328,7 +328,8 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
 
 	vp := reflect.ValueOf(param)
 	assert.Err(!vp.IsValid() || vp.IsNil(), &errors.Err{
-		Msg: "param should not be invalid or nil",
+		Msg:  "param should not be invalid or nil",
+		Tags: errors.Tags{errors.T("param", fmt.Sprintf("%#v", param))},
 	})
 
 	if vp.Kind() == reflect.Func {
