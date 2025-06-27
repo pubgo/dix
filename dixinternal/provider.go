@@ -2,11 +2,12 @@ package dixinternal
 
 import (
 	"fmt"
+	"github.com/pubgo/funk/log"
+	"github.com/pubgo/funk/v2/result"
 	"reflect"
 	"strings"
 
 	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
 )
 
@@ -48,20 +49,18 @@ type providerFn struct {
 	hasError bool
 }
 
-func (n providerFn) call(in []reflect.Value) []reflect.Value {
-	defer recovery.Raise(func(err error) error {
-		return errors.WrapTag(err,
-			errors.T("msg", "failed to handle provider invoke"),
-			errors.T("fn_stack", stack.CallerWithFunc(n.fn).String()),
-			errors.T("fn_type", n.fn.Type().String()),
-			errors.T("input", fmt.Sprintf("%v", in)),
-			errors.T("input_data", reflectValueToString(in)),
-			errors.T("input_types", reflectTypesToString(n.inputList)),
-			errors.T("output_type", n.output.typ.String()),
-		)
-	})
-
-	return n.fn.Call(in)
+func (n providerFn) call(in []reflect.Value) (r result.Result[[]reflect.Value]) {
+	return result.WrapFn(func() ([]reflect.Value, error) { return n.fn.Call(in), nil }).
+		InspectErr(func(err error) {
+			log.Err(err).
+				Any("fn_stack", stack.CallerWithFunc(n.fn)).
+				Any("fn_type", n.fn.Type().String()).
+				Any("input", fmt.Sprintf("%v", in)).
+				Any("input_data", reflectValueToString(in)).
+				Any("input_types", reflectTypesToString(n.inputList)).
+				Any("output_type", n.output.typ.String()).
+				Msgf("failed to invoke provider")
+		})
 }
 
 // reflectTypesToString converts input type list to readable string

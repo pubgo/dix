@@ -12,6 +12,7 @@ import (
 	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
+	"github.com/pubgo/funk/v2/result"
 )
 
 func newDix(opts ...Option) *Dix {
@@ -51,7 +52,7 @@ func (x *Dix) Option() Options {
 	return x.option
 }
 
-func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]value {
+func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Result[map[group][]value]) {
 	switch outTyp.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
@@ -90,7 +91,11 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 			Str("provider", fnStack.String()).
 			Msgf("start eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
-		fnCall := n.call(input)
+		fnCall := n.call(input).UnwrapErr(&r)
+		if r.IsErr() {
+			return
+		}
+
 		x.initializer[n.fn] = true
 		logger.Debug().
 			Str("cost", time.Since(now).String()).
@@ -99,7 +104,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) map[group][]va
 
 		if n.hasError && len(fnCall) > 1 && !fnCall[1].IsNil() {
 			if err, ok := fnCall[1].Interface().(error); ok && err != nil {
-				panic(&errors.Err{
+				return r.WithErr(&errors.Err{
 					Msg:    fmt.Sprintf("failed to do provider, err=%s", err.Error()),
 					Detail: fmt.Sprintf("func=%s", fnStack.String()),
 				})
