@@ -328,8 +328,8 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 	return
 }
 
-func (x *Dix) inject(param interface{}, opts ...Option) (gErr result.Error) {
-	defer result.RecoveryErr(&gErr, func(err error) error {
+func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
+	defer result.RecoveryErr(&r, func(err error) error {
 		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
 	})
 
@@ -345,22 +345,22 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr result.Error) {
 
 	vp := reflect.ValueOf(param)
 	if !vp.IsValid() || vp.IsNil() {
-		return gErr.WrapErr(&errors.Err{
+		return r.WrapErr(&errors.Err{
 			Msg:  "param should not be invalid or nil",
 			Tags: errors.Tags{errors.T("param", param)},
 		})
 	}
 
 	if vp.Kind() == reflect.Func {
-		x.injectFunc(vp, opt)
+		x.injectFunc(vp, opt).CatchErr(&r)
 		return
 	}
 
 	if vp.Kind() != reflect.Ptr {
-		return result.ErrOf(errors.NewErr(&errors.Err{
+		return r.WrapErr(&errors.Err{
 			Msg:  "param should be ptr type",
 			Tags: errors.Tags{errors.T("param", param)},
-		}))
+		})
 	}
 
 	for i := 0; i < vp.NumMethod(); i++ {
@@ -369,7 +369,9 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr result.Error) {
 			continue
 		}
 
-		x.injectFunc(vp.Method(i), opt)
+		if x.injectFunc(vp.Method(i), opt).CatchErr(&r) {
+			return
+		}
 	}
 
 	for vp.Kind() == reflect.Ptr {
@@ -377,10 +379,10 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr result.Error) {
 	}
 
 	if vp.Kind() != reflect.Struct {
-		return result.ErrOf(errors.NewErr(&errors.Err{
+		return r.WrapErr(&errors.Err{
 			Msg:  "param should be struct type",
 			Tags: errors.Tags{errors.T("param", param)},
-		}))
+		})
 	}
 
 	return x.injectStruct(vp, opt)
