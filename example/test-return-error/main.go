@@ -57,7 +57,6 @@ func testProviderErr() {
 		return nil
 	})
 
-	//fmt.Println(string(errutil.JsonPretty(err)))
 	if err != nil && strings.Contains(err.Error(), "provider_err") {
 		return
 	} else {

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kr/pretty"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
 	"github.com/pubgo/funk/log"
@@ -153,9 +154,12 @@ func (x *Dix) getProviderStack(typ reflect.Type) []string {
 
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) (r result.Result[reflect.Value]) {
 	if typ.Kind() == reflect.Struct {
-		v := reflect.New(typ)
-		x.injectStruct(v.Elem(), opt)
-		return r.WithValue(v.Elem())
+		v := reflect.New(typ).Elem()
+		if x.injectStruct(v, opt).CatchErr(&r) {
+			return
+		}
+
+		return r.WithValue(v)
 	}
 
 	valMap := x.getOutputTypeValues(typ, opt).UnwrapErr(&r)
@@ -208,7 +212,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 			val := valList[len(valList)-1]
 			if val.IsZero() {
 				return r.WrapErr(&errors.Err{
-					Msg:    "provider value is nil",
+					Msg:    "provider value is null",
 					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
 					Tags: errors.Maps{
 						"type":      typ.String(),
@@ -330,7 +334,7 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 
 func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
 	defer result.RecoveryErr(&r, func(err error) error {
-		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
+		return errors.WrapKV(err, "param", pretty.Sprint(param))
 	})
 
 	if param == nil {
@@ -347,7 +351,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
 	if !vp.IsValid() || vp.IsNil() {
 		return r.WrapErr(&errors.Err{
 			Msg:  "param should not be invalid or nil",
-			Tags: errors.Tags{errors.T("param", param)},
+			Tags: errors.Tags{errors.T("param", pretty.Sprint(param))},
 		})
 	}
 
@@ -359,7 +363,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
 	if vp.Kind() != reflect.Ptr {
 		return r.WrapErr(&errors.Err{
 			Msg:  "param should be ptr type",
-			Tags: errors.Tags{errors.T("param", param)},
+			Tags: errors.Tags{errors.T("param", pretty.Sprint(param))},
 		})
 	}
 
@@ -466,7 +470,7 @@ func (x *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
 // Provide panics if the constructor is not a function or does not have the required signature.
 func (x *Dix) provide(param interface{}) {
 	defer recovery.Raise(func(err error) error {
-		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
+		return errors.WrapKV(err, "param", pretty.Sprint(param))
 	})
 
 	assert.If(param == nil, "[param] is null")
