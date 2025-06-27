@@ -56,10 +56,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Resu
 	switch outTyp.Kind() {
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 	default:
-		assert.Must(errors.Err{
-			Msg:    "provider type kind error, the supported type kinds are <ptr,interface,func>",
-			Detail: fmt.Sprintf("type=%s kind=%s", outTyp, outTyp.Kind()),
-		})
+		return r.WithErrorf("provider type kind error, the supported type kinds are <ptr,interface,func>, type=%s kind=%s", outTyp, outTyp.Kind())
 	}
 
 	if len(x.providers[outTyp]) == 0 {
@@ -80,7 +77,11 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Resu
 
 		var input []reflect.Value
 		for _, in := range n.inputList {
-			val := x.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
+			val := x.getValue(in.typ, opt, in.isMap, in.isList, outTyp).UnwrapErr(&r)
+			if r.IsErr() {
+				return
+			}
+
 			input = append(input, val)
 		}
 
@@ -104,10 +105,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Resu
 
 		if n.hasError && len(fnCall) > 1 && !fnCall[1].IsNil() {
 			if err, ok := fnCall[1].Interface().(error); ok && err != nil {
-				return r.WithErr(&errors.Err{
-					Msg:    fmt.Sprintf("failed to do provider, err=%s", err.Error()),
-					Detail: fmt.Sprintf("func=%s", fnStack.String()),
-				})
+				return r.WithErr(errors.Wrapf(err, "failed to do provider, provider=%s", fnStack))
 			}
 		}
 
@@ -142,7 +140,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Resu
 		}
 	}
 
-	return x.objects[outTyp]
+	return r.WithValue(x.objects[outTyp])
 }
 
 func (x *Dix) getProviderStack(typ reflect.Type) []string {
@@ -153,92 +151,96 @@ func (x *Dix) getProviderStack(typ reflect.Type) []string {
 	return stacks
 }
 
-func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) reflect.Value {
+func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) (r result.Result[reflect.Value]) {
 	if typ.Kind() == reflect.Struct {
 		v := reflect.New(typ)
 		x.injectStruct(v.Elem(), opt)
-		return v.Elem()
+		return r.WithValue(v.Elem())
 	}
 
-	valMap := x.getOutputTypeValues(typ, opt)
+	valMap := x.getOutputTypeValues(typ, opt).UnwrapErr(&r)
+	if r.IsErr() {
+		return
+	}
+
 	switch {
 	case isMap:
 		if !opt.AllowValuesNull && len(valMap) == 0 {
-			logger.Panic().
-				Any("options", opt).
-				Str("type", typ.String()).
-				Any("providers", x.getProviderStack(typ)).
-				Any("parents", fmt.Sprintf("%q", parents)).
-				Str("type-kind", typ.Kind().String()).
-				Msg("provider value not found")
+			return r.WithErrorf("provider value not found, options=%v type=%s providers=%v parents=%v type-kind=%s",
+				opt, typ.String(), x.getProviderStack(typ), parents, typ.Kind().String(),
+			)
 		}
 
-		return makeMap(typ, valMap, isList)
+		return r.WithValue(makeMap(typ, valMap, isList))
 	case isList:
 		if !opt.AllowValuesNull && len(valMap[defaultKey]) == 0 {
-			err := &errors.Err{
+			return r.WithErr(errors.NewErr(&errors.Err{
 				Msg:    "provider value not found",
 				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
-			}
-
-			logger.Panic().Err(err).
-				Any("options", opt).
-				Any("values", valMap[defaultKey]).
-				Any("providers", x.getProviderStack(typ)).
-				Any("parents", fmt.Sprintf("%q", parents)).
-				Str("type", typ.String()).
-				Str("type-kind", typ.Kind().String()).
-				Msg(err.Msg)
+				Tags: errors.Maps{
+					"type":      typ.String(),
+					"kind":      typ.Kind().String(),
+					"values":    valMap,
+					"parents":   fmt.Sprintf("%q", parents),
+					"options":   opt,
+					"providers": x.getProviderStack(typ),
+				}.Tags(),
+			}))
 		}
 
-		return makeList(typ, valMap[defaultKey])
+		return r.WithValue(makeList(typ, valMap[defaultKey]))
 	default:
 		if valList, ok := valMap[defaultKey]; !ok || len(valList) == 0 {
-			logger.Panic().
-				Any("options", opt).
-				Any("values", valMap[defaultKey]).
-				Str("type", typ.String()).
-				Any("providers", x.getProviderStack(typ)).
-				Any("parents", fmt.Sprintf("%q", parents)).
-				Str("type-kind", typ.Kind().String()).
-				Msg("provider value not found")
+			return r.WithErr(errors.NewErr(&errors.Err{
+				Msg:    "provider value not found",
+				Detail: fmt.Sprintf("type=%s kind=%s allValues=%v", typ, typ.Kind(), valMap),
+				Tags: errors.Maps{
+					"type":      typ.String(),
+					"kind":      typ.Kind().String(),
+					"values":    valMap,
+					"parents":   fmt.Sprintf("%q", parents),
+					"options":   opt,
+					"providers": x.getProviderStack(typ),
+				}.Tags(),
+			}))
 		} else {
 			// 最后一个value
 			val := valList[len(valList)-1]
 			if val.IsZero() {
-				err := &errors.Err{
+				return r.WithErr(errors.NewErr(&errors.Err{
 					Msg:    "provider value is nil",
 					Detail: fmt.Sprintf("type=%s kind=%s value=%v", typ, typ.Kind(), val.Interface()),
-				}
-
-				logger.Panic().Err(err).
-					Any("options", opt).
-					Any("values", valList).
-					Any("providers", x.getProviderStack(typ)).
-					Any("parents", fmt.Sprintf("%q", parents)).
-					Str("type", typ.String()).
-					Str("type-kind", typ.Kind().String()).
-					Msg(err.Msg)
+					Tags: errors.Maps{
+						"type":      typ.String(),
+						"kind":      typ.Kind().String(),
+						"value":     val.Interface(),
+						"values":    valMap,
+						"parents":   fmt.Sprintf("%q", parents),
+						"options":   opt,
+						"providers": x.getProviderStack(typ),
+					}.Tags(),
+				}))
 			}
-			return val
+			return r.WithValue(val)
 		}
 	}
-
-	panic("unknown type")
 }
 
-func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
+func (x *Dix) injectFunc(vp reflect.Value, opt Options) (r result.Error) {
+	defer result.RecoveryErr(&r)
+
 	assert.If(vp.Type().NumOut() > 1, "func output num should <=1")
 	assert.If(vp.Type().NumIn() == 0, "func input num should not be zero")
+
 	var hasErrorReturn bool
 	if vp.Type().NumOut() == 1 {
 		// 如果有一个返回值，必须是 error 类型
 		errorType := vp.Type().Out(0)
 		if !errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-			panic(&errors.Err{
+			return result.ErrOf(errors.NewErr(&errors.Err{
 				Msg:    "injectable function can only return error type",
 				Detail: fmt.Sprintf("return_type=%s", errorType.String()),
-			})
+			}))
 		}
 		hasErrorReturn = true
 	}
@@ -258,16 +260,19 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 		case reflect.Slice:
 			inTypes = append(inTypes, &providerInputType{typ: inTyp.Elem(), isList: true})
 		default:
-			panic(&errors.Err{
+			return result.ErrOf(errors.NewErr(&errors.Err{
 				Msg:    "incorrect input type",
 				Detail: fmt.Sprintf("inTyp=%s kind=%s", inTyp, inTyp.Kind()),
-			})
+			}))
 		}
 	}
 
 	var input []reflect.Value
 	for _, in := range inTypes {
-		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()))
+		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()).UnwrapErr(&r))
+		if r.IsErr() {
+			return
+		}
 	}
 
 	results := vp.Call(input)
@@ -275,12 +280,13 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) {
 	if hasErrorReturn && len(results) > 0 && !results[0].IsNil() {
 		errorValue := results[0]
 		if funcErr, ok := errorValue.Interface().(error); ok {
-			panic(errors.Wrapf(funcErr, "injected function returned error"))
+			return result.ErrOf(errors.Wrap(funcErr, "injected function returned error"))
 		}
 	}
+	return
 }
 
-func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
+func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 	tp := vp.Type()
 	for i := 0; i < tp.NumField(); i++ {
 		field := tp.Field(i)
@@ -292,32 +298,43 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) {
 		case reflect.Struct:
 			x.injectStruct(vp.Field(i), opt)
 		case reflect.Interface, reflect.Ptr, reflect.Func:
-			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()))
+			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()).UnwrapErr(&r))
+			if r.IsErr() {
+				return
+			}
 		case reflect.Map:
 			isList := field.Type.Elem().Kind() == reflect.Slice
 			typ := field.Type.Elem()
 			if isList {
 				typ = typ.Elem()
 			}
-			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()))
+
+			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()).UnwrapErr(&r))
+			if r.IsErr() {
+				return
+			}
 		case reflect.Slice:
-			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()))
+			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).UnwrapErr(&r))
+			if r.IsErr() {
+				return
+			}
 		default:
-			panic(&errors.Err{
+			return result.ErrOf(errors.NewErr(&errors.Err{
 				Msg:    "incorrect input type",
 				Detail: fmt.Sprintf("inTyp=%s kind=%s", field.Type, field.Type.Kind()),
-			})
+			}))
 		}
 	}
+	return
 }
 
-func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
-	defer recovery.Err(&gErr, func(err error) error {
+func (x *Dix) inject(param interface{}, opts ...Option) (gErr result.Error) {
+	defer result.RecoveryErr(&gErr, func(err error) error {
 		return errors.WrapKV(err, "param", fmt.Sprintf("%#v", param))
 	})
 
 	if param == nil {
-		return errors.New("nil injection parameter")
+		return result.ErrorOf("nil injection parameter")
 	}
 
 	var opt Options
@@ -327,19 +344,24 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
 	opt = x.option.Merge(opt)
 
 	vp := reflect.ValueOf(param)
-	assert.Err(!vp.IsValid() || vp.IsNil(), &errors.Err{
-		Msg:  "param should not be invalid or nil",
-		Tags: errors.Tags{errors.T("param", fmt.Sprintf("%#v", param))},
-	})
+	if !vp.IsValid() || vp.IsNil() {
+		return result.ErrOf(errors.NewErr(&errors.Err{
+			Msg:  "param should not be invalid or nil",
+			Tags: errors.Tags{errors.T("param", param)},
+		}))
+	}
 
 	if vp.Kind() == reflect.Func {
 		x.injectFunc(vp, opt)
-		return nil
+		return
 	}
 
-	assert.Err(vp.Kind() != reflect.Ptr, &errors.Err{
-		Msg: "param should be ptr type",
-	})
+	if vp.Kind() != reflect.Ptr {
+		return result.ErrOf(errors.NewErr(&errors.Err{
+			Msg:  "param should be ptr type",
+			Tags: errors.Tags{errors.T("param", param)},
+		}))
+	}
 
 	for i := 0; i < vp.NumMethod(); i++ {
 		name := vp.Type().Method(i).Name
@@ -354,25 +376,27 @@ func (x *Dix) inject(param interface{}, opts ...Option) (gErr error) {
 		vp = vp.Elem()
 	}
 
-	assert.Err(vp.Kind() != reflect.Struct, &errors.Err{
-		Msg: "param raw type should be struct",
-	})
+	if vp.Kind() != reflect.Struct {
+		return result.ErrOf(errors.NewErr(&errors.Err{
+			Msg:  "param should be struct type",
+			Tags: errors.Tags{errors.T("param", param)},
+		}))
+	}
 
-	x.injectStruct(vp, opt)
-	return nil
+	return x.injectStruct(vp, opt)
 }
 
-func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*providerInputType) {
+func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*providerInputType) (r result.Error) {
 	hasError := false
 	if fnVal.Type().NumOut() == 2 {
 		errorType := fnVal.Type().Out(1)
 		if errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 			hasError = true
 		} else {
-			panic(&errors.Err{
+			return result.ErrOf(errors.NewErr(&errors.Err{
 				Msg:    "second return value must be error type",
 				Detail: fmt.Sprintf("actual_type=%s, fn=%v", errorType.String(), fnVal.String()),
-			})
+			}))
 		}
 	}
 
@@ -403,11 +427,15 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 				continue
 			}
 
-			x.handleProvide(fnVal, typ, in)
+			x.handleProvide(fnVal, typ, in).CatchErr(&r)
+			if r.IsErr() {
+				return
+			}
 		}
 	default:
 		log.Error().Msgf("incorrect output type, ouTyp=%s kind=%s fnVal=%s", outTyp, outTyp.Kind(), fnVal.String())
 	}
+	return
 }
 
 func (x *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
@@ -462,5 +490,5 @@ func (x *Dix) provide(param interface{}) {
 
 	// The return value can only have one
 	// TODO Add the second parameter, support for error
-	x.handleProvide(fnVal, typ.Out(0), input)
+	x.handleProvide(fnVal, typ.Out(0), input).Must()
 }

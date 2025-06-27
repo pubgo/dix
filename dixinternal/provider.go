@@ -2,13 +2,13 @@ package dixinternal
 
 import (
 	"fmt"
-	"github.com/pubgo/funk/log"
-	"github.com/pubgo/funk/v2/result"
 	"reflect"
 	"strings"
 
 	"github.com/pubgo/funk/errors"
+	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/stack"
+	"github.com/pubgo/funk/v2/result"
 )
 
 type providerInputType struct {
@@ -20,15 +20,15 @@ type providerInputType struct {
 
 func (v providerInputType) Validate() error {
 	if v.isMap && !isMapListSupportedType(v.typ) {
-		return errors.Format("input map value type kind not support, kind=%s", v.typ.Kind().String())
+		return errors.Errorf("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if v.isList && !isMapListSupportedType(v.typ) {
-		return errors.Format("input list element value type kind not support, kind=%s", v.typ.Kind().String())
+		return errors.Errorf("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if !isMapListSupportedType(v.typ) {
-		return errors.Format("input value type kind not support, kind=%s", v.typ.Kind().String())
+		return errors.Errorf("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	return nil
@@ -65,18 +65,18 @@ func (n providerFn) call(in []reflect.Value) (r result.Result[[]reflect.Value]) 
 
 // reflectTypesToString converts input type list to readable string
 func reflectTypesToString(types []*providerInputType) string {
-	var result strings.Builder
+	var builder strings.Builder
 	for i, t := range types {
 		if i > 0 {
-			result.WriteString(", ")
+			builder.WriteString(", ")
 		}
-		result.WriteString(t.typ.String())
+		builder.WriteString(t.typ.String())
 		if t.isMap {
-			result.WriteString("(map)")
+			builder.WriteString("(map)")
 		}
 		if t.isList {
-			result.WriteString("(list)")
+			builder.WriteString("(list)")
 		}
 	}
-	return result.String()
+	return builder.String()
 }

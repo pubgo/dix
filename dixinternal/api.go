@@ -25,7 +25,7 @@ func (x *Dix) Inject(param any, opts ...Option) any {
 		assert.Must(errors.New("circular dependency: " + dep))
 	}
 
-	assert.Must(x.inject(param, opts...))
+	x.inject(param, opts...).Must()
 	return param
 }
 
