@@ -3,26 +3,26 @@ package dix
 import (
 	"reflect"
 
-	"github.com/pubgo/dix/dix_internal"
+	"github.com/pubgo/dix/dixinternal"
 )
 
 const (
-	InjectMethodPrefix = dix_internal.InjectMethodPrefix
+	InjectMethodPrefix = dixinternal.InjectMethodPrefix
 )
 
 type (
-	Option  = dix_internal.Option
-	Options = dix_internal.Options
-	Dix     = dix_internal.Dix
-	Graph   = dix_internal.Graph
+	Option  = dixinternal.Option
+	Options = dixinternal.Options
+	Dix     = dixinternal.Dix
+	Graph   = dixinternal.Graph
 )
 
 func WithValuesNull() Option {
-	return dix_internal.WithValuesNull()
+	return dixinternal.WithValuesNull()
 }
 
 func New(opts ...Option) *Dix {
-	return dix_internal.New(opts...)
+	return dixinternal.New(opts...)
 }
 
 func Inject[T any](di *Dix, data T, opts ...Option) T {

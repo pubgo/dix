@@ -1,9 +1,9 @@
-package dix_internal
+package dixinternal
 
 type (
 	Option  func(opts *Options)
 	Options struct {
-		// 允许结果为nil
+		// AllowValuesNull allows result to be nil
 		AllowValuesNull bool
 	}
 )
@@ -15,7 +15,8 @@ func (o Options) Merge(opt Options) Options {
 	return opt
 }
 
-func (o Options) Check() {
+func (o Options) Validate() error {
+	return nil
 }
 
 func WithValuesNull() Option {

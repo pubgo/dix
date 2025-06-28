@@ -1,0 +1,30 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - govet
+  exclusions:
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - internal/example
+      - cmds
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - goimports
+    - gofmt
+  exclusions:
+    paths:
+      - internal/example
+      - cmds
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$

@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix"
-	"github.com/pubgo/dix/di"
+	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/recovery"
 )
@@ -25,22 +25,22 @@ type c struct {
 func main() {
 	defer recovery.Exit()
 
-	di.Provide(func() *c {
+	dixglobal.Provide(func() *c {
 		return &c{C: "hello"}
 	})
 
-	arg := di.Inject(new(a))
+	arg := dixglobal.Inject(new(a))
 	assert.If(arg.C.C != "hello", "not match")
 	fmt.Println(arg.C.C)
 	fmt.Println(arg.B.C.C)
-	fmt.Println(di.Graph())
+	fmt.Println(dixglobal.Graph())
 
-	di.Provide(func(a a1, di *dix.Dix, dd map[string][]*dix.Dix) *a2 {
+	dixglobal.Provide(func(a a1, di *dix.Dix, dd map[string][]*dix.Dix) *a2 {
 		fmt.Println(dd)
 		return &a2{Hello: "a2", di: di}
 	})
 
-	di.Inject(func(a *a2) {
+	dixglobal.Inject(func(a *a2) {
 		fmt.Println(a.Hello)
 		fmt.Println(a.di.Option())
 	})

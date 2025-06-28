@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/pubgo/dix/di"
+	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/recovery"
 )
@@ -23,14 +23,14 @@ func main() {
 	defer recovery.Exit()
 
 	defer func() {
-		fmt.Println(di.Graph())
+		fmt.Println(dixglobal.Graph())
 	}()
 
-	di.Provide(func() *log.Logger {
+	dixglobal.Provide(func() *log.Logger {
 		return log.New(os.Stderr, "example: ", log.LstdFlags|log.Lshortfile)
 	})
 
-	di.Provide(func(p struct {
+	dixglobal.Provide(func(p struct {
 		L *log.Logger
 	},
 	) *Redis {
@@ -38,26 +38,26 @@ func main() {
 		return &Redis{name: "hello"}
 	})
 
-	di.Provide(func(l *log.Logger) map[string]*Redis {
+	dixglobal.Provide(func(l *log.Logger) map[string]*Redis {
 		l.Println("init redis")
 		return map[string]*Redis{
 			"ns": {name: "hello1"},
 		}
 	})
 
-	fmt.Println(di.Graph())
+	fmt.Println(dixglobal.Graph())
 
-	di.Inject(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
+	dixglobal.Inject(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
 		l.Println("invoke redis")
 		fmt.Println("invoke:", r.name)
 		fmt.Println("invoke:", rr)
 	})
 
-	h := di.Inject(new(Handler))
+	h := dixglobal.Inject(new(Handler))
 	assert.If(h.Cli.name != "hello", "inject error")
 	assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 
-	di.Inject(func(h Handler) {
+	dixglobal.Inject(func(h Handler) {
 		assert.If(h.Cli.name != "hello", "inject error")
 		assert.If(h.Cli1["ns"].name != "hello1", "inject error")
 	})

@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/di"
+	"github.com/pubgo/dix/dixglobal"
 	"github.com/pubgo/funk/errors"
 )
 
@@ -29,13 +29,13 @@ func (h *handler) DixInjectB(err *errors.Err, errs []*errors.Err) {
 }
 
 func main() {
-	di.Provide(func() *errors.Err {
+	dixglobal.Provide(func() *errors.Err {
 		return &errors.Err{Msg: "<ok>"}
 	})
 
-	di.Provide(func() *errors.Err {
+	dixglobal.Provide(func() *errors.Err {
 		return &errors.Err{Msg: "<ok 1>"}
 	})
 
-	di.Inject(&handler{})
+	dixglobal.Inject(&handler{})
 }
