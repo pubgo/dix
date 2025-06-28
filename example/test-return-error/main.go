@@ -6,8 +6,10 @@ import (
 	"strings"
 
 	"github.com/pubgo/dix"
+	logger "github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/try"
+	"github.com/pubgo/funk/v2/result/resultchecker"
 )
 
 func testok() {
@@ -66,6 +68,8 @@ func testProviderErr() {
 
 func main() {
 	defer recovery.Exit()
+
+	resultchecker.RegisterErrCheck(logger.RecordErr())
 
 	testok()
 	testProviderErr()
