@@ -2,6 +2,8 @@ module github.com/pubgo/dix
 
 go 1.23.0
 
+// https://github.com/ondrajz/go-callvis
+
 require (
 	github.com/kr/pretty v0.3.1
 	github.com/pubgo/funk v0.5.66
