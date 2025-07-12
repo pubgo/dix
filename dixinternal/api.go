@@ -31,7 +31,8 @@ func (x *Dix) Inject(param any, opts ...Option) any {
 
 func (x *Dix) Graph() *Graph {
 	return &Graph{
-		Objects:   x.objectGraph(),
-		Providers: x.providerGraph(),
+		Objects:       x.objectGraph(),
+		Providers:     x.providerGraph(),
+		ProviderTypes: x.providerGraphTypes(),
 	}
 }
