@@ -115,19 +115,17 @@ func (x *Dix) providerGraphTypes() string {
 
 		for _, n := range nodes {
 			for _, in := range n.inputList {
+				var typesToRender []reflect.Type
 				if in.typ.Kind() == reflect.Struct {
-					inTypes := lo.Uniq(lo.Map(getProvideAllInputs(in.typ), func(item *providerInputType, index int) reflect.Type { return item.typ }))
-					for _, inType := range inTypes {
-						if inType.String() == "" {
-							continue
-						}
-						d.RenderEdge(inType.String(), providerOutputType.String(), nil)
-					}
+					typesToRender = lo.Uniq(lo.Map(getProvideAllInputs(in.typ), func(item *providerInputType, index int) reflect.Type { return item.typ }))
 				} else {
-					if in.typ.String() == "" {
-						continue
+					typesToRender = []reflect.Type{in.typ}
+				}
+
+				for _, t := range typesToRender {
+					if t.String() != "" {
+						d.RenderEdge(t.String(), providerOutputType.String(), nil)
 					}
-					d.RenderEdge(in.typ.String(), providerOutputType.String(), nil)
 				}
 			}
 		}
