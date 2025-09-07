@@ -10,7 +10,6 @@ import (
 	"github.com/kr/pretty"
 	"github.com/pubgo/funk/assert"
 	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
 	"github.com/pubgo/funk/v2/result"
@@ -439,7 +438,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 			}
 		}
 	default:
-		log.Error().Msgf("incorrect output type, ouTyp=%s kind=%s fnVal=%s", outTyp, outTyp.Kind(), fnVal.String())
+		logger.Error().Msgf("incorrect output type, ouTyp=%s kind=%s fnVal=%s", outTyp, outTyp.Kind(), fnVal.String())
 	}
 	return
 }
@@ -458,7 +457,7 @@ func (x *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
 	case reflect.Slice:
 		input = append(input, &providerInputType{typ: inTye.Elem(), isList: true})
 	default:
-		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
+		logger.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
 	}
 	return input
 }

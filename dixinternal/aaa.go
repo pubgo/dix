@@ -21,8 +21,9 @@ type (
 )
 
 type Graph struct {
-	Objects   string `json:"objects"`
-	Providers string `json:"providers"`
+	Objects       string `json:"objects"`
+	Providers     string `json:"providers"`
+	ProviderTypes string `json:"provider_types"`
 }
 
 var logger = log.GetLogger("dix")

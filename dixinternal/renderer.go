@@ -70,6 +70,72 @@ func (d *DotRenderer) formatAttrs(attrs map[string]string) string {
 	return result.String()
 }
 
+func (x *Dix) providerGraphTypes() string {
+	d := NewDotRenderer()
+	d.writef("digraph G {")
+	d.writef(`
+	// 设置布局引擎
+    layout=dot;
+
+    // 图形整体设置
+    rankdir=LR;          // 左到右布局
+    overlap=false;       // 避免节点重叠
+    splines=true;        // 使用曲线边
+    nodesep=0.5;         // 节点间距
+    ranksep=1.0;         // 层级间距
+    concentrate=true;    // 合并重复边
+
+    // 节点样式
+    node [
+        shape=box,
+        style=filled,
+        fillcolor="#F9F9F9",
+        color="#666666",
+        fontsize=8,
+        fontname="Arial",
+        width=0.1,
+        height=0.1,
+        fixedsize=false
+    ];
+
+    // 边样式
+    edge [
+        arrowhead=vee,
+        arrowsize=0.4,
+        color="#888888",
+        penwidth=0.5
+    ];
+`)
+	d.BeginSubgraph("cluster_providers", "providers")
+
+	for providerOutputType, nodes := range x.providers {
+		if providerOutputType.String() == "" {
+			continue
+		}
+
+		for _, n := range nodes {
+			for _, in := range n.inputList {
+				var typesToRender []reflect.Type
+				if in.typ.Kind() == reflect.Struct {
+					typesToRender = lo.Uniq(lo.Map(getProvideAllInputs(in.typ), func(item *providerInputType, index int) reflect.Type { return item.typ }))
+				} else {
+					typesToRender = []reflect.Type{in.typ}
+				}
+
+				for _, t := range typesToRender {
+					if t.String() != "" {
+						d.RenderEdge(t.String(), providerOutputType.String(), nil)
+					}
+				}
+			}
+		}
+	}
+
+	d.EndSubgraph()
+	d.writef("}")
+	return d.String()
+}
+
 func (x *Dix) providerGraph() string {
 	d := NewDotRenderer()
 	d.writef("digraph G {")

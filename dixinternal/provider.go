@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/log"
 	"github.com/pubgo/funk/stack"
 	"github.com/pubgo/funk/v2/result"
 )
@@ -52,7 +51,7 @@ type providerFn struct {
 func (n providerFn) call(in []reflect.Value) (r result.Result[[]reflect.Value]) {
 	return result.WrapFn(func() ([]reflect.Value, error) { return n.fn.Call(in), nil }).
 		InspectErr(func(err error) {
-			log.Err(err).
+			logger.Err(err).
 				Any("fn_stack", stack.CallerWithFunc(n.fn)).
 				Any("fn_type", n.fn.Type().String()).
 				Any("input", fmt.Sprintf("%v", in)).
