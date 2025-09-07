@@ -5,8 +5,6 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-
-	"github.com/pubgo/funk/log"
 )
 
 func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
@@ -186,7 +184,7 @@ func getProvideAllInputs(typ reflect.Type) []*providerInputType {
 	case reflect.Slice:
 		input = append(input, &providerInputType{typ: inTye.Elem(), isList: true})
 	default:
-		log.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
+		logger.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
 	}
 	return input
 }
