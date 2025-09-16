@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/funk/v2/recovery"
 )
 
 func main() {
