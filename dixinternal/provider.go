@@ -5,9 +5,9 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/stack"
+	"github.com/pubgo/funk/v2/errors"
 	"github.com/pubgo/funk/v2/result"
+	"github.com/pubgo/funk/v2/stack"
 )
 
 type providerInputType struct {
