@@ -13,6 +13,7 @@ import (
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
 	"github.com/pubgo/funk/v2/result"
+	"github.com/rs/zerolog"
 )
 
 func newDix(opts ...Option) *Dix {
@@ -77,7 +78,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Resu
 
 		var input []reflect.Value
 		for _, in := range n.inputList {
-			val := x.getValue(in.typ, opt, in.isMap, in.isList, outTyp).UnwrapErr(&r)
+			val := x.getValue(in.typ, opt, in.isMap, in.isList, outTyp).Unwrap(&r)
 			if r.IsErr() {
 				return
 			}
@@ -92,7 +93,7 @@ func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Resu
 			Str("provider", fnStack.String()).
 			Msgf("start eval provider func %s.%s", filepath.Base(fnStack.Pkg), fnStack.Name)
 
-		fnCall := n.call(input).UnwrapErr(&r)
+		fnCall := n.call(input).Unwrap(&r)
 		if r.IsErr() {
 			return
 		}
@@ -154,14 +155,14 @@ func (x *Dix) getProviderStack(typ reflect.Type) []string {
 func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) (r result.Result[reflect.Value]) {
 	if typ.Kind() == reflect.Struct {
 		v := reflect.New(typ).Elem()
-		if x.injectStruct(v, opt).CatchErr(&r) {
+		if x.injectStruct(v, opt).Catch(&r) {
 			return
 		}
 
 		return r.WithValue(v)
 	}
 
-	valMap := x.getOutputTypeValues(typ, opt).UnwrapErr(&r)
+	valMap := x.getOutputTypeValues(typ, opt).Unwrap(&r)
 	if r.IsErr() {
 		return
 	}
@@ -230,7 +231,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 }
 
 func (x *Dix) injectFunc(vp reflect.Value, opt Options) (r result.Error) {
-	defer result.RecoveryErr(&r)
+	defer result.Recovery(&r)
 
 	assert.If(vp.Type().NumOut() > 1, "func output num should <=1")
 	assert.If(vp.Type().NumIn() == 0, "func input num should not be zero")
@@ -272,7 +273,7 @@ func (x *Dix) injectFunc(vp reflect.Value, opt Options) (r result.Error) {
 
 	var input []reflect.Value
 	for _, in := range inTypes {
-		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()).UnwrapErr(&r))
+		input = append(input, x.getValue(in.typ, opt, in.isMap, in.isList, vp.Type()).Unwrap(&r))
 		if r.IsErr() {
 			return
 		}
@@ -301,7 +302,7 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 		case reflect.Struct:
 			x.injectStruct(vp.Field(i), opt)
 		case reflect.Interface, reflect.Ptr, reflect.Func:
-			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()).UnwrapErr(&r))
+			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()).Unwrap(&r))
 			if r.IsErr() {
 				return
 			}
@@ -312,12 +313,12 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 				typ = typ.Elem()
 			}
 
-			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()).UnwrapErr(&r))
+			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()).Unwrap(&r))
 			if r.IsErr() {
 				return
 			}
 		case reflect.Slice:
-			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).UnwrapErr(&r))
+			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).Unwrap(&r))
 			if r.IsErr() {
 				return
 			}
@@ -332,12 +333,13 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 }
 
 func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
-	defer result.RecoveryErr(&r, func(err error) error {
-		return errors.WrapKV(err, "param", pretty.Sprint(param))
+	defer result.Recovery(&r, func(err error) error {
+		result.Log(err, func(e *zerolog.Event) { e.Str("param", pretty.Sprint(param)) })
+		return err
 	})
 
 	if param == nil {
-		return result.ErrorOf("nil injection parameter")
+		return result.Errorf("nil injection parameter")
 	}
 
 	var opt Options
@@ -355,7 +357,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
 	}
 
 	if vp.Kind() == reflect.Func {
-		x.injectFunc(vp, opt).CatchErr(&r)
+		x.injectFunc(vp, opt).Catch(&r)
 		return
 	}
 
@@ -372,7 +374,7 @@ func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
 			continue
 		}
 
-		if x.injectFunc(vp.Method(i), opt).CatchErr(&r) {
+		if x.injectFunc(vp.Method(i), opt).Catch(&r) {
 			return
 		}
 	}
@@ -432,7 +434,7 @@ func (x *Dix) handleProvide(fnVal reflect.Value, out reflect.Type, in []*provide
 				continue
 			}
 
-			x.handleProvide(fnVal, typ, in).CatchErr(&r)
+			x.handleProvide(fnVal, typ, in).Catch(&r)
 			if r.IsErr() {
 				return
 			}
