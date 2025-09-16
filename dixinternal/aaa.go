@@ -29,5 +29,5 @@ type Graph struct {
 var logger = log.GetLogger("dix")
 
 func SetLog(setter func(logger log.Logger) log.Logger) {
-	logger = setter(logger)
+	logger = setter(logger).WithName("dix")
 }
