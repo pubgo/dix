@@ -4,3 +4,6 @@ test:
 
 lint:
 	golangci-lint run --timeout=10m --verbose
+
+vet:
+	go vet ./...

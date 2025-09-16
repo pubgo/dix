@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/pubgo/dix"
-	logger "github.com/pubgo/funk/log"
-	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/try"
+	logger "github.com/pubgo/funk/v2/log"
+	"github.com/pubgo/funk/v2/recovery"
 	"github.com/pubgo/funk/v2/result/resultchecker"
+	"github.com/pubgo/funk/v2/try"
 )
 
 func testok() {

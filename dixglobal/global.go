@@ -3,7 +3,7 @@ package dixglobal
 import (
 	"reflect"
 
-	"github.com/pubgo/dix/dixinternal"
+	"github.com/pubgo/dix/v2/dixinternal"
 )
 
 var _dix = dixinternal.New(dixinternal.WithValuesNull())

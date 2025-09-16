@@ -1,9 +1,10 @@
 package dix
 
 import (
+	_ "embed"
 	"reflect"
 
-	"github.com/pubgo/dix/dixinternal"
+	"github.com/pubgo/dix/v2/dixinternal"
 )
 
 const (
@@ -39,3 +40,8 @@ func Inject[T any](di *Dix, data T, opts ...Option) T {
 func Provide(di *Dix, data any) {
 	di.Provide(data)
 }
+
+//go:embed .version
+var version string
+
+func GetReleaseVersion() string { return version }
