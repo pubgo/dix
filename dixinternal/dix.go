@@ -14,6 +14,7 @@ import (
 	"github.com/pubgo/funk/recovery"
 	"github.com/pubgo/funk/stack"
 	"github.com/pubgo/funk/v2/result"
+	"github.com/rs/zerolog"
 )
 
 func newDix(opts ...Option) *Dix {
@@ -231,7 +232,7 @@ func (x *Dix) getValue(typ reflect.Type, opt Options, isMap, isList bool, parent
 }
 
 func (x *Dix) injectFunc(vp reflect.Value, opt Options) (r result.Error) {
-	defer result.RecoveryErr(&r)
+	defer result.Recovery(&r)
 
 	assert.If(vp.Type().NumOut() > 1, "func output num should <=1")
 	assert.If(vp.Type().NumIn() == 0, "func input num should not be zero")
@@ -333,12 +334,13 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 }
 
 func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
-	defer result.RecoveryErr(&r, func(err error) error {
-		return errors.WrapKV(err, "param", pretty.Sprint(param))
+	defer result.Recovery(&r, func(err error) error {
+		result.Log(err, func(e *zerolog.Event) { e.Str("param", pretty.Sprint(param)) })
+		return err
 	})
 
 	if param == nil {
-		return result.ErrorOf("nil injection parameter")
+		return result.Errorf("nil injection parameter")
 	}
 
 	var opt Options

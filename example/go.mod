@@ -6,21 +6,23 @@ replace github.com/pubgo/dix v0.3.20 => ../
 
 require (
 	github.com/pubgo/dix v0.3.20
-	github.com/pubgo/funk v0.5.66
+	github.com/pubgo/funk v0.5.69-alpha.28
 )
 
 require (
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/k0kubun/pp/v3 v3.2.0 // indirect
+	github.com/google/go-cmp v0.6.0 // indirect
+	github.com/k0kubun/pp/v3 v3.5.0 // indirect
 	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
+	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/phuslu/goid v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.9.0 // indirect
+	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/rs/xid v1.5.0 // indirect
 	github.com/rs/zerolog v1.33.0 // indirect
 	github.com/samber/lo v1.51.0 // indirect
+	github.com/samber/slog-common v0.19.0 // indirect
+	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/net v0.41.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
