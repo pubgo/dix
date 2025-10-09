@@ -4,12 +4,13 @@ import (
 	_ "embed"
 	"reflect"
 
-	"github.com/pubgo/dix/dixinternal"
+	"github.com/pubgo/dix/v2/dixinternal"
 )
 
-const (
-	InjectMethodPrefix = dixinternal.InjectMethodPrefix
-)
+//go:embed .version
+var version string
+
+func ReleaseVersion() string { return version }
 
 type (
 	Option  = dixinternal.Option
@@ -18,13 +19,8 @@ type (
 	Graph   = dixinternal.Graph
 )
 
-func WithValuesNull() Option {
-	return dixinternal.WithValuesNull()
-}
-
-func New(opts ...Option) *Dix {
-	return dixinternal.New(opts...)
-}
+var WithValuesNull = dixinternal.WithValuesNull
+var New = dixinternal.New
 
 func Inject[T any](di *Dix, data T, opts ...Option) T {
 	vp := reflect.ValueOf(data)
@@ -37,11 +33,14 @@ func Inject[T any](di *Dix, data T, opts ...Option) T {
 	return data
 }
 
-func Provide(di *Dix, data any) {
-	di.Provide(data)
+func InjectT[T any](di *Dix, opts ...Option) T {
+	var data T
+	if reflect.TypeOf(data).Kind() != reflect.Struct {
+		panic("<T> type kind is not struct")
+	}
+
+	_ = di.Inject(&data, opts...)
+	return data
 }
 
-//go:embed .version
-var version string
-
-func GetReleaseVersion() string { return version }
+func Provide(di *Dix, data any) { di.Provide(data) }

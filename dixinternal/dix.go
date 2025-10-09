@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kr/pretty"
-	"github.com/pubgo/funk/assert"
-	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/stack"
+	"github.com/pubgo/funk/v2/assert"
+	"github.com/pubgo/funk/v2/errors"
+	"github.com/pubgo/funk/v2/pretty"
+	"github.com/pubgo/funk/v2/recovery"
 	"github.com/pubgo/funk/v2/result"
+	"github.com/pubgo/funk/v2/stack"
 	"github.com/rs/zerolog"
 )
 
@@ -55,7 +55,7 @@ func (x *Dix) Option() Options {
 
 func (x *Dix) getOutputTypeValues(outTyp outputType, opt Options) (r result.Result[map[group][]value]) {
 	switch outTyp.Kind() {
-	case reflect.Ptr, reflect.Interface, reflect.Func:
+	case reflect.Pointer, reflect.Interface, reflect.Func:
 	default:
 		return r.WithErrorf("provider type kind error, the supported type kinds are <ptr,interface,func>, type=%s kind=%s", outTyp, outTyp.Kind())
 	}
@@ -301,11 +301,13 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 		switch field.Type.Kind() {
 		case reflect.Struct:
 			x.injectStruct(vp.Field(i), opt)
-		case reflect.Interface, reflect.Ptr, reflect.Func:
-			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()).Unwrap(&r))
+		case reflect.Interface, reflect.Pointer, reflect.Func:
+			val := x.getValue(field.Type, opt, false, false, vp.Type()).Unwrap(&r)
 			if r.IsErr() {
 				return
 			}
+
+			vp.Field(i).Set(val)
 		case reflect.Map:
 			isList := field.Type.Elem().Kind() == reflect.Slice
 			typ := field.Type.Elem()
@@ -313,15 +315,19 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 				typ = typ.Elem()
 			}
 
-			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()).Unwrap(&r))
+			val := x.getValue(typ, opt, true, isList, vp.Type()).Unwrap(&r)
 			if r.IsErr() {
 				return
 			}
+
+			vp.Field(i).Set(val)
 		case reflect.Slice:
-			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).Unwrap(&r))
+			val := x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).Unwrap(&r)
 			if r.IsErr() {
 				return
 			}
+
+			vp.Field(i).Set(val)
 		default:
 			return r.WrapErr(&errors.Err{
 				Msg:    "incorrect input type",
@@ -332,9 +338,9 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 	return
 }
 
-func (x *Dix) inject(param interface{}, opts ...Option) (r result.Error) {
+func (x *Dix) inject(param any, opts ...Option) (r result.Error) {
 	defer result.Recovery(&r, func(err error) error {
-		result.LogErr(err, func(e *zerolog.Event) { e.Str("param", pretty.Sprint(param)) })
+		result.LogErr(err, func(e *zerolog.Event) { e.Str("param", pretty.Simple().Sprint(param)) })
 		return err
 	})
 

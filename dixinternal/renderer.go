@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/pubgo/funk/stack"
+	"github.com/pubgo/funk/v2/stack"
 	"github.com/samber/lo"
 )
 
