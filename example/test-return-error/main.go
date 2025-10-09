@@ -6,10 +6,11 @@ import (
 	"strings"
 
 	"github.com/pubgo/dix"
-	logger "github.com/pubgo/funk/log"
-	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/try"
+	"github.com/pubgo/funk/v2/errors"
+	logger "github.com/pubgo/funk/v2/log"
+	"github.com/pubgo/funk/v2/recovery"
 	"github.com/pubgo/funk/v2/result/resultchecker"
+	"github.com/pubgo/funk/v2/try"
 )
 
 func testok() {
@@ -38,6 +39,7 @@ func testInjectErr() {
 		})
 		return nil
 	})
+	errors.Debug(err)
 	if err != nil && strings.Contains(err.Error(), "inject_err") {
 		return
 	} else {

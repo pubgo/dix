@@ -8,11 +8,11 @@ import (
 	"time"
 
 	"github.com/kr/pretty"
-	"github.com/pubgo/funk/assert"
-	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/recovery"
-	"github.com/pubgo/funk/stack"
+	"github.com/pubgo/funk/v2/assert"
+	"github.com/pubgo/funk/v2/errors"
+	"github.com/pubgo/funk/v2/recovery"
 	"github.com/pubgo/funk/v2/result"
+	"github.com/pubgo/funk/v2/stack"
 	"github.com/rs/zerolog"
 )
 

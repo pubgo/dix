@@ -3,8 +3,8 @@ package dixinternal
 import (
 	"reflect"
 
-	"github.com/pubgo/funk/assert"
-	"github.com/pubgo/funk/errors"
+	"github.com/pubgo/funk/v2/assert"
+	"github.com/pubgo/funk/v2/errors"
 )
 
 // New Dix new
