@@ -301,10 +301,12 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 		case reflect.Struct:
 			x.injectStruct(vp.Field(i), opt)
 		case reflect.Interface, reflect.Ptr, reflect.Func:
-			vp.Field(i).Set(x.getValue(field.Type, opt, false, false, vp.Type()).UnwrapErr(&r))
+			val := x.getValue(field.Type, opt, false, false, vp.Type()).UnwrapErr(&r)
 			if r.IsErr() {
 				return
 			}
+
+			vp.Field(i).Set(val)
 		case reflect.Map:
 			isList := field.Type.Elem().Kind() == reflect.Slice
 			typ := field.Type.Elem()
@@ -312,15 +314,19 @@ func (x *Dix) injectStruct(vp reflect.Value, opt Options) (r result.Error) {
 				typ = typ.Elem()
 			}
 
-			vp.Field(i).Set(x.getValue(typ, opt, true, isList, vp.Type()).UnwrapErr(&r))
+			val := x.getValue(typ, opt, true, isList, vp.Type()).UnwrapErr(&r)
 			if r.IsErr() {
 				return
 			}
+
+			vp.Field(i).Set(val)
 		case reflect.Slice:
-			vp.Field(i).Set(x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).UnwrapErr(&r))
+			val := x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).UnwrapErr(&r)
 			if r.IsErr() {
 				return
 			}
+
+			vp.Field(i).Set(val)
 		default:
 			return r.WrapErr(&errors.Err{
 				Msg:    "incorrect input type",
