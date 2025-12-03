@@ -4,10 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/pubgo/funk/v2/errors"
-	"github.com/pubgo/funk/v2/result"
-	"github.com/pubgo/funk/v2/stack"
 )
 
 type providerInputType struct {
@@ -19,15 +15,15 @@ type providerInputType struct {
 
 func (v providerInputType) Validate() error {
 	if v.isMap && !isMapListSupportedType(v.typ) {
-		return errors.Errorf("input map value type kind not support, kind=%s", v.typ.Kind().String())
+		return fmt.Errorf("input map value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if v.isList && !isMapListSupportedType(v.typ) {
-		return errors.Errorf("input list element value type kind not support, kind=%s", v.typ.Kind().String())
+		return fmt.Errorf("input list element value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	if !isMapListSupportedType(v.typ) {
-		return errors.Errorf("input value type kind not support, kind=%s", v.typ.Kind().String())
+		return fmt.Errorf("input value type kind not support, kind=%s", v.typ.Kind().String())
 	}
 
 	return nil
@@ -37,29 +33,35 @@ type providerOutputType struct {
 	typ    reflect.Type
 	isMap  bool
 	isList bool
-	// isStruct bool
 }
 
 type providerFn struct {
 	fn        reflect.Value
 	inputList []*providerInputType
 	output    *providerOutputType
-
-	hasError bool
+	hasError  bool
 }
 
-func (n providerFn) call(in []reflect.Value) (r result.Result[[]reflect.Value]) {
-	return result.WrapFn(func() ([]reflect.Value, error) { return n.fn.Call(in), nil }).
-		InspectErr(func(err error) {
-			logger.Err(err).
-				Any("fn_stack", stack.CallerWithFunc(n.fn)).
-				Any("fn_type", n.fn.Type().String()).
-				Any("input", fmt.Sprintf("%v", in)).
-				Any("input_data", reflectValueToString(in)).
-				Any("input_types", reflectTypesToString(n.inputList)).
-				Any("output_type", n.output.typ.String()).
-				Msgf("failed to invoke provider")
-		})
+func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if rErr, ok := r.(error); ok {
+				err = rErr
+			} else {
+				err = fmt.Errorf("panic: %v", r)
+			}
+
+			logger.Error("failed to invoke provider",
+				"error", err,
+				"fn_name", GetFnName(n.fn),
+				"fn_type", n.fn.Type().String(),
+				"input_data", reflectValueToString(in),
+				"input_types", reflectTypesToString(n.inputList),
+				"output_type", n.output.typ.String())
+		}
+	}()
+
+	return n.fn.Call(in), nil
 }
 
 // reflectTypesToString converts input type list to readable string

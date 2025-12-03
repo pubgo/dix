@@ -4,11 +4,14 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix/v2/dixglobal"
-	"github.com/pubgo/funk/v2/recovery"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 	defer func() {
 		fmt.Println(dixglobal.Graph())
 	}()

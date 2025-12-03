@@ -3,6 +3,7 @@ package dixinternal
 import (
 	"fmt"
 	"reflect"
+	"runtime"
 	"slices"
 	"strings"
 )
@@ -184,7 +185,7 @@ func getProvideAllInputs(typ reflect.Type) []*providerInputType {
 	case reflect.Slice:
 		input = append(input, &providerInputType{typ: inTye.Elem(), isList: true})
 	default:
-		logger.Error().Msgf("incorrect input type, inTyp=%s kind=%s", inTye, inTye.Kind())
+		logger.Error("incorrect input type", "type", inTye.String(), "kind", inTye.Kind().String())
 	}
 	return input
 }
@@ -228,4 +229,17 @@ func isMapListSupportedType(p reflect.Type) bool {
 	default:
 		return false
 	}
+}
+
+// GetFnName returns the name of the function represented by reflect.Value
+func GetFnName(fn reflect.Value) string {
+	if fn.IsNil() {
+		return "nil"
+	}
+	pc := fn.Pointer()
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		return "unknown"
+	}
+	return f.Name()
 }

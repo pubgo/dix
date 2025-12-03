@@ -3,11 +3,26 @@ package dixcontext
 import (
 	"context"
 	"log"
+	"log/slog"
 
 	"github.com/pubgo/dix/v2"
 )
 
 type dixKey struct{}
+
+func GetOrNil(ctx context.Context) *dix.Dix {
+	if ctx == nil {
+		slog.Error("ctx is nil")
+		return nil
+	}
+
+	di, ok := ctx.Value(dixKey{}).(*dix.Dix)
+	if !ok {
+		slog.Error("dix not found")
+		return nil
+	}
+	return di
+}
 
 func Get(ctx context.Context) *dix.Dix {
 	if ctx == nil {

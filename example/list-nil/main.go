@@ -4,12 +4,14 @@ import (
 	"fmt"
 
 	"github.com/pubgo/dix/v2/dixglobal"
-	"github.com/pubgo/funk/v2/log"
-	"github.com/pubgo/funk/v2/recovery"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 	defer func() {
 		fmt.Println(dixglobal.Graph())
 	}()
@@ -17,7 +19,7 @@ func main() {
 	type handler func() string
 
 	dixglobal.Inject(func(handlers []handler) {
-		log.Printf("handlers: %d", len(handlers))
+		fmt.Printf("handlers: %d\n", len(handlers))
 		for i := range handlers {
 			fmt.Println("fn:", handlers[i]())
 		}
@@ -28,13 +30,13 @@ func main() {
 	}
 
 	hh := dixglobal.Inject(new(param))
-	log.Printf("handlers: %d", len(hh.H))
+	fmt.Printf("handlers: %d\n", len(hh.H))
 	for i := range hh.H {
 		fmt.Println("struct:", hh.H[i]())
 	}
 
 	dixglobal.Inject(func(p param) {
-		log.Printf("handlers: %d", len(p.H))
+		fmt.Printf("handlers: %d\n", len(p.H))
 		for i := range p.H {
 			fmt.Println("struct struct:", p.H[i]())
 		}

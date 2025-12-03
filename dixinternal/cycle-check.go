@@ -5,8 +5,8 @@ import (
 )
 
 // isCycle Check whether type circular dependency
-func (x *Dix) isCycle() (string, bool) {
-	depGraph := buildDependencyGraph(x.providers)
+func (dix *Dix) isCycle() (string, bool) {
+	depGraph := buildDependencyGraph(dix.providers)
 
 	cyclePath := detectCycle(depGraph)
 	if len(cyclePath) == 0 {

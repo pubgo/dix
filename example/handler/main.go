@@ -6,8 +6,6 @@ import (
 	"os"
 
 	"github.com/pubgo/dix/v2/dixglobal"
-	"github.com/pubgo/funk/v2/assert"
-	"github.com/pubgo/funk/v2/recovery"
 )
 
 type Redis struct {
@@ -20,7 +18,11 @@ type Handler struct {
 }
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 
 	defer func() {
 		fmt.Println(dixglobal.Graph())
@@ -54,11 +56,19 @@ func main() {
 	})
 
 	h := dixglobal.Inject(new(Handler))
-	assert.If(h.Cli.name != "hello", "inject error")
-	assert.If(h.Cli1["ns"].name != "hello1", "inject error")
+	if h.Cli.name != "hello" {
+		panic("inject error")
+	}
+	if h.Cli1["ns"].name != "hello1" {
+		panic("inject error")
+	}
 
 	dixglobal.Inject(func(h Handler) {
-		assert.If(h.Cli.name != "hello", "inject error")
-		assert.If(h.Cli1["ns"].name != "hello1", "inject error")
+		if h.Cli.name != "hello" {
+			panic("inject error")
+		}
+		if h.Cli1["ns"].name != "hello1" {
+			panic("inject error")
+		}
 	})
 }

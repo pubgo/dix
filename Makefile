@@ -1,6 +1,7 @@
 .PHONY: test, lint
 test:
-	@go test -race -v ./... -cover
+	@go test -v ./dixinternal/... -covermode=count -coverprofile=coverage.out
+	@go tool cover -html=coverage.out -o coverage.html
 
 lint:
 	golangci-lint run --timeout=10m --verbose

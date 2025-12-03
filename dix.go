@@ -2,6 +2,7 @@ package dix
 
 import (
 	_ "embed"
+	"log/slog"
 	"reflect"
 
 	"github.com/pubgo/dix/v2/dixinternal"
@@ -17,10 +18,18 @@ type (
 	Options = dixinternal.Options
 	Dix     = dixinternal.Dix
 	Graph   = dixinternal.Graph
+	// GraphOptions holds configuration options for graph rendering
+	GraphOptions = dixinternal.GraphOptions
 )
 
-var WithValuesNull = dixinternal.WithValuesNull
-var New = dixinternal.New
+func SetLog(log slog.Handler) { dixinternal.SetLog(log) }
+
+func WithValuesNull() Option { return dixinternal.WithValuesNull() }
+
+func New(opts ...Option) *Dix { return dixinternal.New(opts...) }
+
+// NewGraphOptions creates GraphOptions with sensible defaults
+func NewGraphOptions() *GraphOptions { return dixinternal.NewGraphOptions() }
 
 func Inject[T any](di *Dix, data T, opts ...Option) T {
 	vp := reflect.ValueOf(data)

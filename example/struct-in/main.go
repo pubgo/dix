@@ -3,10 +3,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix"
+	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixglobal"
-	"github.com/pubgo/funk/v2/assert"
-	"github.com/pubgo/funk/v2/recovery"
 )
 
 type a struct {
@@ -23,14 +21,20 @@ type c struct {
 }
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 
 	dixglobal.Provide(func() *c {
 		return &c{C: "hello"}
 	})
 
 	arg := dixglobal.Inject(new(a))
-	assert.If(arg.C.C != "hello", "not match")
+	if arg.C.C != "hello" {
+		panic("not match")
+	}
 	fmt.Println(arg.C.C)
 	fmt.Println(arg.B.C.C)
 	fmt.Println(dixglobal.Graph())

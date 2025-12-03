@@ -53,3 +53,8 @@ func InjectT[T any](opts ...dix.Option) T {
 func Graph() *dixinternal.Graph {
 	return _dix.Graph()
 }
+
+// GraphWithOptions generates dependency graphs with custom options
+func GraphWithOptions(opts *dixinternal.GraphOptions) *dixinternal.Graph {
+	return _dix.GraphWithOptions(opts)
+}
