@@ -5,6 +5,7 @@ go 1.23.0
 replace github.com/pubgo/dix v0.3.20 => ../
 
 require (
+	github.com/kr/pretty v0.3.1
 	github.com/pubgo/dix v0.3.20
 	github.com/pubgo/funk v0.5.68
 )
@@ -12,7 +13,6 @@ require (
 require (
 	github.com/goccy/go-json v0.10.5 // indirect
 	github.com/k0kubun/pp/v3 v3.5.0 // indirect
-	github.com/kr/pretty v0.3.1 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
