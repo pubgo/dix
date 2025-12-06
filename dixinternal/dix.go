@@ -94,6 +94,13 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 	for _, in := range p.inputList {
 		val, err := dix.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
 		if err != nil {
+			logger.Error("failed to get input value",
+				"error", err,
+				"type", in.typ.String(),
+				"kind", in.typ.Kind().String(),
+				"map", in.isMap,
+				"list", in.isList,
+			)
 			return fmt.Errorf("failed to get input value for provider: %w", err)
 		}
 		inputs = append(inputs, val)
@@ -107,6 +114,11 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 
 	outputs, err := p.call(inputs)
 	if err != nil {
+		logger.Error("provider call failed",
+			"error", err,
+			"fn_name", fnName,
+			"inputs", reflectValueToString(inputs),
+		)
 		return fmt.Errorf("provider call failed for %s: %w", fnName, err)
 	}
 
