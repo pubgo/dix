@@ -1,40 +1,42 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/errors"
+	"github.com/pubgo/dix/v2/dixglobal"
 )
 
 type handler struct{}
 
-func (h *handler) DixInjectA(err *errors.Err) {
-	fmt.Println("A: ", err.Msg)
+func (h *handler) DixInjectA(err error) {
+	fmt.Println("A: ", err.Error())
 }
 
 func (h *handler) DixInjectD(p struct {
-	Err *errors.Err
+	Err error
 },
 ) {
-	fmt.Println("D: ", p.Err.Msg)
+	fmt.Println("D: ", p.Err.Error())
 }
 
-func (h *handler) DixInjectC(errs []*errors.Err) {
-	fmt.Println("C: ", errs)
+func (h *handler) DixInjectC(errs []error) {
+	for i, e := range errs {
+		fmt.Printf("C[%d]: %s\n", i, e.Error())
+	}
 }
 
-func (h *handler) DixInjectB(err *errors.Err, errs []*errors.Err) {
-	fmt.Println("B: ", err.Msg, errs)
+func (h *handler) DixInjectB(err error, errs []error) {
+	fmt.Println("B: ", err.Error(), errs)
 }
 
 func main() {
-	dixglobal.Provide(func() *errors.Err {
-		return &errors.Err{Msg: "<ok>"}
+	dixglobal.Provide(func() error {
+		return errors.New("<ok>")
 	})
 
-	dixglobal.Provide(func() *errors.Err {
-		return &errors.Err{Msg: "<ok 1>"}
+	dixglobal.Provide(func() error {
+		return errors.New("<ok 1>")
 	})
 
 	dixglobal.Inject(&handler{})

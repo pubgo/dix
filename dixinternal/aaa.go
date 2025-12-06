@@ -2,8 +2,6 @@ package dixinternal
 
 import (
 	"reflect"
-
-	"github.com/pubgo/funk/log"
 )
 
 const (
@@ -24,10 +22,4 @@ type Graph struct {
 	Objects       string `json:"objects"`
 	Providers     string `json:"providers"`
 	ProviderTypes string `json:"provider_types"`
-}
-
-var logger = log.GetLogger("dix")
-
-func SetLog(setter func(logger log.Logger) log.Logger) {
-	logger = setter(logger)
 }

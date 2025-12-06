@@ -3,12 +3,15 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/dix/v2/dixglobal"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 
 	type handler func() string
 	dixglobal.Provide(func() handler {

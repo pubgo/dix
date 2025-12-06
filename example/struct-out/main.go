@@ -3,9 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/pretty"
-	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/dix/v2/dixglobal"
 )
 
 type Inline struct {
@@ -45,10 +43,16 @@ type B struct {
 }
 
 func main() {
-	defer recovery.Exit(func(err error) error {
-		fmt.Println(dixglobal.Graph())
-		return err
-	})
+	defer func() {
+		if r := recover(); r != nil {
+			err, ok := r.(error)
+			if !ok {
+				err = fmt.Errorf("panic: %v", r)
+			}
+			fmt.Printf("panic: %v\n", err)
+			fmt.Println(dixglobal.Graph()) // Original behavior from recovery.Exit's func
+		}
+	}()
 
 	dixglobal.Provide(func() Conf {
 		return Conf{
@@ -83,15 +87,15 @@ func main() {
 	})
 
 	dixglobal.Inject(func(a *A, b *B, cc []C, c1 *C1, c2 []*C1, d *D, dd []*D, dm map[string]*D, d5 map[string][]*D) {
-		pretty.Println(a.Hello)
-		pretty.Println(b.Hello)
-		pretty.Println(cc)
-		pretty.Println(c1)
-		pretty.Println(c2)
-		pretty.Println(d)
-		pretty.Println(dd)
-		pretty.Println(dm)
-		pretty.Println(d5)
+		fmt.Println(a.Hello)
+		fmt.Println(b.Hello)
+		fmt.Println(cc)
+		fmt.Println(c1)
+		fmt.Println(c2)
+		fmt.Println(d)
+		fmt.Println(dd)
+		fmt.Println(dm)
+		fmt.Println(d5)
 	})
 
 	fmt.Println(dixglobal.Graph())

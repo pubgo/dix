@@ -1,10 +1,8 @@
 package dixinternal
 
 import (
+	"errors"
 	"reflect"
-
-	"github.com/pubgo/funk/assert"
-	"github.com/pubgo/funk/errors"
 )
 
 // New Dix new
@@ -12,27 +10,36 @@ func New(opts ...Option) *Dix {
 	return newDix(opts...)
 }
 
-func (x *Dix) Provide(param any) {
-	x.provide(param)
+func (dix *Dix) Provide(param any) {
+	dix.provide(param)
 }
 
-func (x *Dix) Inject(param any, opts ...Option) any {
-	if dep, ok := x.isCycle(); ok {
-		logger.Error().
-			Str("cycle_path", dep).
-			Str("component", reflect.TypeOf(param).String()).
-			Msg("dependency cycle detected")
-		assert.Must(errors.New("circular dependency: " + dep))
+func (dix *Dix) Inject(param any, opts ...Option) any {
+	if dep, ok := dix.isCycle(); ok {
+		logger.Error("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
+		panic(errors.New("circular dependency: " + dep))
 	}
 
-	x.inject(param, opts...).Must()
+	if err := dix.inject(param, opts...); err != nil {
+		panic(err)
+	}
 	return param
 }
 
-func (x *Dix) Graph() *Graph {
+// Graph generates dependency graphs with default options
+func (dix *Dix) Graph() *Graph {
 	return &Graph{
-		Objects:       x.objectGraph(),
-		Providers:     x.providerGraph(),
-		ProviderTypes: x.providerGraphTypes(),
+		Objects:       dix.objectGraph(),
+		Providers:     dix.providerGraph(),
+		ProviderTypes: dix.providerGraphTypes(),
+	}
+}
+
+// GraphWithOptions generates dependency graphs with custom options
+func (dix *Dix) GraphWithOptions(opts *GraphOptions) *Graph {
+	return &Graph{
+		Objects:       dix.objectGraph(),
+		Providers:     dix.providerGraphWithOptions(opts),
+		ProviderTypes: dix.providerGraphTypesWithOptions(opts),
 	}
 }

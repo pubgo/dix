@@ -1,42 +1,45 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/dix/v2/dixglobal"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 
 	defer func() {
 		fmt.Println(dixglobal.Graph())
 	}()
 
-	dixglobal.Provide(func() map[string]*errors.Err {
-		return map[string]*errors.Err{
-			"":      {Msg: "default msg"},
-			"hello": {Msg: "hello"},
+	dixglobal.Provide(func() map[string]error {
+		return map[string]error{
+			"":      errors.New("default msg"),
+			"hello": errors.New("hello"),
 		}
 	})
 
-	dixglobal.Provide(func() map[string]*errors.Err {
-		return map[string]*errors.Err{
-			"hello": {Msg: "hello1"},
+	dixglobal.Provide(func() map[string]error {
+		return map[string]error{
+			"hello": errors.New("hello1"),
 		}
 	})
 
-	dixglobal.Inject(func(err *errors.Err, errs map[string]*errors.Err, errMapList map[string][]*errors.Err) {
-		fmt.Println(err.Msg)
+	dixglobal.Inject(func(err error, errs map[string]error, errMapList map[string][]error) {
+		fmt.Println(err.Error())
 		fmt.Println(errs)
 		fmt.Println(errMapList)
 	})
 
 	type param struct {
-		ErrMap     map[string]*errors.Err
-		ErrMapList map[string][]*errors.Err
+		ErrMap     map[string]error
+		ErrMapList map[string][]error
 	}
 	fmt.Println(dixglobal.Inject(new(param)).ErrMap)
 	fmt.Println(dixglobal.Inject(new(param)).ErrMapList)

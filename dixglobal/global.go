@@ -3,10 +3,11 @@ package dixglobal
 import (
 	"reflect"
 
-	"github.com/pubgo/dix/dixinternal"
+	"github.com/pubgo/dix/v2"
+	"github.com/pubgo/dix/v2/dixinternal"
 )
 
-var _dix = dixinternal.New(dixinternal.WithValuesNull())
+var _dix = dix.New(dix.WithValuesNull())
 
 // Example:
 //
@@ -28,7 +29,7 @@ func Provide(data any) {
 // Inject injects objects
 //
 //	data: <*struct> or <func>
-func Inject[T any](data T, opts ...dixinternal.Option) T {
+func Inject[T any](data T, opts ...dix.Option) T {
 	vp := reflect.ValueOf(data)
 	if vp.Kind() == reflect.Struct {
 		_ = _dix.Inject(&data, opts...)
@@ -38,7 +39,22 @@ func Inject[T any](data T, opts ...dixinternal.Option) T {
 	return data
 }
 
+func InjectT[T any](opts ...dix.Option) T {
+	var data T
+	if reflect.TypeOf(data).Kind() != reflect.Struct {
+		panic("<T> type kind is not struct")
+	}
+
+	_ = _dix.Inject(&data, opts...)
+	return data
+}
+
 // Graph Dix graph
 func Graph() *dixinternal.Graph {
 	return _dix.Graph()
+}
+
+// GraphWithOptions generates dependency graphs with custom options
+func GraphWithOptions(opts *dixinternal.GraphOptions) *dixinternal.Graph {
+	return _dix.GraphWithOptions(opts)
 }

@@ -1,29 +1,35 @@
 package dix
 
 import (
+	_ "embed"
+	"log/slog"
 	"reflect"
 
-	"github.com/pubgo/dix/dixinternal"
+	"github.com/pubgo/dix/v2/dixinternal"
 )
 
-const (
-	InjectMethodPrefix = dixinternal.InjectMethodPrefix
-)
+//go:embed .version
+var version string
+
+func ReleaseVersion() string { return version }
 
 type (
 	Option  = dixinternal.Option
 	Options = dixinternal.Options
 	Dix     = dixinternal.Dix
 	Graph   = dixinternal.Graph
+	// GraphOptions holds configuration options for graph rendering
+	GraphOptions = dixinternal.GraphOptions
 )
 
-func WithValuesNull() Option {
-	return dixinternal.WithValuesNull()
-}
+func SetLog(log slog.Handler) { dixinternal.SetLog(log) }
 
-func New(opts ...Option) *Dix {
-	return dixinternal.New(opts...)
-}
+func WithValuesNull() Option { return dixinternal.WithValuesNull() }
+
+func New(opts ...Option) *Dix { return dixinternal.New(opts...) }
+
+// NewGraphOptions creates GraphOptions with sensible defaults
+func NewGraphOptions() *GraphOptions { return dixinternal.NewGraphOptions() }
 
 func Inject[T any](di *Dix, data T, opts ...Option) T {
 	vp := reflect.ValueOf(data)
@@ -36,6 +42,14 @@ func Inject[T any](di *Dix, data T, opts ...Option) T {
 	return data
 }
 
-func Provide(di *Dix, data any) {
-	di.Provide(data)
+func InjectT[T any](di *Dix, opts ...Option) T {
+	var data T
+	if reflect.TypeOf(data).Kind() != reflect.Struct {
+		panic("<T> type kind is not struct")
+	}
+
+	_ = di.Inject(&data, opts...)
+	return data
 }
+
+func Provide(di *Dix, data any) { di.Provide(data) }

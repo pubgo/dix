@@ -2,25 +2,29 @@ package main
 
 import (
 	"fmt"
+)
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/recovery"
+import (
+	"github.com/pubgo/dix/v2/dixglobal"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 
 	defer func() {
 		fmt.Println(dixglobal.Graph())
 	}()
 
-	dixglobal.Inject(func(errs map[string]*errors.Err) {
+	dixglobal.Inject(func(errs map[string]error) {
 		fmt.Println(errs)
 	})
 
 	type param struct {
-		ErrMap map[string]*errors.Err
+		ErrMap map[string]error
 	}
 	fmt.Println(dixglobal.Inject(new(param)).ErrMap)
 }

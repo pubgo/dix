@@ -1,15 +1,18 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 
-	"github.com/pubgo/dix/dixglobal"
-	"github.com/pubgo/funk/errors"
-	"github.com/pubgo/funk/recovery"
+	"github.com/pubgo/dix/v2/dixglobal"
 )
 
 func main() {
-	defer recovery.Exit()
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Printf("panic: %v\n", r)
+		}
+	}()
 
 	type handler struct{}
 	dixglobal.Provide(func() *handler {
@@ -22,11 +25,11 @@ func main() {
 		return new(handler)
 	})
 
-	dixglobal.Provide(func(_ *handler) *errors.Err {
-		return &errors.Err{Msg: "ok"}
+	dixglobal.Provide(func(_ *handler) error {
+		return errors.New("ok")
 	})
 
-	dixglobal.Inject(func(err *errors.Err) {
-		fmt.Println(err.Msg)
+	dixglobal.Inject(func(err error) {
+		fmt.Println(err.Error())
 	})
 }
