@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -12,6 +13,7 @@ import (
 func newDix(opts ...Option) (d *Dix) {
 	defer func() {
 		if r := recover(); r != nil {
+			debug.PrintStack()
 			err, ok := r.(error)
 			if !ok {
 				err = fmt.Errorf("panic: %v", r)
@@ -94,6 +96,13 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 	for _, in := range p.inputList {
 		val, err := dix.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
 		if err != nil {
+			logger.Error("failed to get input value",
+				"error", err,
+				"type", in.typ.String(),
+				"kind", in.typ.Kind().String(),
+				"map", in.isMap,
+				"list", in.isList,
+			)
 			return fmt.Errorf("failed to get input value for provider: %w", err)
 		}
 		inputs = append(inputs, val)
@@ -224,6 +233,7 @@ func (dix *Dix) createNotFoundError(typ reflect.Type, valMap map[group][]value, 
 func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			debug.PrintStack()
 			var ok bool
 			err, ok = r.(error)
 			if !ok {
@@ -348,6 +358,7 @@ func (dix *Dix) injectStruct(structVal reflect.Value, opt Options) error {
 func (dix *Dix) inject(param any, opts ...Option) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
+			debug.PrintStack()
 			var ok bool
 			err, ok = r.(error)
 			if !ok {
@@ -487,6 +498,7 @@ func (dix *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
 func (dix *Dix) provide(param interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
+			debug.PrintStack()
 			err, ok := r.(error)
 			if !ok {
 				err = fmt.Errorf("panic: %v", r)
