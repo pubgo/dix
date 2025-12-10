@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dix 依赖关系可视化</title>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 14px;
+        }
+        
+        .controls {
+            background: white;
+            padding: 15px 20px;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .controls button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        
+        .controls button:hover {
+            background: #f0f0f0;
+            border-color: #667eea;
+        }
+        
+        .controls button.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .controls .info {
+            margin-left: auto;
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .controls select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        .controls select:hover {
+            border-color: #667eea;
+        }
+        
+        .container {
+            display: flex;
+            height: calc(100vh - 140px);
+        }
+        
+        .graph-container {
+            flex: 1;
+            background: white;
+            margin: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #network {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .sidebar {
+            width: 300px;
+            background: white;
+            margin: 20px 20px 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            padding: 20px;
+            overflow-y: auto;
+            max-height: calc(100vh - 140px);
+        }
+        
+        .sidebar h3 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 8px;
+        }
+        
+        .stats {
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .stat-item:last-child {
+            border-bottom: none;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .stat-value {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .legend {
+            margin-top: 20px;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #666;
+        }
+        
+        .error {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #e74c3c;
+            padding: 20px;
+            background: #fee;
+            border-radius: 8px;
+            border: 1px solid #fcc;
+        }
+        
+        /* 自定义 tooltip 样式 */
+        .vis-tooltip {
+            background-color: rgba(255, 255, 255, 0.98) !important;
+            border: 2px solid #667eea !important;
+            border-radius: 8px !important;
+            padding: 12px 16px !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+            font-size: 13px !important;
+            line-height: 1.8 !important;
+            max-width: 500px !important;
+            white-space: pre-line !important; /* 支持换行符 */
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace !important;
+            color: #333 !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🔗 Dix 依赖关系可视化</h1>
+        <p>查看 Providers 和 Objects 之间的依赖关系</p>
+    </div>
+    
+    <div class="controls">
+        <button id="btn-providers" class="active" onclick="loadView('providers')">Providers 视图</button>
+        <button id="btn-providers-only" onclick="loadView('providers-only')">纯 Providers</button>
+        <button id="btn-objects" onclick="loadView('objects')">Objects 视图</button>
+        <button id="btn-combined" onclick="loadView('combined')">组合视图</button>
+        <select id="layout-select" onchange="changeLayout(this.value)">
+            <option value="hierarchical" selected>分层布局（推荐）</option>
+            <option value="force">力导向布局</option>
+            <option value="circular">圆形布局</option>
+        </select>
+        <div class="info" id="info">加载中...</div>
+    </div>
+    
+    <div class="container">
+        <div class="graph-container">
+            <div id="network"></div>
+            <div id="loading" class="loading">正在加载依赖关系数据...</div>
+            <div id="error" class="error" style="display: none;"></div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="stats">
+                <h3>统计信息</h3>
+                <div class="stat-item">
+                    <span class="stat-label">Providers:</span>
+                    <span class="stat-value" id="stat-providers">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Objects:</span>
+                    <span class="stat-value" id="stat-objects">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">依赖关系:</span>
+                    <span class="stat-value" id="stat-edges">0</span>
+                </div>
+            </div>
+            
+            <div class="legend">
+                <h3>图例</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #C8E6C9; border: 1px solid #2E7D32;"></div>
+                    <span>Provider 函数</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #E3F2FD; border: 1px solid #1976D2;"></div>
+                    <span>类型节点（层级 0）</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #F3E5F5; border: 1px solid #7B1FA2;"></div>
+                    <span>类型节点（层级 1）</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #E8F5E9; border: 1px solid #388E3C;"></div>
+                    <span>类型节点（层级 2+）</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #FFE0B2; border: 1px solid #E65100;"></div>
+                    <span>Object 实例</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9E9E9E;"></div>
+                    <span>依赖关系</span>
+                </div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                    <div style="font-size: 12px; color: #666; margin-bottom: 5px;">
+                        <strong>布局说明：</strong>
+                    </div>
+                    <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                        • 分层布局：按依赖层级从上到下排列<br>
+                        • 力导向布局：基于物理模拟的自然布局<br>
+                        • 圆形布局：节点呈圆形排列
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let network = null;
+        let data = null;
+        let currentView = 'providers';
+        let currentLayout = 'hierarchical';
+        
+        // HTML 转义函数
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        // 计算节点的层级（基于依赖深度）
+        function calculateLevels(nodes, edges) {
+            const nodeMap = new Map();
+            const inDegree = new Map();
+            const children = new Map();
+            
+            // 初始化
+            nodes.forEach(node => {
+                nodeMap.set(node.id, node);
+                inDegree.set(node.id, 0);
+                children.set(node.id, []);
+            });
+            
+            // 计算入度和子节点
+            edges.forEach(edge => {
+                if (nodeMap.has(edge.from) && nodeMap.has(edge.to)) {
+                    inDegree.set(edge.to, (inDegree.get(edge.to) || 0) + 1);
+                    const childrenList = children.get(edge.from) || [];
+                    childrenList.push(edge.to);
+                    children.set(edge.from, childrenList);
+                }
+            });
+            
+            // 找到根节点（入度为0的节点）
+            const roots = [];
+            inDegree.forEach((degree, nodeId) => {
+                if (degree === 0) {
+                    roots.push(nodeId);
+                }
+            });
+            
+            // 如果没有根节点，使用所有节点
+            if (roots.length === 0) {
+                roots.push(...Array.from(nodeMap.keys()));
+            }
+            
+            // BFS 计算层级
+            const levels = new Map();
+            const queue = [];
+            
+            roots.forEach(root => {
+                levels.set(root, 0);
+                queue.push(root);
+            });
+            
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const currentLevel = levels.get(current);
+                const currentChildren = children.get(current) || [];
+                
+                currentChildren.forEach(child => {
+                    const childLevel = levels.get(child);
+                    if (childLevel === undefined || childLevel < currentLevel + 1) {
+                        levels.set(child, currentLevel + 1);
+                        queue.push(child);
+                    }
+                });
+            }
+            
+            // 确保所有节点都有层级
+            nodes.forEach(node => {
+                if (!levels.has(node.id)) {
+                    // 对于没有依赖的节点，设置为最大层级+1
+                    const maxLevel = Math.max(...Array.from(levels.values()), -1);
+                    levels.set(node.id, maxLevel + 1);
+                }
+            });
+            
+            return levels;
+        }
+        
+        // 根据层级设置节点颜色
+        function getColorByLevel(level, group) {
+            const colors = [
+                { bg: '#E3F2FD', border: '#1976D2' }, // 层级 0 - 浅蓝
+                { bg: '#F3E5F5', border: '#7B1FA2' }, // 层级 1 - 浅紫
+                { bg: '#E8F5E9', border: '#388E3C' }, // 层级 2 - 浅绿
+                { bg: '#FFF3E0', border: '#F57C00' }, // 层级 3 - 浅橙
+                { bg: '#FCE4EC', border: '#C2185B' }, // 层级 4 - 浅粉
+                { bg: '#E0F2F1', border: '#00796B' }, // 层级 5 - 浅青
+            ];
+            
+            const colorIndex = level % colors.length;
+            const baseColor = colors[colorIndex];
+            
+            // 根据节点类型调整颜色
+            if (group === 'provider') {
+                return { bg: '#C8E6C9', border: '#2E7D32' }; // Provider 保持绿色
+            } else if (group === 'object') {
+                return { bg: '#FFE0B2', border: '#E65100' }; // Object 保持橙色
+            }
+            
+            return baseColor;
+        }
+        
+        // 切换布局
+        function changeLayout(layout) {
+            currentLayout = layout;
+            if (network && data) {
+                // 应用新的布局配置
+                applyLayout(network, currentLayout);
+            } else if (data) {
+                // 如果网络还没创建，重新加载视图
+                loadView(currentView);
+            }
+        }
+        
+        // 应用布局配置
+        function applyLayout(networkInstance, layout) {
+            let layoutConfig = {};
+            let physicsConfig = {};
+            let smoothConfig = {};
+            
+            if (layout === 'hierarchical') {
+                layoutConfig = {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'UD',
+                        sortMethod: 'directed',
+                        levelSeparation: 150,
+                        nodeSpacing: 200,
+                        treeSpacing: 200,
+                        blockShifting: true,
+                        edgeMinimization: true,
+                        parentCentralization: true,
+                        shakeTowards: 'leaves'
+                    }
+                };
+                physicsConfig = {
+                    enabled: false
+                };
+                smoothConfig = {
+                    type: 'straight',
+                    roundness: 0
+                };
+            } else if (layout === 'force') {
+                layoutConfig = {
+                    improvedLayout: true,
+                    hierarchical: {
+                        enabled: false
+                    }
+                };
+                physicsConfig = {
+                    enabled: true,
+                    stabilization: {
+                        iterations: 200
+                    },
+                    barnesHut: {
+                        gravitationalConstant: -3000,
+                        centralGravity: 0.1,
+                        springLength: 200,
+                        springConstant: 0.04,
+                        damping: 0.09
+                    }
+                };
+                smoothConfig = {
+                    type: 'continuous',
+                    roundness: 0.5
+                };
+            } else if (layout === 'circular') {
+                layoutConfig = {
+                    improvedLayout: false,
+                    hierarchical: {
+                        enabled: false
+                    }
+                };
+                physicsConfig = {
+                    enabled: true,
+                    stabilization: {
+                        iterations: 100
+                    },
+                    forceAtlas2Based: {
+                        gravitationalConstant: -50,
+                        centralGravity: 0.01,
+                        springLength: 100,
+                        springConstant: 0.08,
+                        damping: 0.4
+                    }
+                };
+                smoothConfig = {
+                    type: 'continuous',
+                    roundness: 0.5
+                };
+            }
+            
+            // 应用新的配置
+            networkInstance.setOptions({
+                layout: layoutConfig,
+                physics: physicsConfig,
+                edges: {
+                    smooth: smoothConfig
+                }
+            });
+            
+            // 如果是分层布局，需要重新布局
+            if (layout === 'hierarchical') {
+                networkInstance.fit({
+                    animation: {
+                        duration: 500,
+                        easingFunction: 'easeInOutQuad'
+                    }
+                });
+            }
+        }
+        
+        // 初始化网络图
+        function initNetwork(nodes, edges) {
+            const container = document.getElementById('network');
+            
+            // 计算节点层级
+            const levels = calculateLevels(nodes, edges);
+            
+            // 根据层级设置节点颜色和位置
+            nodes.forEach(node => {
+                const level = levels.get(node.id) || 0;
+                const colorInfo = getColorByLevel(level, node.group);
+                node.color = {
+                    background: colorInfo.bg,
+                    border: colorInfo.border,
+                    highlight: {
+                        background: '#FFD54F',
+                        border: '#F57F17'
+                    }
+                };
+                // 设置层级信息（用于分层布局）
+                node.level = level;
+            });
+            
+            const data = {
+                nodes: new vis.DataSet(nodes),
+                edges: new vis.DataSet(edges)
+            };
+            
+            // 根据选择的布局设置选项
+            let layoutConfig = {};
+            let physicsConfig = {};
+            
+            if (currentLayout === 'hierarchical') {
+                layoutConfig = {
+                    hierarchical: {
+                        enabled: true,
+                        direction: 'UD', // 从上到下
+                        sortMethod: 'directed', // 基于边的方向排序
+                        levelSeparation: 150, // 层级间距
+                        nodeSpacing: 200, // 节点间距
+                        treeSpacing: 200, // 树间距
+                        blockShifting: true,
+                        edgeMinimization: true,
+                        parentCentralization: true,
+                        shakeTowards: 'leaves'
+                    }
+                };
+                physicsConfig = {
+                    enabled: false // 分层布局不需要物理引擎
+                };
+            } else if (currentLayout === 'force') {
+                layoutConfig = {
+                    improvedLayout: true,
+                    hierarchical: {
+                        enabled: false
+                    }
+                };
+                physicsConfig = {
+                    enabled: true,
+                    stabilization: {
+                        iterations: 200
+                    },
+                    barnesHut: {
+                        gravitationalConstant: -3000,
+                        centralGravity: 0.1,
+                        springLength: 200,
+                        springConstant: 0.04,
+                        damping: 0.09
+                    }
+                };
+            } else if (currentLayout === 'circular') {
+                layoutConfig = {
+                    improvedLayout: false,
+                    hierarchical: {
+                        enabled: false
+                    }
+                };
+                physicsConfig = {
+                    enabled: true,
+                    stabilization: {
+                        iterations: 100
+                    },
+                    forceAtlas2Based: {
+                        gravitationalConstant: -50,
+                        centralGravity: 0.01,
+                        springLength: 100,
+                        springConstant: 0.08,
+                        damping: 0.4
+                    }
+                };
+            }
+            
+            const options = {
+                nodes: {
+                    shape: 'box',
+                    font: {
+                        size: 12,
+                        face: 'Arial',
+                        multi: 'html' // 启用 HTML 支持
+                    },
+                    borderWidth: 2,
+                    shadow: true,
+                    margin: 10
+                },
+                edges: {
+                    arrows: {
+                        to: {
+                            enabled: true,
+                            scaleFactor: 0.8
+                        }
+                    },
+                    color: {
+                        color: '#9E9E9E',
+                        highlight: '#667eea'
+                    },
+                    smooth: currentLayout === 'hierarchical' ? {
+                        type: 'straight',
+                        roundness: 0
+                    } : {
+                        type: 'continuous',
+                        roundness: 0.5
+                    },
+                    width: 2,
+                    font: {
+                        size: 10,
+                        align: 'middle'
+                    }
+                },
+                physics: physicsConfig,
+                interaction: {
+                    hover: true,
+                    tooltipDelay: 200,
+                    zoomView: true,
+                    dragView: true,
+                    selectConnectedEdges: true,
+                    hoverConnectedEdges: true
+                },
+                layout: layoutConfig
+            };
+            
+            network = new vis.Network(container, data, options);
+            
+            // 自定义 tooltip 样式（通过 CSS 覆盖）
+            // vis.js 的 tooltip 会自动处理换行符
+            
+            network.on("click", function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = data.nodes.get(nodeId);
+                    if (node) {
+                        console.log('选中节点:', node);
+                    }
+                }
+            });
+        }
+        
+        // 加载数据
+        async function loadData() {
+            try {
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('error').style.display = 'none';
+                
+                const response = await fetch('/api/dependencies');
+                if (!response.ok) {
+                    throw new Error('加载数据失败: ' + response.statusText);
+                }
+                
+                data = await response.json();
+                
+                // 更新统计信息
+                document.getElementById('stat-providers').textContent = data.providers.length;
+                document.getElementById('stat-objects').textContent = data.objects.length;
+                document.getElementById('stat-edges').textContent = data.edges.length;
+                
+                document.getElementById('loading').style.display = 'none';
+                loadView(currentView);
+            } catch (error) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = '错误: ' + error.message;
+                console.error('加载数据失败:', error);
+            }
+        }
+        
+        // 加载视图
+        function loadView(view) {
+            if (!data) {
+                loadData();
+                return;
+            }
+            
+            currentView = view;
+            
+            // 更新按钮状态
+            document.querySelectorAll('.controls button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            const btnId = view === 'providers-only' ? 'btn-providers-only' : 'btn-' + view;
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                btn.classList.add('active');
+            }
+            
+            const nodes = [];
+            const edges = [];
+            const nodeMap = new Map();
+            
+            // 纯 Providers 视图：只显示 providers 之间的调用关系
+            if (view === 'providers-only') {
+                // 构建 provider 输出类型到 provider 的映射
+                const outputTypeToProviders = new Map(); // outputType -> [providers]
+                const providerMap = new Map(); // provider.id -> provider
+                
+                data.providers.forEach(provider => {
+                    if (!provider || !provider.id) return;
+                    const outputType = provider.output_type || provider.outputType;
+                    if (outputType) {
+                        if (!outputTypeToProviders.has(outputType)) {
+                            outputTypeToProviders.set(outputType, []);
+                        }
+                        outputTypeToProviders.get(outputType).push(provider);
+                    }
+                    providerMap.set(provider.id, provider);
+                });
+                
+                // 添加所有 Provider 节点
+                data.providers.forEach(provider => {
+                    if (!provider || !provider.id) return;
+                    
+                    const fnName = provider.function_name || provider.functionName || 'unknown';
+                    const inputTypes = provider.input_types || provider.inputTypes || [];
+                    const outputType = provider.output_type || provider.outputType || 'unknown';
+                    
+                    // 提取函数名
+                    let fnLabel = 'unknown';
+                    if (typeof fnName === 'string' && fnName.length > 0 && fnName !== 'unknown') {
+                        const parts = fnName.split('.');
+                        if (parts.length > 0) {
+                            let lastPart = parts[parts.length - 1];
+                            if (lastPart.includes('(') && lastPart.includes(')')) {
+                                const methodMatch = lastPart.match(/\)\.(\w+)$/);
+                                if (methodMatch) {
+                                    lastPart = methodMatch[1];
+                                }
+                            }
+                            fnLabel = lastPart;
+                        }
+                    }
+                    
+                    // 简化类型名称
+                    const simplifyType = (typeStr) => {
+                        if (!typeStr || typeof typeStr !== 'string') return typeStr;
+                        if (typeStr.includes('.')) {
+                            return typeStr.split('.').pop();
+                        }
+                        return typeStr;
+                    };
+                    
+                    // 构建简洁的标签
+                    const outputLabel = simplifyType(outputType);
+                    let label = fnLabel;
+                    const maxFnNameLength = 25;
+                    if (label.length > maxFnNameLength) {
+                        label = label.substring(0, maxFnNameLength) + '...';
+                    }
+                    if (outputType !== 'unknown' && outputLabel) {
+                        let shortOutput = outputLabel;
+                        const maxTypeLength = 20;
+                        if (shortOutput.length > maxTypeLength) {
+                            shortOutput = shortOutput.substring(0, maxTypeLength) + '...';
+                        }
+                        label = label + ' → ' + shortOutput;
+                    }
+                    
+                    // 构建标题
+                    let title = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                    title += 'Provider 函数\n';
+                    title += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+                    title += '函数名:\n  ' + fnName + '\n\n';
+                    title += '输出类型:\n  ' + outputType + '\n\n';
+                    if (inputTypes.length > 0) {
+                        title += '输入类型 (' + inputTypes.length + ' 个):\n';
+                        inputTypes.forEach((inputType, idx) => {
+                            title += '  ' + (idx + 1) + '. ' + inputType + '\n';
+                        });
+                    } else {
+                        title += '无输入参数';
+                    }
+                    
+                    if (!nodeMap.has(provider.id)) {
+                        nodes.push({
+                            id: provider.id,
+                            label: label,
+                            title: title,
+                            color: {
+                                background: '#4CAF50',
+                                border: '#2E7D32'
+                            },
+                            group: 'provider',
+                            font: {
+                                size: 11
+                            },
+                            shape: 'box'
+                        });
+                        nodeMap.set(provider.id, true);
+                    }
+                });
+                
+                // 添加 providers 之间的依赖关系
+                // 如果 provider A 的输出类型是 provider B 的输入类型，则 A -> B
+                data.providers.forEach(providerA => {
+                    if (!providerA || !providerA.id) return;
+                    const outputTypeA = providerA.output_type || providerA.outputType;
+                    
+                    if (outputTypeA) {
+                        // 查找所有使用 outputTypeA 作为输入的 providers
+                        data.providers.forEach(providerB => {
+                            if (!providerB || !providerB.id || providerB.id === providerA.id) return;
+                            
+                            const inputTypesB = providerB.input_types || providerB.inputTypes || [];
+                            if (inputTypesB.includes(outputTypeA)) {
+                                // 避免重复边
+                                const edgeKey = providerA.id + '->' + providerB.id;
+                                if (!nodeMap.has('edge_' + edgeKey)) {
+                                    nodeMap.set('edge_' + edgeKey, true);
+                                    
+                                    edges.push({
+                                        from: providerA.id,
+                                        to: providerB.id,
+                                        label: '提供',
+                                        color: { color: '#4CAF50' },
+                                        font: { align: 'middle' },
+                                        title: 'Provider A 的输出类型被 Provider B 使用'
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+            } else if (view === 'providers' || view === 'combined') {
+                // 添加 Provider 节点
+                data.providers.forEach(provider => {
+                    if (!provider || !provider.id) return;
+                    
+                    // 添加 Provider 函数节点
+                    if (!nodeMap.has(provider.id)) {
+                        // JSON 字段名是 function_name（下划线），不是 functionName（驼峰）
+                        const fnName = provider.function_name || provider.functionName || 'unknown';
+                        const inputTypes = provider.input_types || provider.inputTypes || [];
+                        const outputType = provider.output_type || 'unknown';
+                        
+                        // 提取函数名（去掉包名，只保留函数名）
+                        let fnLabel = 'unknown';
+                        if (typeof fnName === 'string' && fnName.length > 0 && fnName !== 'unknown') {
+                            // 处理格式：package.function 或 package.(*Type).method
+                            const parts = fnName.split('.');
+                            if (parts.length > 0) {
+                                // 取最后一部分，如果是方法则去掉类型部分
+                                let lastPart = parts[parts.length - 1];
+                                // 处理 (*Type).method 格式
+                                if (lastPart.includes('(') && lastPart.includes(')')) {
+                                    const methodMatch = lastPart.match(/\)\.(\w+)$/);
+                                    if (methodMatch) {
+                                        lastPart = methodMatch[1];
+                                    }
+                                }
+                                fnLabel = lastPart;
+                            }
+                        }
+                        
+                        // 简化类型名称（去掉包名）
+                        const simplifyType = (typeStr) => {
+                            if (!typeStr || typeof typeStr !== 'string') return typeStr;
+                            if (typeStr.includes('.')) {
+                                return typeStr.split('.').pop();
+                            }
+                            return typeStr;
+                        };
+                        
+                        // 构建节点标签：只显示简洁的函数名和输出类型
+                        // 不使用换行符，保持标签简洁
+                        const outputLabel = simplifyType(outputType);
+                        let label = fnLabel;
+                        
+                        // 如果函数名太长，截断
+                        const maxFnNameLength = 20;
+                        if (label.length > maxFnNameLength) {
+                            label = label.substring(0, maxFnNameLength) + '...';
+                        }
+                        
+                        // 添加输出类型（简洁形式）
+                        if (outputType !== 'unknown' && outputLabel) {
+                            // 如果输出类型名太长，也截断
+                            let shortOutput = outputLabel;
+                            const maxTypeLength = 15;
+                            if (shortOutput.length > maxTypeLength) {
+                                shortOutput = shortOutput.substring(0, maxTypeLength) + '...';
+                            }
+                            label = label + ' → ' + shortOutput;
+                        }
+                        
+                        // 如果标签还是太长，进一步截断
+                        const maxLabelLength = 40;
+                        if (label.length > maxLabelLength) {
+                            label = label.substring(0, maxLabelLength) + '...';
+                        }
+                        
+                        // 构建完整的标题信息（使用格式化文本）
+                        let title = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                        title += 'Provider 函数\n';
+                        title += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+                        title += '函数名:\n  ' + fnName + '\n\n';
+                        title += '输出类型:\n  ' + outputType + '\n\n';
+                        if (inputTypes.length > 0) {
+                            title += '输入类型 (' + inputTypes.length + ' 个):\n';
+                            inputTypes.forEach((inputType, idx) => {
+                                title += '  ' + (idx + 1) + '. ' + inputType + '\n';
+                            });
+                        } else {
+                            title += '无输入参数';
+                        }
+                        
+                        nodes.push({
+                            id: provider.id,
+                            label: label,
+                            title: title,
+                            color: {
+                                background: '#4CAF50',
+                                border: '#2E7D32'
+                            },
+                            group: 'provider',
+                            font: {
+                                size: 11
+                            },
+                            shape: 'box'
+                        });
+                        nodeMap.set(provider.id, true);
+                    }
+                    
+                    // 添加输出类型节点
+                    const outputType = provider.output_type || 'unknown';
+                    if (outputType && !nodeMap.has(outputType)) {
+                        const label = (typeof outputType === 'string' && outputType.includes('.')) 
+                            ? outputType.split('.').pop() 
+                            : outputType;
+                        let outputTitle = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                        outputTitle += '输出类型\n';
+                        outputTitle += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+                        outputTitle += '类型:\n  ' + outputType;
+                        
+                        nodes.push({
+                            id: outputType,
+                            label: label,
+                            title: outputTitle,
+                            color: {
+                                background: '#2196F3',
+                                border: '#1565C0'
+                            },
+                            group: 'type'
+                        });
+                        nodeMap.set(outputType, true);
+                    }
+                    
+                    // 添加从 Provider 到输出类型的边（显示输出类型信息）
+                    if (provider.id && outputType) {
+                        const outputLabel = outputType.includes('.') 
+                            ? outputType.split('.').pop() 
+                            : outputType;
+                        edges.push({
+                            from: provider.id,
+                            to: outputType,
+                            label: '输出: ' + outputLabel,
+                            color: { color: '#4CAF50' },
+                            font: { align: 'middle' }
+                        });
+                    }
+                    
+                    // 添加输入类型节点和依赖边
+                    if (provider.input_types && Array.isArray(provider.input_types)) {
+                        provider.input_types.forEach((inputType, index) => {
+                            if (!inputType || typeof inputType !== 'string') return;
+                            
+                            if (!nodeMap.has(inputType)) {
+                                const label = inputType.includes('.') 
+                                    ? inputType.split('.').pop() 
+                                    : inputType;
+                                let inputTitle = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                                inputTitle += '输入类型\n';
+                                inputTitle += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+                                inputTitle += '类型:\n  ' + inputType;
+                                
+                                nodes.push({
+                                    id: inputType,
+                                    label: label,
+                                    title: inputTitle,
+                                    color: {
+                                        background: '#2196F3',
+                                        border: '#1565C0'
+                                    },
+                                    group: 'type'
+                                });
+                                nodeMap.set(inputType, true);
+                            }
+                            
+                            // 添加从输入类型到输出类型的边（显示依赖关系）
+                            if (inputType && outputType) {
+                                const inputLabel = inputType.includes('.') 
+                                    ? inputType.split('.').pop() 
+                                    : inputType;
+                                edges.push({
+                                    from: inputType,
+                                    to: outputType,
+                                    label: '依赖',
+                                    color: { color: '#9E9E9E' },
+                                    font: { align: 'middle' },
+                                    // 如果是多个输入，可以添加序号
+                                    title: '输入 ' + (index + 1) + ': ' + inputType
+                                });
+                            }
+                            
+                            // 也可以添加从输入类型到 Provider 的边，更清晰地显示依赖
+                            if (inputType && provider.id) {
+                                const inputLabel = inputType.includes('.') 
+                                    ? inputType.split('.').pop() 
+                                    : inputType;
+                                edges.push({
+                                    from: inputType,
+                                    to: provider.id,
+                                    label: '输入',
+                                    color: { color: '#FF9800' },
+                                    font: { align: 'middle' },
+                                    dashes: true, // 使用虚线表示输入依赖
+                                    title: '输入参数: ' + inputType
+                                });
+                            }
+                        });
+                    }
+                });
+            }
+            
+            if (view === 'objects' || view === 'combined') {
+                // 构建类型依赖关系图（从 providers 中提取）
+                // 这个图表示：outputType 依赖于哪些 inputTypes
+                const typeDependencies = new Map(); // outputType -> [inputTypes]
+                if (data.providers) {
+                    data.providers.forEach(provider => {
+                        const outputType = provider.output_type || provider.outputType;
+                        const inputTypes = provider.input_types || provider.inputTypes || [];
+                        
+                        if (outputType && inputTypes.length > 0) {
+                            if (!typeDependencies.has(outputType)) {
+                                typeDependencies.set(outputType, []);
+                            }
+                            inputTypes.forEach(inputType => {
+                                const deps = typeDependencies.get(outputType);
+                                if (!deps.includes(inputType)) {
+                                    deps.push(inputType);
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                // 构建类型到 objects 的映射
+                const typeToObjects = new Map(); // type -> [objects]
+                data.objects.forEach(object => {
+                    if (!object || !object.id) return;
+                    const objType = object.type || 'unknown';
+                    if (!typeToObjects.has(objType)) {
+                        typeToObjects.set(objType, []);
+                    }
+                    typeToObjects.get(objType).push(object);
+                });
+                
+                // 添加 Object 节点（不显示类型节点，只显示 objects）
+                data.objects.forEach(object => {
+                    if (!object || !object.id) return;
+                    
+                    const objType = object.type || 'unknown';
+                    const objGroup = object.group || 'default';
+                    
+                    if (!nodeMap.has(object.id)) {
+                        const typeLabel = (typeof objType === 'string' && objType.includes('.')) 
+                            ? objType.split('.').pop() 
+                            : objType;
+                        let objectTitle = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                        objectTitle += 'Object 实例\n';
+                        objectTitle += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+                        objectTitle += '类型:\n  ' + objType + '\n\n';
+                        objectTitle += '分组:\n  ' + objGroup + '\n\n';
+                        objectTitle += '已初始化:\n  ' + (object.is_initialized ? '是 ✓' : '否 ✗');
+                        
+                        nodes.push({
+                            id: object.id,
+                            label: typeLabel + ' (' + objGroup + ')',
+                            title: objectTitle,
+                            color: {
+                                background: object.is_initialized ? '#FF9800' : '#FFC107',
+                                border: object.is_initialized ? '#F57C00' : '#FFA000'
+                            },
+                            group: 'object'
+                        });
+                        nodeMap.set(object.id, true);
+                    }
+                });
+                
+                // 添加 objects 之间的关联关系
+                // 如果 object A 的类型依赖于 object B 的类型，则 B -> A（B 被 A 依赖）
+                data.objects.forEach(objectA => {
+                    if (!objectA || !objectA.id) return;
+                    const typeA = objectA.type || 'unknown';
+                    
+                    // 查找 typeA 的依赖类型（typeA 依赖于哪些类型）
+                    const dependencies = typeDependencies.get(typeA) || [];
+                    
+                    dependencies.forEach(depType => {
+                        // 找到所有类型为 depType 的 objects
+                        const dependentObjects = typeToObjects.get(depType) || [];
+                        
+                        dependentObjects.forEach(objectB => {
+                            if (!objectB || !objectB.id) return;
+                            
+                            // 避免自引用
+                            if (objectB.id === objectA.id) return;
+                            
+                            // 避免重复边
+                            const edgeKey = objectB.id + '->' + objectA.id;
+                            if (nodeMap.has('edge_' + edgeKey)) return;
+                            nodeMap.set('edge_' + edgeKey, true);
+                            
+                            // 添加从 objectB 到 objectA 的边（B 被 A 依赖）
+                            const typeBLabel = (typeof objectB.type === 'string' && objectB.type.includes('.')) 
+                                ? objectB.type.split('.').pop() 
+                                : objectB.type;
+                            const typeALabel = (typeof typeA === 'string' && typeA.includes('.')) 
+                                ? typeA.split('.').pop() 
+                                : typeA;
+                            
+                            edges.push({
+                                from: objectB.id,
+                                to: objectA.id,
+                                label: '依赖',
+                                color: { color: '#9E9E9E' },
+                                font: { align: 'middle' },
+                                dashes: false,
+                                title: typeBLabel + ' → ' + typeALabel + '\\n类型依赖关系'
+                            });
+                        });
+                    });
+                });
+            }
+            
+            // 更新信息
+            document.getElementById('info').textContent = 
+                '节点: ' + nodes.length + ' | 边: ' + edges.length;
+            
+            // 初始化或更新网络图
+            if (network) {
+                // 重新计算层级并更新节点
+                const levels = calculateLevels(nodes, edges);
+                nodes.forEach(node => {
+                    const level = levels.get(node.id) || 0;
+                    const colorInfo = getColorByLevel(level, node.group);
+                    node.color = {
+                        background: colorInfo.bg,
+                        border: colorInfo.border,
+                        highlight: {
+                            background: '#FFD54F',
+                            border: '#F57F17'
+                        }
+                    };
+                    node.level = level;
+                });
+                
+                network.setData({ nodes: nodes, edges: edges });
+                
+                // 应用当前布局配置
+                applyLayout(network, currentLayout);
+            } else {
+                initNetwork(nodes, edges);
+            }
+        }
+        
+        // 页面加载时初始化
+        window.addEventListener('DOMContentLoaded', function() {
+            loadData();
+        });
+    </script>
+</body>
+</html>
