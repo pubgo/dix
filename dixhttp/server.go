@@ -32,7 +32,6 @@ func NewServer(dix *dixinternal.Dix) *Server {
 func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/", s.handleIndex)
 	s.mux.HandleFunc("/api/dependencies", s.handleDependencies)
-	s.mux.HandleFunc("/api/graph", s.handleGraph)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -63,32 +62,6 @@ func (s *Server) handleDependencies(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
 		return
 	}
-}
-
-// handleGraph returns the DOT graph format
-func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
-	graphType := r.URL.Query().Get("type")
-	if graphType == "" {
-		graphType = "providers"
-	}
-
-	var dotContent string
-	graph := s.dix.Graph()
-	switch graphType {
-	case "providers":
-		dotContent = graph.Providers
-	case "provider_types":
-		dotContent = graph.ProviderTypes
-	case "objects":
-		dotContent = graph.Objects
-	default:
-		http.Error(w, "Invalid graph type. Use: providers, provider_types, or objects", http.StatusBadRequest)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, dotContent)
 }
 
 // DependencyData represents the structure of dependency information
