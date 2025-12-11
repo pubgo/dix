@@ -26,6 +26,17 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	return param
 }
 
+// GetProvideAllInputTypes returns all input types for a given type, including struct fields
+// This is a public version of getProvideAllInputs that returns types instead of internal structures
+func GetProvideAllInputTypes(typ reflect.Type) []reflect.Type {
+	inputs := getProvideAllInputs(typ)
+	types := make([]reflect.Type, 0, len(inputs))
+	for _, input := range inputs {
+		types = append(types, input.typ)
+	}
+	return types
+}
+
 // GetProviders returns a copy of the providers map for inspection
 // This is useful for HTTP visualization endpoints
 func (dix *Dix) GetProviders() map[reflect.Type][]*providerFn {
@@ -75,15 +86,4 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 		}
 	}
 	return details
-}
-
-// GetProvideAllInputTypes returns all input types for a given type, including struct fields
-// This is a public version of getProvideAllInputs that returns types instead of internal structures
-func GetProvideAllInputTypes(typ reflect.Type) []reflect.Type {
-	inputs := getProvideAllInputs(typ)
-	types := make([]reflect.Type, 0, len(inputs))
-	for _, input := range inputs {
-		types = append(types, input.typ)
-	}
-	return types
 }

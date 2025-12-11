@@ -213,6 +213,7 @@
     
     <div class="controls">
         <button id="btn-providers" class="active" onclick="loadView('providers')">Providers 视图</button>
+        <button id="btn-providers-only" onclick="loadView('providers-only')">纯 Providers</button>
         <button id="btn-objects" onclick="loadView('objects')">Objects 视图</button>
         <button id="btn-combined" onclick="loadView('combined')">组合视图</button>
         <select id="layout-select" onchange="changeLayout(this.value)">
@@ -703,13 +704,149 @@
             document.querySelectorAll('.controls button').forEach(btn => {
                 btn.classList.remove('active');
             });
-            document.getElementById('btn-' + view).classList.add('active');
-            
+            const btnId = view === 'providers-only' ? 'btn-providers-only' : 'btn-' + view;
+            const btn = document.getElementById(btnId);
+            if (btn) {
+                btn.classList.add('active');
+            }
+
             const nodes = [];
             const edges = [];
             const nodeMap = new Map();
             
-            if (view === 'providers' || view === 'combined') {
+            // 纯 Providers 视图：只显示 providers 之间的调用关系
+            if (view === 'providers-only') {
+                // 构建 provider 输出类型到 provider 的映射
+                const outputTypeToProviders = new Map(); // outputType -> [providers]
+                const providerMap = new Map(); // provider.id -> provider
+
+                data.providers.forEach(provider => {
+                    if (!provider || !provider.id) return;
+                    const outputType = provider.output_type || provider.outputType;
+                    if (outputType) {
+                        if (!outputTypeToProviders.has(outputType)) {
+                            outputTypeToProviders.set(outputType, []);
+                        }
+                        outputTypeToProviders.get(outputType).push(provider);
+                    }
+                    providerMap.set(provider.id, provider);
+                });
+
+                // 添加所有 Provider 节点
+                data.providers.forEach(provider => {
+                    if (!provider || !provider.id) return;
+
+                    const fnName = provider.function_name || provider.functionName || 'unknown';
+                    const inputTypes = provider.input_types || provider.inputTypes || [];
+                    const outputType = provider.output_type || provider.outputType || 'unknown';
+
+                    // 提取函数名
+                    let fnLabel = 'unknown';
+                    if (typeof fnName === 'string' && fnName.length > 0 && fnName !== 'unknown') {
+                        const parts = fnName.split('.');
+                        if (parts.length > 0) {
+                            let lastPart = parts[parts.length - 1];
+                            if (lastPart.includes('(') && lastPart.includes(')')) {
+                                const methodMatch = lastPart.match(/\)\.(\w+)$/);
+                                if (methodMatch) {
+                                    lastPart = methodMatch[1];
+                                }
+                            }
+                            fnLabel = lastPart;
+                        }
+                    }
+
+                    // 简化类型名称
+                    const simplifyType = (typeStr) => {
+                        if (!typeStr || typeof typeStr !== 'string') return typeStr;
+                        if (typeStr.includes('.')) {
+                            return typeStr.split('.').pop();
+                        }
+                        return typeStr;
+                    };
+
+                    // 构建简洁的标签
+                    const outputLabel = simplifyType(outputType);
+                    let label = fnLabel;
+                    const maxFnNameLength = 25;
+                    if (label.length > maxFnNameLength) {
+                        label = label.substring(0, maxFnNameLength) + '...';
+                    }
+                    if (outputType !== 'unknown' && outputLabel) {
+                        let shortOutput = outputLabel;
+                        const maxTypeLength = 20;
+                        if (shortOutput.length > maxTypeLength) {
+                            shortOutput = shortOutput.substring(0, maxTypeLength) + '...';
+                        }
+                        label = label + ' → ' + shortOutput;
+                    }
+
+                    // 构建标题
+                    let title = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
+                    title += 'Provider 函数\n';
+                    title += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
+                    title += '函数名:\n  ' + fnName + '\n\n';
+                    title += '输出类型:\n  ' + outputType + '\n\n';
+                    if (inputTypes.length > 0) {
+                        title += '输入类型 (' + inputTypes.length + ' 个):\n';
+                        inputTypes.forEach((inputType, idx) => {
+                            title += '  ' + (idx + 1) + '. ' + inputType + '\n';
+                        });
+                    } else {
+                        title += '无输入参数';
+                    }
+
+                    if (!nodeMap.has(provider.id)) {
+                        nodes.push({
+                            id: provider.id,
+                            label: label,
+                            title: title,
+                            color: {
+                                background: '#4CAF50',
+                                border: '#2E7D32'
+                            },
+                            group: 'provider',
+                            font: {
+                                size: 11
+                            },
+                            shape: 'box'
+                        });
+                        nodeMap.set(provider.id, true);
+                    }
+                });
+
+                // 添加 providers 之间的依赖关系
+                // 如果 provider A 的输出类型是 provider B 的输入类型，则 A -> B
+                data.providers.forEach(providerA => {
+                    if (!providerA || !providerA.id) return;
+                    const outputTypeA = providerA.output_type || providerA.outputType;
+
+                    if (outputTypeA) {
+                        // 查找所有使用 outputTypeA 作为输入的 providers
+                        data.providers.forEach(providerB => {
+                            if (!providerB || !providerB.id || providerB.id === providerA.id) return;
+
+                            const inputTypesB = providerB.input_types || providerB.inputTypes || [];
+                            if (inputTypesB.includes(outputTypeA)) {
+                                // 避免重复边
+                                const edgeKey = providerA.id + '->' + providerB.id;
+                                if (!nodeMap.has('edge_' + edgeKey)) {
+                                    nodeMap.set('edge_' + edgeKey, true);
+
+                                    edges.push({
+                                        from: providerA.id,
+                                        to: providerB.id,
+                                        label: '提供',
+                                        color: { color: '#4CAF50' },
+                                        font: { align: 'middle' },
+                                        title: 'Provider A 的输出类型被 Provider B 使用'
+                                    });
+                                }
+                            }
+                        });
+                    }
+                });
+            } else if (view === 'providers' || view === 'combined') {
                 // 添加 Provider 节点
                 data.providers.forEach(provider => {
                     if (!provider || !provider.id) return;
