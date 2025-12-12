@@ -26,22 +26,15 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	return param
 }
 
-// Graph generates dependency graphs with default options
-func (dix *Dix) Graph() *Graph {
-	return &Graph{
-		Objects:       dix.objectGraph(),
-		Providers:     dix.providerGraph(),
-		ProviderTypes: dix.providerGraphTypes(),
+// GetProvideAllInputTypes returns all input types for a given type, including struct fields
+// This is a public version of getProvideAllInputs that returns types instead of internal structures
+func GetProvideAllInputTypes(typ reflect.Type) []reflect.Type {
+	inputs := getProvideAllInputs(typ)
+	types := make([]reflect.Type, 0, len(inputs))
+	for _, input := range inputs {
+		types = append(types, input.typ)
 	}
-}
-
-// GraphWithOptions generates dependency graphs with custom options
-func (dix *Dix) GraphWithOptions(opts *GraphOptions) *Graph {
-	return &Graph{
-		Objects:       dix.objectGraph(),
-		Providers:     dix.providerGraphWithOptions(opts),
-		ProviderTypes: dix.providerGraphTypesWithOptions(opts),
-	}
+	return types
 }
 
 // GetProviders returns a copy of the providers map for inspection

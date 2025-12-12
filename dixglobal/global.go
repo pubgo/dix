@@ -4,7 +4,6 @@ import (
 	"reflect"
 
 	"github.com/pubgo/dix/v2"
-	"github.com/pubgo/dix/v2/dixinternal"
 )
 
 var _dix = dix.New(dix.WithValuesNull())
@@ -50,11 +49,11 @@ func InjectT[T any](opts ...dix.Option) T {
 }
 
 // Graph Dix graph
-func Graph() *dixinternal.Graph {
-	return _dix.Graph()
+func Graph() *dix.Graph {
+	return dix.GenerateGraph(_dix)
 }
 
 // GraphWithOptions generates dependency graphs with custom options
-func GraphWithOptions(opts *dixinternal.GraphOptions) *dixinternal.Graph {
-	return _dix.GraphWithOptions(opts)
+func GraphWithOptions(opts *dix.GraphOptions) *dix.Graph {
+	return dix.GenerateGraphWithOptions(_dix, opts)
 }

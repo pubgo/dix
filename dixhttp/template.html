@@ -709,7 +709,7 @@
             if (btn) {
                 btn.classList.add('active');
             }
-            
+
             const nodes = [];
             const edges = [];
             const nodeMap = new Map();
@@ -719,7 +719,7 @@
                 // 构建 provider 输出类型到 provider 的映射
                 const outputTypeToProviders = new Map(); // outputType -> [providers]
                 const providerMap = new Map(); // provider.id -> provider
-                
+
                 data.providers.forEach(provider => {
                     if (!provider || !provider.id) return;
                     const outputType = provider.output_type || provider.outputType;
@@ -731,15 +731,15 @@
                     }
                     providerMap.set(provider.id, provider);
                 });
-                
+
                 // 添加所有 Provider 节点
                 data.providers.forEach(provider => {
                     if (!provider || !provider.id) return;
-                    
+
                     const fnName = provider.function_name || provider.functionName || 'unknown';
                     const inputTypes = provider.input_types || provider.inputTypes || [];
                     const outputType = provider.output_type || provider.outputType || 'unknown';
-                    
+
                     // 提取函数名
                     let fnLabel = 'unknown';
                     if (typeof fnName === 'string' && fnName.length > 0 && fnName !== 'unknown') {
@@ -755,7 +755,7 @@
                             fnLabel = lastPart;
                         }
                     }
-                    
+
                     // 简化类型名称
                     const simplifyType = (typeStr) => {
                         if (!typeStr || typeof typeStr !== 'string') return typeStr;
@@ -764,7 +764,7 @@
                         }
                         return typeStr;
                     };
-                    
+
                     // 构建简洁的标签
                     const outputLabel = simplifyType(outputType);
                     let label = fnLabel;
@@ -780,7 +780,7 @@
                         }
                         label = label + ' → ' + shortOutput;
                     }
-                    
+
                     // 构建标题
                     let title = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
                     title += 'Provider 函数\n';
@@ -795,7 +795,7 @@
                     } else {
                         title += '无输入参数';
                     }
-                    
+
                     if (!nodeMap.has(provider.id)) {
                         nodes.push({
                             id: provider.id,
@@ -814,25 +814,25 @@
                         nodeMap.set(provider.id, true);
                     }
                 });
-                
+
                 // 添加 providers 之间的依赖关系
                 // 如果 provider A 的输出类型是 provider B 的输入类型，则 A -> B
                 data.providers.forEach(providerA => {
                     if (!providerA || !providerA.id) return;
                     const outputTypeA = providerA.output_type || providerA.outputType;
-                    
+
                     if (outputTypeA) {
                         // 查找所有使用 outputTypeA 作为输入的 providers
                         data.providers.forEach(providerB => {
                             if (!providerB || !providerB.id || providerB.id === providerA.id) return;
-                            
+
                             const inputTypesB = providerB.input_types || providerB.inputTypes || [];
                             if (inputTypesB.includes(outputTypeA)) {
                                 // 避免重复边
                                 const edgeKey = providerA.id + '->' + providerB.id;
                                 if (!nodeMap.has('edge_' + edgeKey)) {
                                     nodeMap.set('edge_' + edgeKey, true);
-                                    
+
                                     edges.push({
                                         from: providerA.id,
                                         to: providerB.id,

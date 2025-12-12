@@ -17,9 +17,3 @@ type (
 	outputType = reflect.Type
 	value      = reflect.Value
 )
-
-type Graph struct {
-	Objects       string `json:"objects"`
-	Providers     string `json:"providers"`
-	ProviderTypes string `json:"provider_types"`
-}
