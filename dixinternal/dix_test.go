@@ -23,10 +23,12 @@ type testStruct2 struct{}
 func (s *testStruct2) Do() {}
 
 // Types for TestMethodInjection
-type methodInjectDependency struct{}
-type methodInjectTarget struct {
-	injected bool
-}
+type (
+	methodInjectDependency struct{}
+	methodInjectTarget     struct {
+		injected bool
+	}
+)
 
 func (t *methodInjectTarget) DixInject(d *methodInjectDependency) {
 	if d == nil {
@@ -1601,7 +1603,6 @@ func TestOptionsMerge(t *testing.T) {
 func TestOptionsValidate(t *testing.T) {
 	opts := Options{}
 	err := opts.Validate()
-
 	if err != nil {
 		t.Fatalf("Validate returned unexpected error: %v", err)
 	}
@@ -1686,7 +1687,7 @@ func TestProviderInputTypeValidate(t *testing.T) {
 // TestProviderFnCall tests the providerFn.call method
 func TestProviderFnCall(t *testing.T) {
 	// Test normal function call
-	fn := func(x int, y int) int {
+	fn := func(x, y int) int {
 		return x + y
 	}
 

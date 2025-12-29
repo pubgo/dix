@@ -495,7 +495,7 @@ func (dix *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
 }
 
 // provide registers a constructor function
-func (dix *Dix) provide(param interface{}) {
+func (dix *Dix) provide(param any) {
 	defer func() {
 		if r := recover(); r != nil {
 			debug.PrintStack()
