@@ -9,7 +9,7 @@ import (
 	"github.com/pubgo/dix/v2/dixrender"
 )
 
-//go:embed .version
+//go:embed .release
 var version string
 
 func ReleaseVersion() string { return version }
