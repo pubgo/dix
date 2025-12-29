@@ -669,7 +669,7 @@
                 document.getElementById('loading').style.display = 'block';
                 document.getElementById('error').style.display = 'none';
                 
-                const response = await fetch('/api/dependencies');
+                const response = await fetch('api/dependencies');
                 if (!response.ok) {
                     throw new Error('加载数据失败: ' + response.statusText);
                 }
