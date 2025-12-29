@@ -85,6 +85,75 @@
             border-color: #667eea;
         }
         
+        .search-container {
+            position: relative;
+            display: inline-block;
+        }
+        
+        .controls input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            font-size: 14px;
+            width: 200px;
+        }
+        
+        .controls input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .controls input[type="text"]::placeholder {
+            color: #999;
+        }
+        
+        .search-suggestions {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background: white;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            display: none;
+        }
+        
+        .search-suggestion-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 13px;
+        }
+        
+        .search-suggestion-item:hover {
+            background: #f5f5f5;
+        }
+        
+        .search-suggestion-item:last-child {
+            border-bottom: none;
+        }
+        
+        .search-suggestion-label {
+            font-weight: 500;
+            color: #333;
+        }
+        
+        .search-suggestion-id {
+            font-size: 11px;
+            color: #999;
+            margin-top: 2px;
+        }
+        
+        .search-suggestion-item.highlighted {
+            background: #e3f2fd;
+        }
+        
         .container {
             display: flex;
             height: calc(100vh - 140px);
@@ -221,6 +290,15 @@
             <option value="force">力导向布局</option>
             <option value="circular">圆形布局</option>
         </select>
+        <div class="search-container">
+            <input type="text" id="node-search" placeholder="搜索节点名称或ID..." 
+                   onkeyup="handleSearchKeyup(event)" 
+                   oninput="handleSearchInput(event)"
+                   onfocus="handleSearchFocus(event)"
+                   onblur="handleSearchBlur(event)">
+            <div id="search-suggestions" class="search-suggestions"></div>
+        </div>
+        <button id="btn-reset-filter" onclick="resetFilter()" style="display: none;" title="清除过滤并显示所有节点">重置过滤</button>
         <div class="info" id="info">加载中...</div>
     </div>
     
@@ -284,6 +362,17 @@
                         • 圆形布局：节点呈圆形排列
                     </div>
                 </div>
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #e0e0e0;">
+                    <div style="font-size: 12px; color: #666; margin-bottom: 5px;">
+                        <strong>搜索过滤：</strong>
+                    </div>
+                    <div style="font-size: 11px; color: #888; line-height: 1.6;">
+                        • 双击节点：自动过滤该节点及其依赖关系<br>
+                        • 搜索框：输入节点名称，从下拉列表中选择<br>
+                        • 按 Enter：直接过滤第一个匹配的节点<br>
+                        • 重置按钮：清除过滤，显示所有节点
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -293,6 +382,9 @@
         let data = null;
         let currentView = 'providers';
         let currentLayout = 'hierarchical';
+        let allNodes = []; // 存储所有节点（用于过滤）
+        let allEdges = []; // 存储所有边（用于过滤）
+        let filteredNodeId = null; // 当前过滤的节点ID
         
         // HTML 转义函数
         function escapeHtml(text) {
@@ -300,6 +392,137 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+        
+        // 格式化类型名称，包含包名但保持合理长度
+        function formatTypeLabel(typeStr, maxLength) {
+            if (!typeStr || typeof typeStr !== 'string') return typeStr;
+            
+            // 如果不包含点号，直接返回
+            if (!typeStr.includes('.')) return typeStr;
+            
+            // 如果指定了最大长度且类型名不超过，直接返回完整名称
+            if (!maxLength || typeStr.length <= maxLength) return typeStr;
+            
+            // 拆分包名和类型名
+            const parts = typeStr.split('.');
+            const typeName = parts[parts.length - 1];
+            const packageParts = parts.slice(0, -1);
+            
+            // 如果类型名本身就超过了限制，直接截断类型名
+            if (typeName.length > maxLength) {
+                return typeName.substring(0, maxLength - 3) + '...';
+            }
+            
+            // 尝试显示包名的最后一部分 + 类型名
+            // 例如：github.com/pubgo/dix/v2/pkg.Type -> pkg.Type
+            if (packageParts.length === 0) {
+                return typeName;
+            }
+            
+            // 从后往前尝试添加包名部分，最多显示最后两个包名部分
+            let result = typeName;
+            const partsToTry = Math.min(2, packageParts.length); // 最多显示最后2个包名部分
+            
+            for (let i = packageParts.length - partsToTry; i < packageParts.length; i++) {
+                if (i < 0) continue;
+                const part = packageParts[i];
+                const candidate = part + '.' + result;
+                
+                if (candidate.length <= maxLength) {
+                    result = candidate;
+                } else {
+                    // 如果加上当前包名部分超过限制，添加省略号并返回
+                    return '...' + result;
+                }
+            }
+            
+            // 如果还有更多包名部分，添加省略号
+            if (packageParts.length > partsToTry) {
+                return '...' + result;
+            }
+            
+            return result;
+        }
+        
+        // 格式化函数名，包含包名但保持合理长度
+        function formatFunctionLabel(fnName, maxLength) {
+            if (!fnName || typeof fnName !== 'string' || fnName === 'unknown') return 'unknown';
+            
+            // 如果不包含点号，直接返回
+            if (!fnName.includes('.')) return fnName;
+            
+            // 如果指定了最大长度且函数名不超过，直接返回完整名称
+            if (!maxLength || fnName.length <= maxLength) return fnName;
+            
+            // 处理 (*Type).method 格式
+            // 例如：github.com/pubgo/dix/pkg.(*Service).Method
+            let methodName = null;
+            let typeName = null;
+            let functionName = fnName;
+            
+            // 检查是否是方法格式 (*Type).method 或 (*pkg.Type).method
+            const methodPattern = /\(([^)]+)\)\.(\w+)$/;
+            const match = fnName.match(methodPattern);
+            if (match) {
+                methodName = match[2]; // 方法名，例如 "Method"
+                const typePart = match[1]; // 类型部分，例如 "*Service" 或 "*pkg.Service"
+                // 从类型部分提取类型名（去掉 * 和包名）
+                typeName = typePart.replace(/^\*/, ''); // 去掉 *
+                if (typeName.includes('.')) {
+                    typeName = typeName.split('.').pop(); // 只保留最后的类型名
+                }
+                // 提取方法名前的部分（包名）
+                functionName = fnName.substring(0, match.index);
+            }
+            
+            // 拆分包名和函数名
+            const parts = functionName.split('.');
+            const packageParts = parts.length > 0 ? parts : [];
+            
+            // 构建最终的函数名
+            let finalFuncName;
+            if (methodName && typeName) {
+                // 如果是方法，格式为：Type.Method
+                finalFuncName = typeName + '.' + methodName;
+            } else {
+                // 如果是普通函数，使用最后一个部分作为函数名
+                finalFuncName = packageParts.length > 0 ? packageParts[packageParts.length - 1] : fnName;
+            }
+            
+            // 如果函数名本身就超过了限制，直接截断
+            if (finalFuncName.length > maxLength) {
+                return finalFuncName.substring(0, maxLength - 3) + '...';
+            }
+            
+            // 尝试显示包名的最后一部分 + 函数名
+            if (packageParts.length === 0) {
+                return finalFuncName;
+            }
+            
+            // 从后往前尝试添加包名部分，最多显示最后两个包名部分
+            let result = finalFuncName;
+            const partsToTry = Math.min(2, packageParts.length);
+            
+            for (let i = packageParts.length - partsToTry; i < packageParts.length; i++) {
+                if (i < 0) continue;
+                const part = packageParts[i];
+                const candidate = part + '.' + result;
+                
+                if (candidate.length <= maxLength) {
+                    result = candidate;
+                } else {
+                    // 如果加上当前包名部分超过限制，添加省略号并返回
+                    return '...' + result;
+                }
+            }
+            
+            // 如果还有更多包名部分，添加省略号
+            if (packageParts.length > partsToTry) {
+                return '...' + result;
+            }
+            
+            return result;
         }
         
         // 计算节点的层级（基于依赖深度）
@@ -492,7 +715,19 @@
                 layout: layoutConfig,
                 physics: physicsConfig,
                 edges: {
-                    smooth: smoothConfig
+                    smooth: smoothConfig,
+                    font: {
+                        size: 12,
+                        align: 'middle',
+                        strokeWidth: 3,
+                        strokeColor: '#ffffff',
+                        color: '#333333',
+                        face: 'Arial',
+                        bold: true,
+                        vadjust: 0
+                    },
+                    labelHighlightBold: true,
+                    selectionWidth: 3
                 }
             });
             
@@ -631,9 +866,17 @@
                     },
                     width: 2,
                     font: {
-                        size: 10,
-                        align: 'middle'
-                    }
+                        size: 12,
+                        align: 'middle',
+                        strokeWidth: 3,
+                        strokeColor: '#ffffff',
+                        color: '#333333',
+                        face: 'Arial',
+                        bold: true,
+                        vadjust: 0
+                    },
+                    labelHighlightBold: true,
+                    selectionWidth: 3
                 },
                 physics: physicsConfig,
                 interaction: {
@@ -661,6 +904,34 @@
                     }
                 }
             });
+            
+            // 双击节点进行过滤
+            network.on("doubleClick", function(params) {
+                if (params.nodes.length > 0) {
+                    const nodeId = params.nodes[0];
+                    const node = data.nodes.get(nodeId);
+                    if (node) {
+                        // 从 allNodes 中找到对应的节点（包含完整信息）
+                        const fullNode = allNodes.find(n => n.id === nodeId);
+                        if (fullNode) {
+                            // 更新搜索框
+                            const searchInput = document.getElementById('node-search');
+                            if (searchInput) {
+                                searchInput.value = fullNode.label || fullNode.id;
+                            }
+                            // 应用过滤
+                            applyNodeFilter(fullNode);
+                        } else {
+                            // 如果没有找到完整节点，使用当前节点信息
+                            const searchInput = document.getElementById('node-search');
+                            if (searchInput) {
+                                searchInput.value = node.label || node.id;
+                            }
+                            applyNodeFilter(node);
+                        }
+                    }
+                }
+            });
         }
         
         // 加载数据
@@ -669,7 +940,7 @@
                 document.getElementById('loading').style.display = 'block';
                 document.getElementById('error').style.display = 'none';
                 
-                const response = await fetch('/api/dependencies');
+                const response = await fetch('api/dependencies');
                 if (!response.ok) {
                     throw new Error('加载数据失败: ' + response.statusText);
                 }
@@ -696,6 +967,13 @@
             if (!data) {
                 loadData();
                 return;
+            }
+            
+            // 切换视图时清除过滤状态
+            if (currentView !== view) {
+                filteredNodeId = null;
+                document.getElementById('node-search').value = '';
+                document.getElementById('btn-reset-filter').style.display = 'none';
             }
             
             currentView = view;
@@ -740,45 +1018,21 @@
                     const inputTypes = provider.input_types || provider.inputTypes || [];
                     const outputType = provider.output_type || provider.outputType || 'unknown';
 
-                    // 提取函数名
-                    let fnLabel = 'unknown';
-                    if (typeof fnName === 'string' && fnName.length > 0 && fnName !== 'unknown') {
-                        const parts = fnName.split('.');
-                        if (parts.length > 0) {
-                            let lastPart = parts[parts.length - 1];
-                            if (lastPart.includes('(') && lastPart.includes(')')) {
-                                const methodMatch = lastPart.match(/\)\.(\w+)$/);
-                                if (methodMatch) {
-                                    lastPart = methodMatch[1];
-                                }
-                            }
-                            fnLabel = lastPart;
-                        }
-                    }
+                    // 格式化函数名（包含包名）
+                    const fnLabel = formatFunctionLabel(fnName, 35);
 
-                    // 简化类型名称
-                    const simplifyType = (typeStr) => {
-                        if (!typeStr || typeof typeStr !== 'string') return typeStr;
-                        if (typeStr.includes('.')) {
-                            return typeStr.split('.').pop();
-                        }
-                        return typeStr;
-                    };
-
-                    // 构建简洁的标签
-                    const outputLabel = simplifyType(outputType);
+                    // 构建标签，使用格式化类型名称（包含包名）
+                    const outputLabel = formatTypeLabel(outputType, 30);
                     let label = fnLabel;
-                    const maxFnNameLength = 25;
-                    if (label.length > maxFnNameLength) {
-                        label = label.substring(0, maxFnNameLength) + '...';
-                    }
+                    
                     if (outputType !== 'unknown' && outputLabel) {
-                        let shortOutput = outputLabel;
-                        const maxTypeLength = 20;
-                        if (shortOutput.length > maxTypeLength) {
-                            shortOutput = shortOutput.substring(0, maxTypeLength) + '...';
-                        }
-                        label = label + ' → ' + shortOutput;
+                        label = label + ' → ' + outputLabel;
+                    }
+                    
+                    // 如果标签太长，截断
+                    const maxLabelLength = 60;
+                    if (label.length > maxLabelLength) {
+                        label = label.substring(0, maxLabelLength - 3) + '...';
                     }
 
                     // 构建标题
@@ -838,7 +1092,6 @@
                                         to: providerB.id,
                                         label: '提供',
                                         color: { color: '#4CAF50' },
-                                        font: { align: 'middle' },
                                         title: 'Provider A 的输出类型被 Provider B 使用'
                                     });
                                 }
@@ -858,60 +1111,22 @@
                         const inputTypes = provider.input_types || provider.inputTypes || [];
                         const outputType = provider.output_type || 'unknown';
                         
-                        // 提取函数名（去掉包名，只保留函数名）
-                        let fnLabel = 'unknown';
-                        if (typeof fnName === 'string' && fnName.length > 0 && fnName !== 'unknown') {
-                            // 处理格式：package.function 或 package.(*Type).method
-                            const parts = fnName.split('.');
-                            if (parts.length > 0) {
-                                // 取最后一部分，如果是方法则去掉类型部分
-                                let lastPart = parts[parts.length - 1];
-                                // 处理 (*Type).method 格式
-                                if (lastPart.includes('(') && lastPart.includes(')')) {
-                                    const methodMatch = lastPart.match(/\)\.(\w+)$/);
-                                    if (methodMatch) {
-                                        lastPart = methodMatch[1];
-                                    }
-                                }
-                                fnLabel = lastPart;
-                            }
-                        }
+                        // 格式化函数名（包含包名）
+                        const fnLabel = formatFunctionLabel(fnName, 35);
                         
-                        // 简化类型名称（去掉包名）
-                        const simplifyType = (typeStr) => {
-                            if (!typeStr || typeof typeStr !== 'string') return typeStr;
-                            if (typeStr.includes('.')) {
-                                return typeStr.split('.').pop();
-                            }
-                            return typeStr;
-                        };
-                        
-                        // 构建节点标签：只显示简洁的函数名和输出类型
-                        // 不使用换行符，保持标签简洁
-                        const outputLabel = simplifyType(outputType);
+                        // 构建节点标签：显示函数名和输出类型（包含包名）
+                        const outputLabel = formatTypeLabel(outputType, 30);
                         let label = fnLabel;
                         
-                        // 如果函数名太长，截断
-                        const maxFnNameLength = 20;
-                        if (label.length > maxFnNameLength) {
-                            label = label.substring(0, maxFnNameLength) + '...';
-                        }
-                        
-                        // 添加输出类型（简洁形式）
+                        // 添加输出类型
                         if (outputType !== 'unknown' && outputLabel) {
-                            // 如果输出类型名太长，也截断
-                            let shortOutput = outputLabel;
-                            const maxTypeLength = 15;
-                            if (shortOutput.length > maxTypeLength) {
-                                shortOutput = shortOutput.substring(0, maxTypeLength) + '...';
-                            }
-                            label = label + ' → ' + shortOutput;
+                            label = label + ' → ' + outputLabel;
                         }
                         
-                        // 如果标签还是太长，进一步截断
-                        const maxLabelLength = 40;
+                        // 如果标签太长，截断
+                        const maxLabelLength = 60;
                         if (label.length > maxLabelLength) {
-                            label = label.substring(0, maxLabelLength) + '...';
+                            label = label.substring(0, maxLabelLength - 3) + '...';
                         }
                         
                         // 构建完整的标题信息（使用格式化文本）
@@ -949,9 +1164,7 @@
                     // 添加输出类型节点
                     const outputType = provider.output_type || 'unknown';
                     if (outputType && !nodeMap.has(outputType)) {
-                        const label = (typeof outputType === 'string' && outputType.includes('.')) 
-                            ? outputType.split('.').pop() 
-                            : outputType;
+                        const label = formatTypeLabel(outputType, 40);
                         let outputTitle = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
                         outputTitle += '输出类型\n';
                         outputTitle += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
@@ -972,15 +1185,12 @@
                     
                     // 添加从 Provider 到输出类型的边（显示输出类型信息）
                     if (provider.id && outputType) {
-                        const outputLabel = outputType.includes('.') 
-                            ? outputType.split('.').pop() 
-                            : outputType;
+                        const outputLabel = formatTypeLabel(outputType, 25);
                         edges.push({
                             from: provider.id,
                             to: outputType,
                             label: '输出: ' + outputLabel,
-                            color: { color: '#4CAF50' },
-                            font: { align: 'middle' }
+                            color: { color: '#4CAF50' }
                         });
                     }
                     
@@ -990,9 +1200,7 @@
                             if (!inputType || typeof inputType !== 'string') return;
                             
                             if (!nodeMap.has(inputType)) {
-                                const label = inputType.includes('.') 
-                                    ? inputType.split('.').pop() 
-                                    : inputType;
+                                const label = formatTypeLabel(inputType, 40);
                                 let inputTitle = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
                                 inputTitle += '输入类型\n';
                                 inputTitle += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
@@ -1013,15 +1221,12 @@
                             
                             // 添加从输入类型到输出类型的边（显示依赖关系）
                             if (inputType && outputType) {
-                                const inputLabel = inputType.includes('.') 
-                                    ? inputType.split('.').pop() 
-                                    : inputType;
+                                const inputLabel = formatTypeLabel(inputType, 25);
                                 edges.push({
                                     from: inputType,
                                     to: outputType,
                                     label: '依赖',
                                     color: { color: '#9E9E9E' },
-                                    font: { align: 'middle' },
                                     // 如果是多个输入，可以添加序号
                                     title: '输入 ' + (index + 1) + ': ' + inputType
                                 });
@@ -1029,15 +1234,12 @@
                             
                             // 也可以添加从输入类型到 Provider 的边，更清晰地显示依赖
                             if (inputType && provider.id) {
-                                const inputLabel = inputType.includes('.') 
-                                    ? inputType.split('.').pop() 
-                                    : inputType;
+                                const inputLabel = formatTypeLabel(inputType, 25);
                                 edges.push({
                                     from: inputType,
                                     to: provider.id,
                                     label: '输入',
                                     color: { color: '#FF9800' },
-                                    font: { align: 'middle' },
                                     dashes: true, // 使用虚线表示输入依赖
                                     title: '输入参数: ' + inputType
                                 });
@@ -1089,9 +1291,7 @@
                     const objGroup = object.group || 'default';
                     
                     if (!nodeMap.has(object.id)) {
-                        const typeLabel = (typeof objType === 'string' && objType.includes('.')) 
-                            ? objType.split('.').pop() 
-                            : objType;
+                        const typeLabel = formatTypeLabel(objType, 40);
                         let objectTitle = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n';
                         objectTitle += 'Object 实例\n';
                         objectTitle += '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n';
@@ -1138,25 +1338,38 @@
                             nodeMap.set('edge_' + edgeKey, true);
                             
                             // 添加从 objectB 到 objectA 的边（B 被 A 依赖）
-                            const typeBLabel = (typeof objectB.type === 'string' && objectB.type.includes('.')) 
-                                ? objectB.type.split('.').pop() 
-                                : objectB.type;
-                            const typeALabel = (typeof typeA === 'string' && typeA.includes('.')) 
-                                ? typeA.split('.').pop() 
-                                : typeA;
+                            const typeBLabel = formatTypeLabel(objectB.type, 25);
+                            const typeALabel = formatTypeLabel(typeA, 25);
                             
                             edges.push({
                                 from: objectB.id,
                                 to: objectA.id,
                                 label: '依赖',
                                 color: { color: '#9E9E9E' },
-                                font: { align: 'middle' },
                                 dashes: false,
                                 title: typeBLabel + ' → ' + typeALabel + '\\n类型依赖关系'
                             });
                         });
                     });
                 });
+            }
+            
+            // 保存所有节点和边的深拷贝（用于过滤功能）
+            allNodes = JSON.parse(JSON.stringify(nodes));
+            allEdges = JSON.parse(JSON.stringify(edges));
+            
+            // 如果当前有过滤，重新应用过滤
+            if (filteredNodeId) {
+                const targetNode = allNodes.find(node => node.id === filteredNodeId);
+                if (targetNode) {
+                    applyNodeFilter(targetNode);
+                    return;
+                } else {
+                    // 如果在新视图中找不到目标节点，清除过滤
+                    filteredNodeId = null;
+                    document.getElementById('node-search').value = '';
+                    document.getElementById('btn-reset-filter').style.display = 'none';
+                }
             }
             
             // 更新信息
@@ -1188,6 +1401,260 @@
             } else {
                 initNetwork(nodes, edges);
             }
+        }
+        
+        // 搜索节点
+        function handleSearchKeyup(event) {
+            if (event.key === 'Enter') {
+                const searchValue = event.target.value.trim();
+                if (searchValue) {
+                    filterByNode(searchValue);
+                    hideSearchSuggestions();
+                } else {
+                    resetFilter();
+                }
+            } else if (event.key === 'Escape') {
+                hideSearchSuggestions();
+            }
+        }
+        
+        // 处理搜索输入（实时显示建议）
+        function handleSearchInput(event) {
+            const searchValue = event.target.value.trim();
+            if (searchValue.length === 0) {
+                hideSearchSuggestions();
+                return;
+            }
+            
+            if (!allNodes || allNodes.length === 0) {
+                return;
+            }
+            
+            // 查找匹配的节点（最多显示10个）
+            const matchedNodes = allNodes.filter(node => {
+                const nodeId = node.id.toLowerCase();
+                const nodeLabel = (node.label || '').toLowerCase();
+                const searchLower = searchValue.toLowerCase();
+                return nodeId.includes(searchLower) || nodeLabel.includes(searchLower);
+            }).slice(0, 10);
+            
+            showSearchSuggestions(matchedNodes, searchValue);
+        }
+        
+        // 处理搜索框获得焦点
+        function handleSearchFocus(event) {
+            const searchValue = event.target.value.trim();
+            if (searchValue.length > 0 && allNodes && allNodes.length > 0) {
+                const matchedNodes = allNodes.filter(node => {
+                    const nodeId = node.id.toLowerCase();
+                    const nodeLabel = (node.label || '').toLowerCase();
+                    const searchLower = searchValue.toLowerCase();
+                    return nodeId.includes(searchLower) || nodeLabel.includes(searchLower);
+                }).slice(0, 10);
+                showSearchSuggestions(matchedNodes, searchValue);
+            }
+        }
+        
+        // 处理搜索框失去焦点（延迟隐藏，以便点击建议项）
+        function handleSearchBlur(event) {
+            setTimeout(() => {
+                hideSearchSuggestions();
+            }, 200);
+        }
+        
+        // 显示搜索建议
+        function showSearchSuggestions(nodes, searchValue) {
+            const suggestionsDiv = document.getElementById('search-suggestions');
+            if (!suggestionsDiv) return;
+            
+            if (nodes.length === 0) {
+                suggestionsDiv.innerHTML = '<div class="search-suggestion-item" style="color: #999; cursor: default;">未找到匹配的节点</div>';
+                suggestionsDiv.style.display = 'block';
+                return;
+            }
+            
+            const searchLower = searchValue.toLowerCase();
+            // 清空之前的建议
+            suggestionsDiv.innerHTML = '';
+            
+            nodes.forEach(node => {
+                const label = node.label || node.id;
+                const id = node.id;
+                
+                // 创建建议项元素
+                const itemDiv = document.createElement('div');
+                itemDiv.className = 'search-suggestion-item';
+                itemDiv.onclick = () => selectSearchSuggestion(id);
+                
+                // 高亮匹配的文本
+                const labelDiv = document.createElement('div');
+                labelDiv.className = 'search-suggestion-label';
+                if (label.toLowerCase().includes(searchLower)) {
+                    const index = label.toLowerCase().indexOf(searchLower);
+                    const before = escapeHtml(label.substring(0, index));
+                    const match = escapeHtml(label.substring(index, index + searchValue.length));
+                    const after = escapeHtml(label.substring(index + searchValue.length));
+                    labelDiv.innerHTML = before + '<strong>' + match + '</strong>' + after;
+                } else {
+                    labelDiv.textContent = label;
+                }
+                
+                const idDiv = document.createElement('div');
+                idDiv.className = 'search-suggestion-id';
+                idDiv.textContent = id;
+                
+                itemDiv.appendChild(labelDiv);
+                itemDiv.appendChild(idDiv);
+                suggestionsDiv.appendChild(itemDiv);
+            });
+            
+            suggestionsDiv.style.display = 'block';
+        }
+        
+        // 隐藏搜索建议
+        function hideSearchSuggestions() {
+            const suggestionsDiv = document.getElementById('search-suggestions');
+            if (suggestionsDiv) {
+                suggestionsDiv.style.display = 'none';
+            }
+        }
+        
+        // 选择搜索建议
+        function selectSearchSuggestion(nodeId) {
+            if (!allNodes || allNodes.length === 0) {
+                return;
+            }
+            
+            const node = allNodes.find(n => n.id === nodeId);
+            if (node) {
+                const searchInput = document.getElementById('node-search');
+                if (searchInput) {
+                    searchInput.value = node.label || node.id;
+                }
+                applyNodeFilter(node);
+                hideSearchSuggestions();
+            }
+        }
+        
+        // 根据节点名称或ID过滤
+        function filterByNode(searchValue) {
+            if (!allNodes || allNodes.length === 0) {
+                return;
+            }
+            
+            // 查找匹配的节点（支持按ID或标签匹配）
+            const matchedNodes = allNodes.filter(node => {
+                const nodeId = node.id.toLowerCase();
+                const nodeLabel = (node.label || '').toLowerCase();
+                const searchLower = searchValue.toLowerCase();
+                return nodeId.includes(searchLower) || nodeLabel.includes(searchLower);
+            });
+            
+            if (matchedNodes.length === 0) {
+                alert('未找到匹配的节点: ' + searchValue);
+                hideSearchSuggestions();
+                return;
+            }
+            
+            // 使用第一个匹配的节点
+            const targetNode = matchedNodes[0];
+            applyNodeFilter(targetNode);
+            hideSearchSuggestions();
+        }
+        
+        // 应用节点过滤
+        function applyNodeFilter(targetNode) {
+            if (!targetNode || !allNodes || allNodes.length === 0) {
+                return;
+            }
+            
+            filteredNodeId = targetNode.id;
+            
+            // 更新搜索框的值（显示节点标签）
+            const searchInput = document.getElementById('node-search');
+            if (searchInput) {
+                searchInput.value = targetNode.label || targetNode.id;
+            }
+            
+            // 显示重置按钮
+            document.getElementById('btn-reset-filter').style.display = 'inline-block';
+            
+            // 找到所有直接相关的节点和边
+            const relatedNodeIds = new Set([targetNode.id]);
+            
+            // 找到所有相关的边（以目标节点为起点或终点的边）
+            allEdges.forEach(edge => {
+                const isFromTarget = edge.from === targetNode.id;
+                const isToTarget = edge.to === targetNode.id;
+                
+                if (isFromTarget || isToTarget) {
+                    relatedNodeIds.add(edge.from);
+                    relatedNodeIds.add(edge.to);
+                }
+            });
+            
+            // 过滤节点和边
+            const filteredNodes = allNodes.filter(node => relatedNodeIds.has(node.id));
+            
+            // 过滤边，只保留两个端点都在过滤节点中的边
+            const filteredEdges = allEdges.filter(edge => 
+                relatedNodeIds.has(edge.from) && relatedNodeIds.has(edge.to)
+            );
+            
+            // 更新网络图
+            if (network) {
+                // 创建节点副本以避免修改原始数据
+                const nodesToDisplay = filteredNodes.map(node => {
+                    const nodeCopy = JSON.parse(JSON.stringify(node));
+                    // 高亮目标节点
+                    if (nodeCopy.id === targetNode.id) {
+                        nodeCopy.color = {
+                            background: '#FFD54F',
+                            border: '#F57F17',
+                            highlight: {
+                                background: '#FFD54F',
+                                border: '#F57F17'
+                            }
+                        };
+                    }
+                    return nodeCopy;
+                });
+                
+                // 重新计算层级
+                const levels = calculateLevels(nodesToDisplay, filteredEdges);
+                nodesToDisplay.forEach(node => {
+                    const level = levels.get(node.id) || 0;
+                    if (node.id !== targetNode.id) {
+                        const colorInfo = getColorByLevel(level, node.group);
+                        node.color = {
+                            background: colorInfo.bg,
+                            border: colorInfo.border,
+                            highlight: {
+                                background: '#FFD54F',
+                                border: '#F57F17'
+                            }
+                        };
+                    }
+                    node.level = level;
+                });
+                
+                network.setData({ nodes: nodesToDisplay, edges: filteredEdges });
+                applyLayout(network, currentLayout);
+                
+                // 更新信息
+                document.getElementById('info').textContent = 
+                    '节点: ' + filteredNodes.length + ' | 边: ' + filteredEdges.length + ' (已过滤)';
+            }
+        }
+        
+        // 重置过滤
+        function resetFilter() {
+            filteredNodeId = null;
+            document.getElementById('node-search').value = '';
+            document.getElementById('btn-reset-filter').style.display = 'none';
+            
+            // 重新加载视图以显示所有节点
+            loadView(currentView);
         }
         
         // 页面加载时初始化
