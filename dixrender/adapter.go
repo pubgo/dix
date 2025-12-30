@@ -18,7 +18,7 @@ func NewDixAdapter(dix *dixinternal.Dix) DixAccessor {
 
 // providerFnWrapper wraps dixinternal's providerFn to implement dixrender.ProviderFnAccessor
 type providerFnWrapper struct {
-	providerFn interface{} // *dixinternal.providerFn (unexported type)
+	providerFn any // *dixinternal.providerFn (unexported type)
 }
 
 func (w *providerFnWrapper) GetFn() reflect.Value {

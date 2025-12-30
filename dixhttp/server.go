@@ -30,8 +30,8 @@ func NewServer(dix *dixinternal.Dix) *Server {
 
 // setupRoutes configures all HTTP routes
 func (s *Server) setupRoutes() {
-	s.mux.HandleFunc("/", s.handleIndex)
-	s.mux.HandleFunc("/api/dependencies", s.handleDependencies)
+	s.mux.HandleFunc("/", s.HandleIndex)
+	s.mux.HandleFunc("/api/dependencies", s.HandleDependencies)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -44,15 +44,15 @@ func (s *Server) ListenAndServe(addr string) error {
 	return http.ListenAndServe(addr, s)
 }
 
-// handleIndex serves the HTML visualization page
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+// HandleIndex serves the HTML visualization page
+func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, htmlTemplate)
 }
 
-// handleDependencies returns JSON data about providers and objects relationships
-func (s *Server) handleDependencies(w http.ResponseWriter, r *http.Request) {
+// HandleDependencies returns JSON data about providers and objects relationships
+func (s *Server) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 	data := s.extractDependencyData()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
