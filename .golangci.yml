@@ -1,4 +1,6 @@
 version: "2"
+issues:
+  fix: true
 linters:
   default: none
   enable:
@@ -10,8 +12,7 @@ linters:
       - legacy
       - std-error-handling
     paths:
-      - internal/example
-      - cmds
+      - internal/examples
       - vendor
       - third_party$
       - builtin$
@@ -20,11 +21,24 @@ formatters:
   enable:
     - goimports
     - gofmt
+    - gofumpt
+  settings:
+    gofumpt:
+      extra-rules: true
+    goimports:
+      local-prefixes:
+        - github.com/pubgo/dix
+    gofmt:
+      simplify: false
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+        - pattern: 'a[b:len(a)]'
+          replacement: 'a[b:]'
+
   exclusions:
     paths:
-      - internal/example
-      - cmds
+      - internal/examples
       - vendor
-      - third_party$
-      - builtin$
       - examples$
+      - proto

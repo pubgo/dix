@@ -14,7 +14,7 @@ func getLogPackage() slog.Attr {
 }
 
 func createDefaultLogger() *slog.Logger {
-	var logOpt = &tint.Options{Level: slog.LevelInfo, AddSource: true}
+	logOpt := &tint.Options{Level: slog.LevelInfo, AddSource: true}
 	return slog.New(tint.NewHandler(os.Stderr, logOpt)).With(getLogPackage())
 }
 

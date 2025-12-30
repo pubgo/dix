@@ -23,11 +23,11 @@ func NewDotRenderer() *DotRenderer {
 }
 
 // Writef writes a formatted string to the renderer buffer
-func (d *DotRenderer) Writef(format string, args ...interface{}) {
+func (d *DotRenderer) Writef(format string, args ...any) {
 	_, _ = fmt.Fprintf(d.Buf, d.indent+format+"\n", args...)
 }
 
-func (d *DotRenderer) writef(format string, args ...interface{}) {
+func (d *DotRenderer) writef(format string, args ...any) {
 	d.Writef(format, args...)
 }
 
