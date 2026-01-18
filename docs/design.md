@@ -12,6 +12,8 @@
 *   **高级类型支持**：支持 `Interface`、`Map`、`Slice` 等集合类型的自动聚合注入。
 *   **循环依赖检测**：内置图算法检测循环依赖。
 *   **可视化**：支持生成 DOT 格式的依赖图。
+*   **方法注入**：支持通过 `DixInject` 前缀方法进行 Setter 注入。
+*   **分组管理**：支持依赖项按命名空间进行分组管理。
 
 ## 2. 核心架构 (Core Architecture)
 
@@ -153,7 +155,7 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 
 ### 3.4 错误处理 (Error Handling)
 
-使用了 `github.com/pubgo/funk/v2` 库进行错误包装。
+使用了日志系统进行错误记录。
 *   **上下文丰富**: 错误信息中包含了堆栈跟踪（Stack Trace）、Provider 函数名、参数类型等详细信息，便于调试。
 *   **Panic 捕获**: 在执行用户代码（Provider 函数）时，使用 `defer recovery` 机制捕获 Panic，防止整个应用崩溃，并将其转化为 Error 返回。
 
@@ -162,6 +164,17 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 `dix` 提供了 `Graph()` 方法，利用 `DotRenderer` 生成 Graphviz DOT 格式的文本。
 *   **Provider Graph**: 展示 Provider 函数之间的调用关系。
 *   **Object Graph**: 展示实际实例化对象之间的引用关系。
+
+### 3.6 扩展模块 (Extension Modules)
+
+#### 3.6.1 全局容器 (Global Container)
+`dixglobal` 包提供了全局的容器实例，方便在应用程序的不同部分共享同一个容器。
+
+#### 3.6.2 上下文支持 (Context Support)
+`dixcontext` 包提供了将容器实例存储在 context 中的功能，便于在请求链路中传递容器。
+
+#### 3.6.3 HTTP 可视化 (HTTP Visualization)
+`dixhttp` 包提供了 HTTP 服务器，用于可视化展示依赖关系图，支持在浏览器中交互式查看依赖结构。
 
 ## 4. 模块划分 (Module Breakdown)
 
@@ -172,9 +185,13 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 | `provider.go` | 定义 `providerFn` 结构，封装反射调用的细节，处理函数调用的输入输出转换。 |
 | `util.go` | 工具函数集合，包括反射创建 Map/Slice (`makeMap`, `makeList`)，输出类型处理 (`handleOutput`)，以及图构建逻辑。 |
 | `cycle-check.go` | 专门负责循环依赖检测的逻辑。 |
-| `renderer.go` | 负责将内部依赖关系渲染为 DOT 字符串。 |
+| `logger.go` | 日志系统集成，提供结构化日志输出。 |
 | `option.go` | 配置选项模式实现（如 `WithValuesNull`）。 |
+| `dixrender/` | 依赖关系图渲染模块，负责将内部依赖关系渲染为 DOT 字符串。 |
+| `dixglobal/` | 全局容器模块，提供单例容器实例。 |
+| `dixcontext/` | Context 集成模块，支持将容器存储在 context 中。 |
+| `dixhttp/` | HTTP 可视化模块，提供 Web 界面展示依赖关系。 |
 
 ## 5. 总结
 
-`dix` 是一个功能完备的 Go 依赖注入容器。它通过反射牺牲了一定的运行时性能（但在初始化阶段通常可接受），换取了极大的开发灵活性。其设计亮点在于对 Go 语言特性的充分利用（如多返回值处理 error，结构体字段标签等）以及对集合类型注入的优雅支持。
+`dix` 是一个功能完备的 Go 依赖注入容器。它通过反射牺牲了一定的运行时性能（但在初始化阶段通常可接受），换取了极大的开发灵活性。其设计亮点在于对 Go 语言特性的充分利用（如多返回值处理 error，结构体字段标签等）以及对集合类型注入的优雅支持。此外，框架还提供了丰富的扩展功能，包括全局容器、上下文集成和可视化工具，使其成为一个完整的依赖注入解决方案。
