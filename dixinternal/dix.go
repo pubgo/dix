@@ -328,15 +328,42 @@ func (dix *Dix) injectStruct(structVal reflect.Value, opt Options) error {
 			continue // Done for this field
 		case reflect.Interface, reflect.Pointer, reflect.Func:
 			val, err = dix.getValue(field.Type, opt, false, false, structType)
+			x.injectStruct(vp.Field(i), opt)
+		case reflect.Interface, reflect.Ptr, reflect.Func:
+			val := x.getValue(field.Type, opt, false, false, vp.Type()).UnwrapErr(&r)
+			if r.IsErr() {
+				return
+			}
+
+			vp.Field(i).Set(val)
 		case reflect.Map:
 			elemType := field.Type.Elem()
 			isList := elemType.Kind() == reflect.Slice
 			if isList {
+<<<<<<< HEAD
 				elemType = elemType.Elem()
 			}
 			val, err = dix.getValue(elemType, opt, true, isList, structType)
 		case reflect.Slice:
 			val, err = dix.getValue(field.Type.Elem(), opt, false, true, structType)
+=======
+				typ = typ.Elem()
+			}
+
+			val := x.getValue(typ, opt, true, isList, vp.Type()).UnwrapErr(&r)
+			if r.IsErr() {
+				return
+			}
+
+			vp.Field(i).Set(val)
+		case reflect.Slice:
+			val := x.getValue(field.Type.Elem(), opt, false, true, vp.Type()).UnwrapErr(&r)
+			if r.IsErr() {
+				return
+			}
+
+			vp.Field(i).Set(val)
+>>>>>>> 9cd235fd3735e42d37c86c83ffeb165de4ff5ef1
 		default:
 			// We do not inject into basic types, so we just continue.
 			logger.Debug("skipping basic type injection", "field", field.Name)
