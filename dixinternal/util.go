@@ -9,7 +9,7 @@ import (
 )
 
 func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
-	val := reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
+	val := reflect.MakeSlice(reflect.SliceOf(typ), 0, len(data))
 	return reflect.Append(val, data...)
 }
 
