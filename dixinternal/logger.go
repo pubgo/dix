@@ -9,15 +9,13 @@ import (
 
 var logger = createDefaultLogger()
 
-func getLogPackage() slog.Attr {
-	return slog.String("package", "dix")
-}
+func getLogPackage() string { return "dix" }
 
 func createDefaultLogger() *slog.Logger {
 	logOpt := &tint.Options{Level: slog.LevelInfo, AddSource: true}
-	return slog.New(tint.NewHandler(os.Stderr, logOpt)).With(getLogPackage())
+	return slog.New(tint.NewHandler(os.Stderr, logOpt)).WithGroup(getLogPackage())
 }
 
 func SetLog(handler slog.Handler) {
-	logger = slog.New(handler).With(getLogPackage())
+	logger = slog.New(handler).WithGroup(getLogPackage())
 }

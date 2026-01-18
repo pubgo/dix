@@ -177,5 +177,57 @@ make vet
 ### Inject()
 注入依赖到目标函数或结构体。
 
+## 扩展功能
+
+### 全局容器
+dix 提供了全局容器，可以通过 `dixglobal` 包直接使用：
+
+```go
+import "github.com/pubgo/dix/v2/dixglobal"
+
+// 注册依赖
+dixglobal.Provide(func() *ServiceA { return &ServiceA{} })
+
+// 注入依赖
+dixglobal.Inject(func(s *ServiceA) {
+    // 使用服务
+})
+```
+
+### 上下文支持
+dix 支持将容器实例存储在 context 中：
+
+```go
+import (
+    "context"
+    "github.com/pubgo/dix/v2/dixcontext"
+)
+
+// 将容器放入上下文
+ctx := dixcontext.Create(context.Background(), container)
+
+// 从上下文中获取容器
+container := dixcontext.Get(ctx)
+```
+
+### HTTP 可视化
+dix 提供了 HTTP 可视化模块，用于图形化展示依赖关系：
+
+```go
+import (
+    "log"
+    "github.com/pubgo/dix/v2/dixhttp"
+)
+
+// 创建 HTTP 服务器
+server := dixhttp.NewServer(container)
+
+// 启动服务器
+log.Println("服务器启动在 http://localhost:8080")
+if err := server.ListenAndServe(":8080"); err != nil {
+    log.Fatal(err)
+}
+```
+
 ## License
 MIT
