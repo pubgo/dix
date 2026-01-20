@@ -37,7 +37,6 @@ func main() {
 	}
 	fmt.Println(arg.C.C)
 	fmt.Println(arg.B.C.C)
-	fmt.Println(dixglobal.Graph())
 
 	dixglobal.Provide(func(a a1, di *dix.Dix, dd map[string][]*dix.Dix) *a2 {
 		fmt.Println(dd)

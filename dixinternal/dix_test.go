@@ -1730,29 +1730,171 @@ func TestProviderFnCall(t *testing.T) {
 	// We'll fix the implementation in provider.go separately if needed.
 }
 
-// Note: Tests for dixrender functionality (DotRenderer, GraphOptions) have been removed
-// from dixinternal tests to avoid circular dependency. These tests should be in dixrender package.
+// ========== Tests for new optimizations ==========
 
-// TestGraphMethods tests the Graph() and GraphWithOptions() functions from dix package
-// Note: Graph methods have been moved to dix package, so we test via dix package
-func TestGraphMethods(t *testing.T) {
-	// Import dix package - this test verifies the integration works
-	// We'll skip detailed testing here since Graph functionality is tested in dixrender
-	// This test just ensures the basic structure works
+// TestTryProvide tests the TryProvide method which returns error instead of panic
+func TestTryProvide(t *testing.T) {
 	d := New()
 
-	// Create a simple provider to generate a non-empty graph
-	type TestType struct {
-		Value string
+	// Test successful provide
+	err := d.TryProvide(func() *testStruct1 {
+		return &testStruct1{}
+	})
+	if err != nil {
+		t.Fatalf("TryProvide should not return error for valid provider, got: %v", err)
 	}
-	d.Provide(func() *TestType {
-		return &TestType{Value: "test"}
+
+	// Test error case: nil provider
+	err = d.TryProvide(nil)
+	if err == nil {
+		t.Fatal("TryProvide should return error for nil provider")
+	}
+
+	// Test error case: non-function provider
+	err = d.TryProvide("not a function")
+	if err == nil {
+		t.Fatal("TryProvide should return error for non-function provider")
+	}
+
+	// Test error case: function with no return value
+	err = d.TryProvide(func() {})
+	if err == nil {
+		t.Fatal("TryProvide should return error for function with no return value")
+	}
+}
+
+// TestTryInject tests the TryInject method which returns error instead of panic
+func TestTryInject(t *testing.T) {
+	d := New()
+
+	type testDep struct{}
+	d.Provide(func() *testDep {
+		return &testDep{}
 	})
 
-	// Note: To test Graph functions, we would need to import dix package
-	// But that would create a circular dependency in tests
-	// So we'll just verify the container works
-	if d == nil {
-		t.Fatal("Failed to create Dix container")
+	// Test successful inject
+	err := d.TryInject(func(dep *testDep) {
+		if dep == nil {
+			t.Fatal("dependency should not be nil")
+		}
+	})
+	if err != nil {
+		t.Fatalf("TryInject should not return error for valid injection, got: %v", err)
+	}
+
+	// Test error case: nil parameter
+	err = d.TryInject(nil)
+	if err == nil {
+		t.Fatal("TryInject should return error for nil parameter")
+	}
+
+	// Test error case: inject function that returns error
+	err = d.TryInject(func(dep *testDep) error {
+		return errors.New("intentional error")
+	})
+	if err == nil {
+		t.Fatal("TryInject should return error when inject function returns error")
+	}
+}
+
+// TestTryInjectCycleDetection tests that TryInject correctly detects cycles
+func TestTryInjectCycleDetection(t *testing.T) {
+	type CycleA struct{}
+	type CycleB struct{}
+	type CycleC struct{}
+
+	d := New()
+	d.Provide(func(*CycleC) *CycleA { return &CycleA{} })
+	d.Provide(func(*CycleA) *CycleB { return &CycleB{} })
+	d.Provide(func(*CycleB) *CycleC { return &CycleC{} })
+
+	err := d.TryInject(func(*CycleA) {})
+	if err == nil {
+		t.Fatal("TryInject should return error for circular dependency")
+	}
+	if !strings.Contains(err.Error(), "circular dependency") {
+		t.Fatalf("error should mention circular dependency, got: %v", err)
+	}
+}
+
+// NOTE: Concurrent tests removed - Dix container is not thread-safe by design.
+// Users should not call Provide/Inject concurrently on the same container.
+
+// TestParseInputType tests the unified parseInputType function
+func TestParseInputType(t *testing.T) {
+	tests := []struct {
+		name     string
+		typ      reflect.Type
+		wantLen  int
+		isMap    bool
+		isList   bool
+		isStruct bool
+	}{
+		{
+			name:    "pointer type",
+			typ:     reflect.TypeOf((*testStruct1)(nil)),
+			wantLen: 1,
+		},
+		{
+			name:    "interface type",
+			typ:     reflect.TypeOf((*testInterface)(nil)).Elem(),
+			wantLen: 1,
+		},
+		{
+			name:    "func type",
+			typ:     reflect.TypeOf(func() {}),
+			wantLen: 1,
+		},
+		{
+			name:     "struct type",
+			typ:      reflect.TypeOf(testStruct1{}),
+			wantLen:  1,
+			isStruct: true,
+		},
+		{
+			name:    "slice type",
+			typ:     reflect.TypeOf([]testInterface{}),
+			wantLen: 1,
+			isList:  true,
+		},
+		{
+			name:    "map type",
+			typ:     reflect.TypeOf(map[string]testInterface{}),
+			wantLen: 1,
+			isMap:   true,
+		},
+		{
+			name:    "map of slice type",
+			typ:     reflect.TypeOf(map[string][]testInterface{}),
+			wantLen: 1,
+			isMap:   true,
+			isList:  true,
+		},
+		{
+			name:    "unsupported type (int)",
+			typ:     reflect.TypeOf(0),
+			wantLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseInputType(tt.typ)
+			if len(result) != tt.wantLen {
+				t.Errorf("parseInputType() returned %d items, want %d", len(result), tt.wantLen)
+				return
+			}
+			if tt.wantLen > 0 {
+				if result[0].isMap != tt.isMap {
+					t.Errorf("isMap = %v, want %v", result[0].isMap, tt.isMap)
+				}
+				if result[0].isList != tt.isList {
+					t.Errorf("isList = %v, want %v", result[0].isList, tt.isList)
+				}
+				if result[0].isStruct != tt.isStruct {
+					t.Errorf("isStruct = %v, want %v", result[0].isStruct, tt.isStruct)
+				}
+			}
+		})
 	}
 }

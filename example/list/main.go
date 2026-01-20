@@ -12,9 +12,6 @@ func main() {
 			fmt.Printf("panic: %v\n", r)
 		}
 	}()
-	defer func() {
-		fmt.Println(dixglobal.Graph())
-	}()
 
 	type handler func() string
 	type handlers []handler
@@ -39,8 +36,6 @@ func main() {
 			return "world next"
 		}
 	})
-
-	fmt.Println(dixglobal.Graph())
 
 	dixglobal.Inject(func(handlers handlers, h handler) {
 		// h为默认的, 最后一个注册的

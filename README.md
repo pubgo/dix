@@ -1,233 +1,271 @@
 # dix
-> dix 是一个依赖注入框架
 
-> dix 参考了 [uber-go/dig](https://github.com/uber-go/dig) 的设计, 它能够完成更加复杂的依赖注入管理和namespace依赖隔离
+[![Go Reference](https://pkg.go.dev/badge/github.com/pubgo/dix/v2.svg)](https://pkg.go.dev/github.com/pubgo/dix/v2)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pubgo/dix)](https://goreportcard.com/report/github.com/pubgo/dix)
 
-## 功能描述
-1. dix 支持依赖循环检测
-2. dix 支持 func, struct, map, list 作为注入参数
-3. dix 支持 map key 作为 namespace 来进行依赖注入的数据隔离
-4. dix 支持 struct 对外提供多组依赖对象
-5. dix 支持 struct 依赖嵌套
-6. dix Inject 支持 func 和 struct 等多种模式进行数据注入
-7. dix 对象提供和注入对于原对象无任何侵入
-8. 详情请看 [test example](./example/struct-in/main.go)
+> **dix** is a lightweight yet powerful dependency injection framework for Go.
 
-## 安装
+Inspired by [uber-go/dig](https://github.com/uber-go/dig), with support for advanced dependency management and namespace isolation.
+
+[中文文档](./README_zh.md)
+
+## ✨ Features
+
+| Feature | Description |
+|---------|-------------|
+| 🔄 **Cycle Detection** | Auto-detect dependency cycles |
+| 📦 **Multiple Injection** | Support func, struct, map, list |
+| 🏷️ **Namespace** | Dependency isolation via map key |
+| 🎯 **Multi-Output** | Struct can provide multiple dependencies |
+| 🪆 **Nested Support** | Support nested struct injection |
+| 🔧 **Non-Invasive** | Zero intrusion to original objects |
+| 🛡️ **Safe API** | `TryProvide`/`TryInject` won't panic |
+| 🌐 **Visualization** | HTTP module for dependency graph |
+
+## 📦 Installation
+
 ```bash
 go get github.com/pubgo/dix/v2
 ```
 
-## 快速开始
+## 🚀 Quick Start
 
-### 创建容器
 ```go
-import "github.com/pubgo/dix/v2/dixinternal"
+package main
 
-// 创建一个新的依赖注入容器
-container := dixinternal.New()
-```
+import (
+    "fmt"
+    "github.com/pubgo/dix/v2"
+)
 
-### 注册依赖
-```go
-// 注册一个简单的构造函数
-container.Provide(func() *MyService {
-    return &MyService{}
-})
-
-// 注册带依赖的构造函数
-container.Provide(func(repo *Repository) *Service {
-    return &Service{Repo: repo}
-})
-```
-
-### 注入依赖
-```go
-// 函数注入
-container.Inject(func(service *Service) {
-    // 使用注入的服务
-    service.DoSomething()
-})
-
-// 结构体注入
-target := &MyStruct{}
-container.Inject(target)
-```
-
-## 核心特性
-
-### 依赖循环检测
-dix 能够自动检测并防止依赖循环，避免程序陷入死循环。
-
-### 多种注入模式
-- **函数注入**: 通过函数参数自动注入依赖
-- **结构体注入**: 自动填充结构体字段
-- **集合注入**: 支持切片和映射类型的依赖注入
-
-### Namespace 隔离
-通过 map 的 key 作为 namespace 实现依赖注入的数据隔离，不同命名空间的依赖互不影响。
-
-### 无侵入设计
-dix 的依赖注入对原有代码无任何侵入性，不需要修改原有结构即可实现依赖注入。
-
-## 使用示例
-
-### 结构体注入示例
-```go
-type A struct {
-    B B
+type Config struct {
+    DSN string
 }
 
-type B struct {
-    C *C
+type Database struct {
+    Config *Config
 }
 
-type C struct {
-    Value string
+type UserService struct {
+    DB *Database
 }
 
 func main() {
-    container := dixinternal.New()
-    
-    // 提供依赖
-    container.Provide(func() *C {
-        return &C{Value: "hello"}
+    // Create container
+    di := dix.New()
+
+    // Register Providers
+    dix.Provide(di, func() *Config {
+        return &Config{DSN: "postgres://localhost/mydb"}
     })
-    
-    // 注入结构体
-    a := &A{}
-    container.Inject(a)
-    
-    fmt.Println(a.B.C.Value) // 输出: hello
+
+    dix.Provide(di, func(c *Config) *Database {
+        return &Database{Config: c}
+    })
+
+    dix.Provide(di, func(db *Database) *UserService {
+        return &UserService{DB: db}
+    })
+
+    // Inject and use
+    dix.Inject(di, func(svc *UserService) {
+        fmt.Println("DSN:", svc.DB.Config.DSN)
+    })
 }
 ```
 
-### 函数注入示例
+## 📖 Core API
+
+### Provide / TryProvide
+
+Register constructor (Provider) to container:
+
 ```go
-type Handler func() string
+// Standard version - panics on error
+dix.Provide(di, func() *Service { return &Service{} })
 
-func main() {
-    container := dixinternal.New()
-    
-    // 提供函数依赖
-    container.Provide(func() Handler {
-        return func() string {
-            return "hello"
-        }
-    })
-    
-    // 函数注入
-    container.Inject(func(h Handler) {
-        fmt.Println(h()) // 输出: hello
-    })
+// Safe version - returns error
+err := dix.TryProvide(di, func() *Service { return &Service{} })
+if err != nil {
+    log.Printf("Registration failed: %v", err)
 }
 ```
 
-### Map注入示例
+### Inject / TryInject
+
+Inject dependencies from container:
+
 ```go
-func main() {
-    container := dixinternal.New()
-    
-    // 提供map依赖
-    container.Provide(func() map[string]error {
-        return map[string]error{
-            "default": errors.New("default error"),
-            "custom":  errors.New("custom error"),
-        }
-    })
-    
-    // 注入map
-    container.Inject(func(errMap map[string]error) {
-        fmt.Println(errMap["default"]) // 输出: default error
-        fmt.Println(errMap["custom"])  // 输出: custom error
-    })
+// Function injection
+dix.Inject(di, func(svc *Service) {
+    svc.DoSomething()
+})
+
+// Struct injection
+type App struct {
+    Service *Service
+    Config  *Config
 }
+app := &App{}
+dix.Inject(di, app)
+
+// Safe version
+err := dix.TryInject(di, func(svc *Service) {
+    // ...
+})
 ```
 
-更多使用示例请参考 [example 目录](./example/) 中的代码：
-- [结构体注入示例](./example/struct-in/main.go)
-- [函数注入示例](./example/func/main.go)
-- [Map注入示例](./example/map/main.go)
+## 🎯 Injection Patterns
 
-## 构建和测试
+### Struct Injection
 
-### 运行测试
-```bash
-make test
+```go
+type In struct {
+    Config   *Config
+    Database *Database
+}
+
+type Out struct {
+    UserSvc  *UserService
+    OrderSvc *OrderService
+}
+
+// Multiple inputs and outputs
+dix.Provide(di, func(in In) Out {
+    return Out{
+        UserSvc:  &UserService{DB: in.Database},
+        OrderSvc: &OrderService{DB: in.Database},
+    }
+})
 ```
 
-### 代码检查
-```bash
-make lint
+### Map Injection (Namespace)
+
+```go
+// Provide with namespace
+dix.Provide(di, func() map[string]*Database {
+    return map[string]*Database{
+        "master": &Database{DSN: "master-dsn"},
+        "slave":  &Database{DSN: "slave-dsn"},
+    }
+})
+
+// Inject specific namespace
+dix.Inject(di, func(dbs map[string]*Database) {
+    master := dbs["master"]
+    slave := dbs["slave"]
+})
 ```
 
-### 代码审查
-```bash
-make vet
+### List Injection
+
+```go
+// Provide same type multiple times
+dix.Provide(di, func() []Handler {
+    return []Handler{&AuthHandler{}}
+})
+dix.Provide(di, func() []Handler {
+    return []Handler{&LogHandler{}}
+})
+
+// Inject all
+dix.Inject(di, func(handlers []Handler) {
+    // handlers contains AuthHandler and LogHandler
+})
 ```
 
-## API 文档
+## 🧩 Modules
 
-### New()
-创建一个新的依赖注入容器实例。
+### dixglobal - Global Container
 
-### Provide()
-注册构造函数，用于提供依赖对象。
-
-### Inject()
-注入依赖到目标函数或结构体。
-
-## 扩展功能
-
-### 全局容器
-dix 提供了全局容器，可以通过 `dixglobal` 包直接使用：
+Provides global singleton container for simple applications:
 
 ```go
 import "github.com/pubgo/dix/v2/dixglobal"
 
-// 注册依赖
-dixglobal.Provide(func() *ServiceA { return &ServiceA{} })
-
-// 注入依赖
-dixglobal.Inject(func(s *ServiceA) {
-    // 使用服务
-})
+// Use directly without creating container
+dixglobal.Provide(func() *Config { return &Config{} })
+dixglobal.Inject(func(c *Config) { /* ... */ })
 ```
 
-### 上下文支持
-dix 支持将容器实例存储在 context 中：
+### dixcontext - Context Integration
+
+Bind container to `context.Context`:
 
 ```go
-import (
-    "context"
-    "github.com/pubgo/dix/v2/dixcontext"
-)
+import "github.com/pubgo/dix/v2/dixcontext"
 
-// 将容器放入上下文
-ctx := dixcontext.Create(context.Background(), container)
+// Store in context
+ctx := dixcontext.Create(context.Background(), di)
 
-// 从上下文中获取容器
+// Retrieve and use
 container := dixcontext.Get(ctx)
 ```
 
-### HTTP 可视化
-dix 提供了 HTTP 可视化模块，用于图形化展示依赖关系：
+### dixhttp - Dependency Visualization 🆕
+
+Web interface for visualizing dependency graph, **designed for large projects**:
 
 ```go
 import (
-    "log"
     "github.com/pubgo/dix/v2/dixhttp"
+    "github.com/pubgo/dix/v2/dixinternal"
 )
 
-// 创建 HTTP 服务器
-server := dixhttp.NewServer(container)
-
-// 启动服务器
-log.Println("服务器启动在 http://localhost:8080")
-if err := server.ListenAndServe(":8080"); err != nil {
-    log.Fatal(err)
-}
+server := dixhttp.NewServer((*dixinternal.Dix)(di))
+server.ListenAndServe(":8080")
 ```
 
-## License
+Visit `http://localhost:8080` to view dependency graph.
+
+**Highlights**:
+- 🔍 **Fuzzy Search** - Quickly locate types or functions
+- 📦 **Package Grouping** - Collapsible sidebar browsing
+- 🔄 **Bidirectional Tracking** - Show both dependencies and dependents
+- 📏 **Depth Control** - Limit display levels (1-5 or all)
+- 🎨 **Modern UI** - Tailwind CSS + Alpine.js
+
+See [dixhttp/README.md](./dixhttp/README.md) for details.
+
+## 🛠️ Development
+
+```bash
+# Run tests
+task test
+
+# Lint
+task lint
+
+# Build
+task build
+```
+
+## 📚 Examples
+
+| Example | Description |
+|---------|-------------|
+| [struct-in](./example/struct-in/) | Struct input injection |
+| [struct-out](./example/struct-out/) | Struct multi-output |
+| [func](./example/func/) | Function injection |
+| [map](./example/map/) | Map/namespace injection |
+| [map-nil](./example/map-nil/) | Map with nil handling |
+| [list](./example/list/) | List injection |
+| [list-nil](./example/list-nil/) | List with nil handling |
+| [lazy](./example/lazy/) | Lazy injection |
+| [cycle](./example/cycle/) | Cycle detection example |
+| [handler](./example/handler/) | Handler pattern |
+| [inject_method](./example/inject_method/) | Method injection |
+| [test-return-error](./example/test-return-error/) | Error handling |
+| [http](./example/http/) | HTTP visualization |
+
+## 📖 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Design Document](./docs/design.md) | Architecture and detailed design |
+| [Audit Report](./docs/audit.md) | Project audit, evaluation and comparison |
+| [dixhttp README](./dixhttp/README.md) | HTTP visualization module documentation |
+
+## 📄 License
+
 MIT

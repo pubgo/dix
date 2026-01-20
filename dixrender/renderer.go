@@ -31,18 +31,29 @@ func (d *DotRenderer) writef(format string, args ...any) {
 	d.Writef(format, args...)
 }
 
+// escapeDotString escapes special characters for DOT format
+func escapeDotString(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	s = strings.ReplaceAll(s, "\n", "\\n")
+	s = strings.ReplaceAll(s, "\r", "\\r")
+	s = strings.ReplaceAll(s, "\t", "\\t")
+	return s
+}
+
 func (d *DotRenderer) RenderNode(name string, attrs map[string]string) {
-	d.writef("%s [label=\"%s\"%s]", name, name, d.formatAttrs(attrs))
+	escapedName := escapeDotString(name)
+	d.writef(`"%s" [label="%s"%s]`, escapedName, escapedName, d.formatAttrs(attrs))
 }
 
 func (d *DotRenderer) RenderEdge(from, to string, attrs map[string]string) {
-	d.writef(`"%s" -> "%s" %s`, from, to, d.formatAttrs(attrs))
+	d.writef(`"%s" -> "%s" %s`, escapeDotString(from), escapeDotString(to), d.formatAttrs(attrs))
 }
 
 func (d *DotRenderer) BeginSubgraph(name, label string) {
-	d.writef("subgraph %s {", name)
+	d.writef("subgraph %s {", escapeDotString(name))
 	d.indent += "\t"
-	d.writef("label=\"%s\"", label)
+	d.writef("label=\"%s\"", escapeDotString(label))
 }
 
 func (d *DotRenderer) EndSubgraph() {

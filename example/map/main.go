@@ -14,10 +14,6 @@ func main() {
 		}
 	}()
 
-	defer func() {
-		fmt.Println(dixglobal.Graph())
-	}()
-
 	dixglobal.Provide(func() map[string]error {
 		return map[string]error{
 			"":      errors.New("default msg"),

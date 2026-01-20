@@ -31,8 +31,6 @@ func main() {
 		List []handler
 	}
 
-	fmt.Println(dixglobal.Graph())
-
 	fmt.Println("struct: ", dixglobal.Inject(new(param)).H())
 	dixglobal.Inject(func(h handler, list []handler) {
 		fmt.Println("inject: ", h())
@@ -43,6 +41,4 @@ func main() {
 		fmt.Println("inject struct: ", p.H())
 		fmt.Println("inject struct: ", p.List)
 	})
-
-	fmt.Println(dixglobal.Graph())
 }

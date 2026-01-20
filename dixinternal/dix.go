@@ -285,23 +285,14 @@ func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 	return nil
 }
 
+// analyzeInputType analyzes the input type and returns its metadata
+// This is a wrapper around parseInputType for backward compatibility
 func (dix *Dix) analyzeInputType(inType reflect.Type) *providerInputType {
-	switch inType.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
-		return &providerInputType{typ: inType, isStruct: inType.Kind() == reflect.Struct}
-	case reflect.Map:
-		elemType := inType.Elem()
-		isList := elemType.Kind() == reflect.Slice
-		if isList {
-			elemType = elemType.Elem()
-		}
-		return &providerInputType{typ: elemType, isMap: true, isList: isList}
-	case reflect.Slice:
-		return &providerInputType{typ: inType.Elem(), isList: true}
-	default:
-		// This might panic or error later if not handled, but for analysis we return basic info
-		return &providerInputType{typ: inType}
+	inputs := parseInputType(inType)
+	if len(inputs) > 0 {
+		return inputs[0]
 	}
+	return &providerInputType{typ: inType}
 }
 
 // injectStruct injects dependencies into struct fields
@@ -355,6 +346,7 @@ func (dix *Dix) injectStruct(structVal reflect.Value, opt Options) error {
 }
 
 // inject is the entry point for dependency injection
+// NOTE: This method is NOT thread-safe by itself. Use Inject() or TryInject() which handle locking.
 func (dix *Dix) inject(param any, opts ...Option) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -470,31 +462,42 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 		}
 
 	default:
-		logger.Error("unsupported output type", "type", outType.String(), "kind", outType.Kind().String(), "provider", fnVal)
+		logger.Warn("unsupported output type", "type", outType.String(), "kind", outType.Kind().String(), "provider", fnVal)
 	}
 	return nil
 }
 
+// getProvideInput is a wrapper for parseInputType used during provider registration
 func (dix *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
+	return parseInputType(typ)
+}
+
+// parseInputType parses a reflect.Type and returns the corresponding providerInputType(s)
+// This is the unified implementation for input type analysis
+func parseInputType(typ reflect.Type) []*providerInputType {
 	var input []*providerInputType
-	switch inTye := typ; inTye.Kind() {
-	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:
-		input = append(input, &providerInputType{typ: inTye})
+	switch typ.Kind() {
+	case reflect.Interface, reflect.Ptr, reflect.Func:
+		input = append(input, &providerInputType{typ: typ})
+	case reflect.Struct:
+		input = append(input, &providerInputType{typ: typ, isStruct: true})
 	case reflect.Map:
-		tt := &providerInputType{typ: inTye.Elem(), isMap: true, isList: inTye.Elem().Kind() == reflect.Slice}
-		if tt.isList {
-			tt.typ = tt.typ.Elem()
+		elemType := typ.Elem()
+		isList := elemType.Kind() == reflect.Slice
+		if isList {
+			elemType = elemType.Elem()
 		}
-		input = append(input, tt)
+		input = append(input, &providerInputType{typ: elemType, isMap: true, isList: isList})
 	case reflect.Slice:
-		input = append(input, &providerInputType{typ: inTye.Elem(), isList: true})
+		input = append(input, &providerInputType{typ: typ.Elem(), isList: true})
 	default:
-		logger.Error("incorrect input type", "type", inTye.String(), "kind", inTye.Kind().String())
+		logger.Warn("unsupported input type", "type", typ.String(), "kind", typ.Kind().String())
 	}
 	return input
 }
 
 // provide registers a constructor function
+// NOTE: This method is NOT thread-safe by itself. Use Provide() or TryProvide() which handle locking.
 func (dix *Dix) provide(param any) {
 	defer func() {
 		if r := recover(); r != nil {

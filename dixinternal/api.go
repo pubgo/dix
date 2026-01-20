@@ -10,10 +10,30 @@ func New(opts ...Option) *Dix {
 	return newDix(opts...)
 }
 
+// Provide registers a provider function. Panics on error.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Provide(param any) {
 	dix.provide(param)
 }
 
+// TryProvide registers a provider function. Returns error instead of panicking.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
+func (dix *Dix) TryProvide(param any) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			if e, ok := r.(error); ok {
+				err = e
+			} else {
+				err = errors.New(r.(string))
+			}
+		}
+	}()
+	dix.provide(param)
+	return nil
+}
+
+// Inject injects dependencies into the given parameter. Panics on error.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Inject(param any, opts ...Option) any {
 	if dep, ok := dix.isCycle(); ok {
 		logger.Error("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
@@ -24,6 +44,17 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 		panic(err)
 	}
 	return param
+}
+
+// TryInject injects dependencies into the given parameter. Returns error instead of panicking.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
+func (dix *Dix) TryInject(param any, opts ...Option) error {
+	if dep, ok := dix.isCycle(); ok {
+		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
+		return errors.New("circular dependency: " + dep)
+	}
+
+	return dix.inject(param, opts...)
 }
 
 // GetProvideAllInputTypes returns all input types for a given type, including struct fields

@@ -1,0 +1,271 @@
+# dix
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/pubgo/dix/v2.svg)](https://pkg.go.dev/github.com/pubgo/dix/v2)
+[![Go Report Card](https://goreportcard.com/badge/github.com/pubgo/dix)](https://goreportcard.com/report/github.com/pubgo/dix)
+
+> **dix** 是一个轻量、强大的 Go 依赖注入框架
+
+参考了 [uber-go/dig](https://github.com/uber-go/dig) 的设计，支持更复杂的依赖管理和 namespace 隔离。
+
+[English](./README.md)
+
+## ✨ 功能特性
+
+| 特性 | 说明 |
+|------|------|
+| 🔄 **循环检测** | 自动检测依赖循环，避免死循环 |
+| 📦 **多种注入** | 支持 func、struct、map、list 作为注入参数 |
+| 🏷️ **命名空间** | 通过 map key 实现依赖隔离 |
+| 🎯 **多输出** | struct 可对外提供多组依赖对象 |
+| 🪆 **嵌套支持** | 支持 struct 依赖嵌套 |
+| 🔧 **无侵入** | 对原对象零侵入 |
+| 🛡️ **安全 API** | 提供 `TryProvide`/`TryInject` 不 panic 的安全版本 |
+| 🌐 **可视化** | HTTP 模块图形化展示依赖关系 |
+
+## 📦 安装
+
+```bash
+go get github.com/pubgo/dix/v2
+```
+
+## 🚀 快速开始
+
+```go
+package main
+
+import (
+    "fmt"
+    "github.com/pubgo/dix/v2"
+)
+
+type Config struct {
+    DSN string
+}
+
+type Database struct {
+    Config *Config
+}
+
+type UserService struct {
+    DB *Database
+}
+
+func main() {
+    // 创建容器
+    di := dix.New()
+
+    // 注册 Provider
+    dix.Provide(di, func() *Config {
+        return &Config{DSN: "postgres://localhost/mydb"}
+    })
+
+    dix.Provide(di, func(c *Config) *Database {
+        return &Database{Config: c}
+    })
+
+    dix.Provide(di, func(db *Database) *UserService {
+        return &UserService{DB: db}
+    })
+
+    // 注入使用
+    dix.Inject(di, func(svc *UserService) {
+        fmt.Println("DSN:", svc.DB.Config.DSN)
+    })
+}
+```
+
+## 📖 核心 API
+
+### Provide / TryProvide
+
+注册构造函数（Provider）到容器：
+
+```go
+// 标准版本 - 失败会 panic
+dix.Provide(di, func() *Service { return &Service{} })
+
+// 安全版本 - 返回 error
+err := dix.TryProvide(di, func() *Service { return &Service{} })
+if err != nil {
+    log.Printf("注册失败: %v", err)
+}
+```
+
+### Inject / TryInject
+
+从容器注入依赖：
+
+```go
+// 函数注入
+dix.Inject(di, func(svc *Service) {
+    svc.DoSomething()
+})
+
+// 结构体注入
+type App struct {
+    Service *Service
+    Config  *Config
+}
+app := &App{}
+dix.Inject(di, app)
+
+// 安全版本
+err := dix.TryInject(di, func(svc *Service) {
+    // ...
+})
+```
+
+## 🎯 注入模式
+
+### 结构体注入
+
+```go
+type In struct {
+    Config   *Config
+    Database *Database
+}
+
+type Out struct {
+    UserSvc  *UserService
+    OrderSvc *OrderService
+}
+
+// 多输入多输出
+dix.Provide(di, func(in In) Out {
+    return Out{
+        UserSvc:  &UserService{DB: in.Database},
+        OrderSvc: &OrderService{DB: in.Database},
+    }
+})
+```
+
+### Map 注入（命名空间）
+
+```go
+// 提供带 namespace 的依赖
+dix.Provide(di, func() map[string]*Database {
+    return map[string]*Database{
+        "master": &Database{DSN: "master-dsn"},
+        "slave":  &Database{DSN: "slave-dsn"},
+    }
+})
+
+// 注入特定 namespace
+dix.Inject(di, func(dbs map[string]*Database) {
+    master := dbs["master"]
+    slave := dbs["slave"]
+})
+```
+
+### List 注入
+
+```go
+// 多次提供同类型
+dix.Provide(di, func() []Handler {
+    return []Handler{&AuthHandler{}}
+})
+dix.Provide(di, func() []Handler {
+    return []Handler{&LogHandler{}}
+})
+
+// 注入时获取所有
+dix.Inject(di, func(handlers []Handler) {
+    // handlers 包含 AuthHandler 和 LogHandler
+})
+```
+
+## 🧩 模块
+
+### dixglobal - 全局容器
+
+提供全局单例容器，适合简单应用：
+
+```go
+import "github.com/pubgo/dix/v2/dixglobal"
+
+// 直接使用，无需创建容器
+dixglobal.Provide(func() *Config { return &Config{} })
+dixglobal.Inject(func(c *Config) { /* ... */ })
+```
+
+### dixcontext - Context 集成
+
+将容器绑定到 `context.Context`：
+
+```go
+import "github.com/pubgo/dix/v2/dixcontext"
+
+// 存入 context
+ctx := dixcontext.Create(context.Background(), di)
+
+// 取出使用
+container := dixcontext.Get(ctx)
+```
+
+### dixhttp - 依赖可视化 🆕
+
+提供 Web 界面可视化依赖关系图，**专为大型项目设计**：
+
+```go
+import (
+    "github.com/pubgo/dix/v2/dixhttp"
+    "github.com/pubgo/dix/v2/dixinternal"
+)
+
+server := dixhttp.NewServer((*dixinternal.Dix)(di))
+server.ListenAndServe(":8080")
+```
+
+访问 `http://localhost:8080` 查看依赖图。
+
+**功能亮点**：
+- 🔍 **模糊搜索** - 快速定位类型或函数
+- 📦 **按包分组** - 可折叠侧边栏浏览
+- 🔄 **双向追踪** - 同时展示依赖和被依赖
+- 📏 **深度控制** - 限制展示层级（1-5 或全部）
+- 🎨 **现代 UI** - Tailwind CSS + Alpine.js
+
+详见 [dixhttp/README.md](./dixhttp/README.md)
+
+## 🛠️ 开发
+
+```bash
+# 运行测试
+task test
+
+# 代码检查
+task lint
+
+# 构建
+task build
+```
+
+## 📚 示例
+
+| 示例 | 说明 |
+|------|------|
+| [struct-in](./example/struct-in/) | 结构体输入注入 |
+| [struct-out](./example/struct-out/) | 结构体多输出 |
+| [func](./example/func/) | 函数注入 |
+| [map](./example/map/) | Map/命名空间注入 |
+| [map-nil](./example/map-nil/) | Map 空值处理 |
+| [list](./example/list/) | List 注入 |
+| [list-nil](./example/list-nil/) | List 空值处理 |
+| [lazy](./example/lazy/) | 延迟注入 |
+| [cycle](./example/cycle/) | 循环检测示例 |
+| [handler](./example/handler/) | Handler 模式 |
+| [inject_method](./example/inject_method/) | 方法注入 |
+| [test-return-error](./example/test-return-error/) | 错误处理 |
+| [http](./example/http/) | HTTP 可视化 |
+
+## 📖 文档
+
+| 文档 | 说明 |
+|------|------|
+| [设计文档](./docs/design_zh.md) | 架构和详细设计 |
+| [审计报告](./docs/audit_zh.md) | 项目审计、评价和对比 |
+| [dixhttp 文档](./dixhttp/README_zh.md) | HTTP 可视化模块文档 |
+
+## 📄 License
+
+MIT

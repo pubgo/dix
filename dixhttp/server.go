@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/pubgo/dix/v2/dixinternal"
 )
@@ -32,6 +34,10 @@ func NewServer(dix *dixinternal.Dix) *Server {
 func (s *Server) setupRoutes() {
 	s.mux.HandleFunc("/", s.HandleIndex)
 	s.mux.HandleFunc("/api/dependencies", s.HandleDependencies)
+	s.mux.HandleFunc("/api/stats", s.HandleStats)
+	s.mux.HandleFunc("/api/packages", s.HandlePackages)
+	s.mux.HandleFunc("/api/package/", s.HandlePackageDetails)
+	s.mux.HandleFunc("/api/type/", s.HandleTypeDetails)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -51,17 +57,370 @@ func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, htmlTemplate)
 }
 
-// HandleDependencies returns JSON data about providers and objects relationships
-func (s *Server) HandleDependencies(w http.ResponseWriter, r *http.Request) {
-	data := s.extractDependencyData()
+// HandleStats returns summary statistics
+func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
+	providerDetails := s.dix.GetProviderDetails()
+	objects := s.dix.GetObjects()
 
-	w.Header().Set("Content-Type", "application/json; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
+	// Count objects
+	objectCount := 0
+	for _, groupsMap := range objects {
+		for _, values := range groupsMap {
+			objectCount += len(values)
+		}
+	}
 
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
+	// Count unique packages
+	packages := make(map[string]bool)
+	for _, detail := range providerDetails {
+		pkg := extractPackage(detail.OutputType)
+		if pkg != "" {
+			packages[pkg] = true
+		}
+	}
+
+	// Count edges
+	edgeCount := 0
+	for _, detail := range providerDetails {
+		edgeCount += len(detail.InputTypes)
+	}
+
+	stats := StatsData{
+		ProviderCount: len(providerDetails),
+		ObjectCount:   objectCount,
+		PackageCount:  len(packages),
+		EdgeCount:     edgeCount,
+	}
+
+	writeJSON(w, stats)
+}
+
+// HandlePackages returns list of packages for navigation
+func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
+	providerDetails := s.dix.GetProviderDetails()
+
+	// Group by package
+	packageMap := make(map[string]*PackageInfo)
+	for _, detail := range providerDetails {
+		pkg := extractPackage(detail.OutputType)
+		if pkg == "" {
+			pkg = "(anonymous)"
+		}
+
+		if _, exists := packageMap[pkg]; !exists {
+			packageMap[pkg] = &PackageInfo{
+				Name:          pkg,
+				ProviderCount: 0,
+				Types:         make([]string, 0),
+			}
+		}
+
+		packageMap[pkg].ProviderCount++
+
+		// Track unique types
+		found := false
+		for _, t := range packageMap[pkg].Types {
+			if t == detail.OutputType {
+				found = true
+				break
+			}
+		}
+		if !found {
+			packageMap[pkg].Types = append(packageMap[pkg].Types, detail.OutputType)
+		}
+	}
+
+	// Convert to slice
+	packages := make([]PackageInfo, 0, len(packageMap))
+	for _, pkg := range packageMap {
+		packages = append(packages, *pkg)
+	}
+
+	writeJSON(w, packages)
+}
+
+// HandlePackageDetails returns details for a specific package
+func (s *Server) HandlePackageDetails(w http.ResponseWriter, r *http.Request) {
+	// Extract package name from URL
+	pkgName := strings.TrimPrefix(r.URL.Path, "/api/package/")
+	if pkgName == "" {
+		http.Error(w, "package name required", http.StatusBadRequest)
 		return
 	}
+
+	providerDetails := s.dix.GetProviderDetails()
+
+	// Filter providers by package
+	var providers []ProviderInfo
+	for i, detail := range providerDetails {
+		pkg := extractPackage(detail.OutputType)
+		if pkg == "" {
+			pkg = "(anonymous)"
+		}
+		if pkg != pkgName {
+			continue
+		}
+
+		providerID := fmt.Sprintf("provider_%s_%d", detail.OutputType, i)
+		providers = append(providers, ProviderInfo{
+			ID:           providerID,
+			OutputType:   detail.OutputType,
+			FunctionName: detail.FunctionName,
+			InputTypes:   detail.InputTypes,
+		})
+	}
+
+	// Build edges within package
+	var edges []EdgeInfo
+	typeSet := make(map[string]bool)
+	for _, p := range providers {
+		typeSet[p.OutputType] = true
+	}
+
+	for _, p := range providers {
+		for _, inputType := range p.InputTypes {
+			edges = append(edges, EdgeInfo{
+				From: inputType,
+				To:   p.OutputType,
+				Type: "dependency",
+			})
+		}
+	}
+
+	result := PackageDetailsData{
+		Package:   pkgName,
+		Providers: providers,
+		Edges:     edges,
+	}
+
+	writeJSON(w, result)
+}
+
+// HandleTypeDetails returns dependency details for a specific type
+func (s *Server) HandleTypeDetails(w http.ResponseWriter, r *http.Request) {
+	// Extract type name from URL
+	typeName := strings.TrimPrefix(r.URL.Path, "/api/type/")
+	if typeName == "" {
+		http.Error(w, "type name required", http.StatusBadRequest)
+		return
+	}
+
+	// Parse depth parameter
+	depth := 2
+	if depthStr := r.URL.Query().Get("depth"); depthStr != "" {
+		if d, err := strconv.Atoi(depthStr); err == nil && d > 0 {
+			depth = d
+		}
+	}
+
+	providerDetails := s.dix.GetProviderDetails()
+
+	// Build type -> provider mapping
+	typeToProvider := make(map[string][]dixinternal.ProviderDetails)
+	for _, detail := range providerDetails {
+		typeToProvider[detail.OutputType] = append(typeToProvider[detail.OutputType], detail)
+	}
+
+	// BFS to find dependencies up to depth
+	visited := make(map[string]bool)
+	var nodes []TypeNode
+	var edges []EdgeInfo
+
+	queue := []struct {
+		typeName string
+		level    int
+	}{{typeName, 0}}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if visited[current.typeName] || current.level > depth {
+			continue
+		}
+		visited[current.typeName] = true
+
+		// Add node
+		pkg := extractPackage(current.typeName)
+		nodes = append(nodes, TypeNode{
+			ID:      current.typeName,
+			Type:    current.typeName,
+			Package: pkg,
+			Level:   current.level,
+		})
+
+		// Find providers for this type
+		providers := typeToProvider[current.typeName]
+		for _, p := range providers {
+			for _, inputType := range p.InputTypes {
+				// Add edge
+				edges = append(edges, EdgeInfo{
+					From: inputType,
+					To:   current.typeName,
+					Type: "dependency",
+				})
+
+				// Queue input type for processing
+				if !visited[inputType] {
+					queue = append(queue, struct {
+						typeName string
+						level    int
+					}{inputType, current.level + 1})
+				}
+			}
+		}
+	}
+
+	result := TypeDetailsData{
+		RootType: typeName,
+		Depth:    depth,
+		Nodes:    nodes,
+		Edges:    edges,
+	}
+
+	writeJSON(w, result)
+}
+
+// HandleDependencies returns JSON data about providers and objects relationships
+func (s *Server) HandleDependencies(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters for filtering
+	pkgFilter := r.URL.Query().Get("package")
+	limitStr := r.URL.Query().Get("limit")
+	limit := 0 // No limit by default
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	data := s.extractDependencyData(pkgFilter, limit)
+
+	writeJSON(w, data)
+}
+
+// extractDependencyData extracts structured data from the Dix container
+func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyData {
+	data := &DependencyData{
+		Providers: []ProviderInfo{},
+		Objects:   []ObjectInfo{},
+		Edges:     []EdgeInfo{},
+	}
+
+	// Extract provider information using the public API
+	providerDetails := s.dix.GetProviderDetails()
+
+	count := 0
+	for i, detail := range providerDetails {
+		// Apply package filter if specified
+		if pkgFilter != "" {
+			pkg := extractPackage(detail.OutputType)
+			if pkg != pkgFilter {
+				continue
+			}
+		}
+
+		// Apply limit
+		if limit > 0 && count >= limit {
+			break
+		}
+		count++
+
+		providerID := fmt.Sprintf("provider_%s_%d", detail.OutputType, i)
+		providerInfo := ProviderInfo{
+			ID:           providerID,
+			OutputType:   detail.OutputType,
+			FunctionName: detail.FunctionName,
+			InputTypes:   detail.InputTypes,
+		}
+
+		// Add edges from input types to provider output
+		for _, inputTypeStr := range detail.InputTypes {
+			data.Edges = append(data.Edges, EdgeInfo{
+				From: inputTypeStr,
+				To:   detail.OutputType,
+				Type: "provider",
+			})
+		}
+
+		data.Providers = append(data.Providers, providerInfo)
+	}
+
+	// Extract object information using the public API
+	objects := s.dix.GetObjects()
+
+	for outputType, groupsMap := range objects {
+		// Apply package filter if specified
+		if pkgFilter != "" {
+			pkg := extractPackage(outputType.String())
+			if pkg != pkgFilter {
+				continue
+			}
+		}
+
+		for group, values := range groupsMap {
+			for i, value := range values {
+				objectID := fmt.Sprintf("object_%s_%s_%d", outputType.String(), group, i)
+
+				objectInfo := ObjectInfo{
+					ID:            objectID,
+					Type:          outputType.String(),
+					Group:         group,
+					IsInitialized: value.IsValid() && !value.IsZero(),
+				}
+
+				data.Objects = append(data.Objects, objectInfo)
+
+				// Add edge from provider output to object
+				data.Edges = append(data.Edges, EdgeInfo{
+					From: outputType.String(),
+					To:   objectID,
+					Type: "object",
+				})
+			}
+		}
+	}
+
+	return data
+}
+
+// Data types
+
+// StatsData contains summary statistics
+type StatsData struct {
+	ProviderCount int `json:"provider_count"`
+	ObjectCount   int `json:"object_count"`
+	PackageCount  int `json:"package_count"`
+	EdgeCount     int `json:"edge_count"`
+}
+
+// PackageInfo contains information about a package
+type PackageInfo struct {
+	Name          string   `json:"name"`
+	ProviderCount int      `json:"provider_count"`
+	Types         []string `json:"types"`
+}
+
+// PackageDetailsData contains detailed information for a package
+type PackageDetailsData struct {
+	Package   string         `json:"package"`
+	Providers []ProviderInfo `json:"providers"`
+	Edges     []EdgeInfo     `json:"edges"`
+}
+
+// TypeNode represents a type in the dependency graph
+type TypeNode struct {
+	ID      string `json:"id"`
+	Type    string `json:"type"`
+	Package string `json:"package"`
+	Level   int    `json:"level"`
+}
+
+// TypeDetailsData contains dependency details for a type
+type TypeDetailsData struct {
+	RootType string     `json:"root_type"`
+	Depth    int        `json:"depth"`
+	Nodes    []TypeNode `json:"nodes"`
+	Edges    []EdgeInfo `json:"edges"`
 }
 
 // DependencyData represents the structure of dependency information
@@ -91,67 +450,54 @@ type ObjectInfo struct {
 type EdgeInfo struct {
 	From string `json:"from"`
 	To   string `json:"to"`
-	Type string `json:"type"` // "provider" or "object"
+	Type string `json:"type"` // "provider", "object", "dependency"
 }
 
-// extractDependencyData extracts structured data from the Dix container
-func (s *Server) extractDependencyData() *DependencyData {
-	data := &DependencyData{
-		Providers: []ProviderInfo{},
-		Objects:   []ObjectInfo{},
-		Edges:     []EdgeInfo{},
-	}
+// Helper functions
 
-	// Extract provider information using the public API
-	providerDetails := s.dix.GetProviderDetails()
+func extractPackage(typeName string) string {
+	// Handle pointer types
+	typeName = strings.TrimPrefix(typeName, "*")
 
-	for i, detail := range providerDetails {
-		providerID := fmt.Sprintf("provider_%s_%d", detail.OutputType, i)
-		providerInfo := ProviderInfo{
-			ID:           providerID,
-			OutputType:   detail.OutputType,
-			FunctionName: detail.FunctionName,
-			InputTypes:   detail.InputTypes,
-		}
+	// Handle slice/array types
+	typeName = strings.TrimPrefix(typeName, "[]")
 
-		// Add edges from input types to provider output
-		for _, inputTypeStr := range detail.InputTypes {
-			data.Edges = append(data.Edges, EdgeInfo{
-				From: inputTypeStr,
-				To:   detail.OutputType,
-				Type: "provider",
-			})
-		}
-
-		data.Providers = append(data.Providers, providerInfo)
-	}
-
-	// Extract object information using the public API
-	objects := s.dix.GetObjects()
-
-	for outputType, groupsMap := range objects {
-		for group, values := range groupsMap {
-			for i, value := range values {
-				objectID := fmt.Sprintf("object_%s_%s_%d", outputType.String(), group, i)
-
-				objectInfo := ObjectInfo{
-					ID:            objectID,
-					Type:          outputType.String(),
-					Group:         group,
-					IsInitialized: value.IsValid() && !value.IsZero(),
-				}
-
-				data.Objects = append(data.Objects, objectInfo)
-
-				// Add edge from provider output to object
-				data.Edges = append(data.Edges, EdgeInfo{
-					From: outputType.String(),
-					To:   objectID,
-					Type: "object",
-				})
-			}
+	// Handle map types - extract value type package
+	if strings.HasPrefix(typeName, "map[") {
+		// Find the value type after ]
+		idx := strings.Index(typeName, "]")
+		if idx > 0 && idx < len(typeName)-1 {
+			typeName = typeName[idx+1:]
+			typeName = strings.TrimPrefix(typeName, "*")
 		}
 	}
 
-	return data
+	// Find the last dot before the type name
+	lastSlash := strings.LastIndex(typeName, "/")
+	if lastSlash == -1 {
+		// No slash, check for simple package.Type format
+		dotIdx := strings.LastIndex(typeName, ".")
+		if dotIdx > 0 {
+			return typeName[:dotIdx]
+		}
+		return ""
+	}
+
+	// Find the dot after the last slash (package.Type)
+	afterSlash := typeName[lastSlash+1:]
+	dotIdx := strings.Index(afterSlash, ".")
+	if dotIdx > 0 {
+		return typeName[:lastSlash+1+dotIdx]
+	}
+
+	return typeName
+}
+
+func writeJSON(w http.ResponseWriter, data any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
+	}
 }
