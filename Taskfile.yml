@@ -1,0 +1,27 @@
+version: '3'
+
+tasks:
+  test:
+    desc: Run tests with coverage
+    cmds:
+      - go test -v ./dixinternal/... -covermode=count -coverprofile=coverage.out
+      - go tool cover -html=coverage.out -o coverage.html
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run --timeout=10m --verbose
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  default:
+    desc: Run tests
+    deps: [test]
+
+  web-demo:
+    desc: Run web demo
+    cmds:
+      - go run example/http/main.go

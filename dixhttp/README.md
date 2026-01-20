@@ -1,17 +1,20 @@
-# Dix HTTP 可视化模块
+# Dix HTTP Visualization Module
 
-这个模块提供了一个 HTTP 服务器，用于可视化展示 Dix 依赖注入容器中的 Providers 和 Objects 之间的依赖关系。
+This module provides an HTTP server to visualize dependency relationships in the Dix dependency injection container. **Designed for large projects**, with support for fuzzy search, package grouping, bidirectional dependency tracking, and depth control.
 
-## 功能特性
+[中文文档](./README_zh.md)
 
-- 📊 **交互式可视化**: 使用 vis.js 在浏览器中展示依赖关系图
-- 🔄 **多种视图**: 支持 Providers 视图、Objects 视图和组合视图
-- 📡 **RESTful API**: 提供 JSON 格式的依赖关系数据
-- 🎨 **美观的界面**: 现代化的 UI 设计，易于使用
+## Features
 
-## 使用方法
+- 📊 **Interactive Visualization** - Modern UI built with vis.js + Tailwind CSS + Alpine.js
+- 🔍 **Global Fuzzy Search** - Quickly search for type names or function names to view dependencies
+- 📦 **Package Grouping** - Collapsible left panel to browse by package
+- 🔄 **Bidirectional Dependency Tracking** - Show both upstream (dependencies) and downstream (dependents)
+- 📏 **Depth Control** - Limit dependency graph display levels (1-5 or all)
+- 🎨 **Multiple Layouts** - Support hierarchical and force-directed layouts
+- 📡 **RESTful API** - Provide JSON format dependency data
 
-### 基本使用
+## Quick Start
 
 ```go
 package main
@@ -24,92 +27,229 @@ import (
 )
 
 func main() {
-    // 创建 Dix 容器
+    // Create Dix container
     di := dix.New()
     
-    // 注册 providers
-    dix.Provide(di, func() *ServiceA {
-        return &ServiceA{}
+    // Register providers
+    dix.Provide(di, func() *Config {
+        return &Config{}
     })
     
-    dix.Provide(di, func(a *ServiceA) *ServiceB {
-        return &ServiceB{ServiceA: a}
+    dix.Provide(di, func(c *Config) *Database {
+        return &Database{Config: c}
     })
     
-    // 创建 HTTP 服务器
+    dix.Provide(di, func(db *Database) *UserService {
+        return &UserService{DB: db}
+    })
+    
+    // Create and start HTTP server
     server := dixhttp.NewServer((*dixinternal.Dix)(di))
-    
-    // 启动服务器
-    log.Println("服务器启动在 http://localhost:8080")
+    log.Println("Server starting at http://localhost:8080")
     if err := server.ListenAndServe(":8080"); err != nil {
         log.Fatal(err)
     }
 }
 ```
 
-### API 端点
+Open browser and visit `http://localhost:8080` to view the dependency graph.
 
-#### GET `/`
-返回 HTML 可视化页面
+## UI Layout
 
-#### GET `/api/dependencies`
-返回 JSON 格式的依赖关系数据
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  🔗 Dix Dependency Visualization            📦 8 Pkgs  ⚡ 42 Provs  │
+├──────────┬────────────────────────────────────────────┬─────────────┤
+│ 📦 Pkgs  │  [Providers] [Types]  Layout: Hier  Depth: 2  🔍 Search  │ 📋 Details  │
+│          │                                            │             │
+│ 📁 All   │                                            │  Function   │
+│  42      │           ┌─────────┐                      │  xxx.func   │
+│          │           │ Config  │                      │             │
+│ .../app  │           └────┬────┘                      │  Output     │
+│  12      │                │                           │  *Config    │
+│          │           ┌────▼────┐                      │             │
+│ .../db   │           │Database │                      │  Inputs     │
+│  8       │           └────┬────┘                      │  (clickable)│
+│          │                │                           │             │
+│          │        ┌───────▼───────┐                   │ [View Deps] │
+│          │        │  UserService  │                   │             │
+│          │        └───────────────┘                   │             │
+├──────────┴────────────────────────────────────────────┼─────────────┤
+│  « Collapse                                           │   Legend    │
+└───────────────────────────────────────────────────────┴─────────────┘
+```
 
-响应格式：
+### Three-Panel Layout
+
+| Area | Description |
+|------|-------------|
+| **Left - Package List** | Provider list grouped by package, searchable, collapsible |
+| **Center - Dependency Graph** | Interactive graph with drag, zoom, click support |
+| **Right - Details Panel** | Show selected node details with clickable navigation |
+
+## Core Features
+
+### 🔍 Global Fuzzy Search
+
+The search box on the right side of the toolbar supports:
+
+- **Fuzzy Matching** - Enter keywords to match type names or function names
+- **Real-time Suggestions** - Show matching results dropdown (max 20)
+- **Quick Jump** - Click result or press Enter to view dependency graph
+- **Category Labels** - Results marked as `Provider` or `Type`
+
+### 🔄 Bidirectional Dependency Tracking
+
+After searching or clicking a type, the system shows that type as center:
+
+```
+     ┌──────────┐
+     │ Upstream │  ← Green nodes
+     │ (Config) │
+     └────┬─────┘
+          │
+          ▼
+     ┌──────────┐
+     │  Target  │  ← Yellow highlight
+     │(Database)│
+     └────┬─────┘
+          │
+          ▼
+     ┌──────────┐
+     │Downstream│  ← Red nodes
+     │(Service) │
+     └──────────┘
+```
+
+**Color Legend**:
+- 🟡 **Yellow** - Target node (searched object)
+- 🟢 **Green** - Dependencies (upstream, what target depends on)
+- 🔴 **Red** - Dependents (downstream, what depends on target)
+
+### 📏 Depth Control
+
+Depth determines how many levels to expand up/down:
+
+| Depth | Description | Use Case |
+|-------|-------------|----------|
+| 1 | Only direct dependencies/dependents | Quick view of direct relationships |
+| 2 | Two levels (default) | Recommended for daily use |
+| 3-5 | More levels | Track complex dependency chains |
+| All | Show complete dependency tree | Small projects or specific analysis |
+
+**Example**: Assume dependency chain is `Config → Database → UserService → Handler`
+
+Search `UserService` with different depths:
+- Depth 1: `Database ← UserService → Handler`
+- Depth 2: `Config ← Database ← UserService → Handler`
+
+### 📦 Package Grouping
+
+Left panel features:
+- **Package List** - Show all packages with Provider counts
+- **Search Filter** - Quickly locate specific packages
+- **Click Filter** - Show only that package's dependencies
+- **Collapse** - Click `«` button to collapse sidebar, expand graph area
+
+## Interactions
+
+| Operation | Effect |
+|-----------|--------|
+| **Single Click** | Show details in right panel |
+| **Double Click** | Show dependency graph centered on that node |
+| **Drag Node** | Move node position |
+| **Scroll Zoom** | Zoom in/out graph |
+| **Click Type in Details** | Jump to view that type's dependencies |
+
+## API Endpoints
+
+### GET `/`
+Returns HTML visualization page
+
+### GET `/api/stats`
+Returns summary statistics
+
+```json
+{
+  "provider_count": 42,
+  "object_count": 15,
+  "package_count": 8,
+  "edge_count": 67
+}
+```
+
+### GET `/api/packages`
+Returns package list
+
+```json
+[
+  {
+    "name": "github.com/example/app/service",
+    "provider_count": 12,
+    "types": ["*service.UserService", "*service.OrderService"]
+  }
+]
+```
+
+### GET `/api/dependencies?package=xxx&limit=100`
+Returns dependency data, supports package filtering
+
 ```json
 {
   "providers": [
     {
       "id": "provider_*main.ServiceA_0",
       "output_type": "*main.ServiceA",
-      "function_name": "main.initServiceA",
-      "input_types": []
+      "function_name": "main.NewServiceA",
+      "input_types": ["*main.Config"]
     }
   ],
-  "objects": [
-    {
-      "id": "object_*main.ServiceA_default_0",
-      "type": "*main.ServiceA",
-      "group": "default",
-      "is_initialized": true
-    }
+  "objects": [...],
+  "edges": [...]
+}
+```
+
+### GET `/api/package/{packageName}`
+Returns Provider details for specified package
+
+### GET `/api/type/{typeName}?depth=2`
+Returns dependency chain for specified type
+
+```json
+{
+  "root_type": "*service.UserService",
+  "depth": 2,
+  "nodes": [
+    {"id": "*service.UserService", "type": "*service.UserService", "package": "...", "level": 0}
   ],
   "edges": [
-    {
-      "from": "*main.ServiceA",
-      "to": "*main.ServiceB",
-      "type": "provider"
-    }
+    {"from": "*db.Database", "to": "*service.UserService", "type": "dependency"}
   ]
 }
 ```
 
-#### GET `/api/graph?type=providers`
-返回 DOT 格式的依赖图（用于 Graphviz）
+## Tech Stack
 
-支持的 type 参数：
-- `providers`: Provider 函数视图
-- `provider_types`: Provider 类型视图
-- `objects`: Objects 视图
+- **Backend**: Go standard library `net/http`
+- **Frontend**: 
+  - [Tailwind CSS](https://tailwindcss.com/) - Styling
+  - [Alpine.js](https://alpinejs.dev/) - Reactive interactions
+  - [vis-network](https://visjs.github.io/vis-network/) - Graph rendering
+- **Template**: Go embed single-file HTML
 
-## 可视化界面
+## Use Cases
 
-打开浏览器访问 `http://localhost:8080`，你将看到：
+✅ **Recommended**:
+- Large projects (100+ providers)
+- Modular architecture needing package-based viewing
+- Tracking specific type dependency chains
+- Debugging circular dependency issues
+- Onboarding new team members
 
-1. **顶部控制栏**: 切换不同的视图模式
-2. **主视图区**: 交互式依赖关系图
-   - 绿色节点: Provider 函数
-   - 蓝色节点: 类型
-   - 橙色节点: Object 实例
-3. **侧边栏**: 统计信息和图例
+⚠️ **Notes**:
+- Production environment should restrict access (internal network or dev only)
+- Very large projects (1000+ providers) should use depth limits
 
-### 交互功能
+## Example
 
-- **拖拽**: 可以拖拽节点重新布局
-- **缩放**: 使用鼠标滚轮缩放
-- **点击**: 点击节点查看详细信息
-- **悬停**: 鼠标悬停显示节点信息
-
-## 示例
-
-查看 `example/http/main.go` 获取完整示例。
+See `example/http/main.go` for complete example.

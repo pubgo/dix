@@ -1,197 +1,221 @@
-# Dix 依赖注入框架设计文档
+# Dix Dependency Injection Framework - Design Document
 
-## 1. 概述 (Overview)
+[中文文档](./design_zh.md)
 
-`dix` 是一个基于 Go 语言反射机制（Reflection）实现的轻量级依赖注入（Dependency Injection, DI）框架。它参考了 `dig` 的设计理念，旨在通过自动化的依赖解析和生命周期管理，解耦组件间的依赖关系。
+## 1. Overview
 
-`dix` 的核心是对能够寻址的类型（Addressable Types）进行依赖注入管理，主要包括 `func`、`ptr`（指针）和 `interface`。
+`dix` is a lightweight dependency injection (DI) framework for Go, implemented using reflection. Inspired by `dig`, it aims to decouple component dependencies through automated dependency resolution and lifecycle management.
 
-核心特性包括：
-*   **构造函数注入**：通过 `Provide` 注册构造函数。
-*   **结构体/字段注入**：通过 `Inject` 对结构体字段进行填充。
-*   **高级类型支持**：支持 `Interface`、`Map`、`Slice` 等集合类型的自动聚合注入。
-*   **循环依赖检测**：内置图算法检测循环依赖。
-*   **可视化**：支持生成 DOT 格式的依赖图。
-*   **方法注入**：支持通过 `DixInject` 前缀方法进行 Setter 注入。
-*   **分组管理**：支持依赖项按命名空间进行分组管理。
+The core of `dix` manages dependency injection for addressable types, mainly including `func`, `ptr` (pointer), and `interface`.
 
-## 2. 核心架构 (Core Architecture)
+Core features include:
+*   **Constructor Injection**: Register constructors via `Provide`.
+*   **Struct/Field Injection**: Fill struct fields via `Inject`.
+*   **Advanced Type Support**: Support for `Interface`, `Map`, `Slice` with automatic aggregation.
+*   **Cycle Detection**: Built-in graph algorithm for circular dependency detection.
+*   **Web Visualization**: HTTP module for interactive dependency graph visualization.
+*   **Method Injection**: Support setter injection via `DixInject` prefix methods.
+*   **Namespace Grouping**: Support grouping dependencies by namespace.
+*   **Safe APIs**: `TryProvide`/`TryInject` variants that return errors instead of panicking.
 
-`dix` 的核心是一个名为 `Dix` 的容器结构体，它维护了提供者（Providers）的注册表和已实例化对象（Objects）的缓存。
+## 2. Core Architecture
 
-### 2.1 支持的类型 (Supported Types)
+The core of `dix` is a container struct named `Dix`, which maintains a registry of providers and a cache of instantiated objects.
 
-`dix` 严格限制了可作为依赖项管理的类型范围，核心原则是**仅支持可寻址或引用类型**。这种设计确保了依赖关系的稳定性和对象生命周期的可控性。
+### 2.1 Supported Types
 
-*   **Pointer (指针)**:
-    *   这是最常用的类型，通常指向一个结构体实例（如 `*Service`）。
-    *   指针保证了在整个应用生命周期中，组件是单例的（Singleton），且状态共享。
-*   **Interface (接口)**:
-    *   支持将具体实现绑定到接口定义（如 `Service` 接口由 `*ServiceImpl` 实现）。
-    *   这是实现依赖倒置原则（DIP）的关键，使得组件依赖于抽象而非具体实现。
-*   **Func (函数)**:
-    *   函数本身是一等公民，可以作为依赖被注入。
-    *   常用于注入工厂函数、中间件或回调逻辑。
+`dix` strictly limits the types that can be managed as dependencies. The core principle is **only addressable or reference types are supported**. This design ensures stability of dependency relationships and controllability of object lifecycles.
 
-*注意：基础类型（如 `int`, `string`, `bool`）不能直接作为依赖项注入，必须封装在上述类型中（通常是结构体字段）。*
+*   **Pointer**:
+    *   The most common type, usually pointing to a struct instance (e.g., `*Service`).
+    *   Pointers guarantee singleton behavior throughout the application lifecycle with shared state.
+*   **Interface**:
+    *   Supports binding concrete implementations to interface definitions (e.g., `Service` interface implemented by `*ServiceImpl`).
+    *   Key to implementing the Dependency Inversion Principle (DIP).
+*   **Func**:
+    *   Functions are first-class citizens and can be injected as dependencies.
+    *   Commonly used for factory functions, middleware, or callbacks.
 
-### 2.2 数据结构
+*Note: Basic types (e.g., `int`, `string`, `bool`) cannot be directly injected as dependencies; they must be wrapped in the above types (usually as struct fields).*
+
+### 2.2 Data Structures
 
 ```go
 type Dix struct {
-    // 配置选项
+    // Configuration options
     option Options
 
-    // 提供者注册表
-    // key: 输出类型 (reflect.Type)
-    // value: 该类型对应的提供者函数列表
+    // Provider registry
+    // key: output type (reflect.Type)
+    // value: list of provider functions for this type
     providers map[outputType][]*providerFn
 
-    // 对象缓存池 (单例模式)
-    // key: 输出类型 -> 分组(group) -> 值列表
+    // Object cache pool (singleton pattern)
+    // key: output type -> group -> value list
     objects map[outputType]map[group][]value
 
-    // 初始化状态标记，防止 Provider 重复执行
+    // Initialization state flags to prevent duplicate Provider execution
     initializer map[reflect.Value]bool
 }
 ```
 
-### 2.3 核心流程
+### 2.3 Core Flow
 
-1.  **注册 (Provide)**: 用户注册构造函数 -> 解析函数签名（输入/输出） -> 存入 `providers` 表。
-2.  **调用 (Inject)**: 用户请求注入对象 -> 递归查找依赖 -> 执行 Provider 函数 -> 缓存结果 -> 填充目标。
+1.  **Register (Provide)**: User registers constructor -> Parse function signature (input/output) -> Store in `providers` table.
+2.  **Invoke (Inject)**: User requests object injection -> Recursively find dependencies -> Execute Provider function -> Cache result -> Fill target.
 
-## 3. 详细设计 (Detailed Design)
+## 3. Detailed Design
 
-### 3.1 提供者注册 (Provider Registration)
+### 3.1 Provider Registration
 
-`Provide` 方法负责将构造函数注册到容器中。
+The `Provide` method registers constructors into the container.
 
-#### 3.1.1 输入参数类型 (Input Types)
-Provider 函数的参数声明了该组件的依赖项：
-
-*   **Func / Ptr / Interface**:
-    *   **行为**: 声明为直接依赖。
-    *   **解析**: 容器会在已注册的 Provider 中查找匹配该类型的唯一实例。
-*   **Struct**:
-    *   **行为**: **递归依赖注入 (Recursive Dependency Injection)**。
-    *   **解析**: 框架会递归遍历该结构体的所有**导出字段**。如果字段类型是支持的类型（Func/Ptr/Interface），容器会自动查找并注入对应的实例。这允许通过定义一个配置结构体来聚合多个依赖项，简化函数签名。
-*   **Slice (`[]T`)**:
-    *   **行为**: 声明为聚合依赖（List）。
-    *   **解析**: 容器查找所有能提供类型 `T` 的 Provider，并将它们在 **默认分组 (default group)** 下的结果汇总成切片。
-*   **Map (`map[string]T`)**:
-    *   **行为**: 声明为聚合依赖（Map）。
-    *   **解析**: 容器查找所有能提供类型 `T` 的 Provider，利用其返回的 Key（默认为 "default"）汇总成 Map。如果同一 Key 有多个值，取最后一个。
-
-#### 3.1.2 返回值类型 (Output Types)
-Provider 函数的返回值定义了它向容器提供的组件。
-
-**约束 (Constraints)**:
-Provider 函数必须返回 **1 个或 2 个** 值。
-*   如果返回 1 个值：该值即为提供的组件。
-*   如果返回 2 个值：第二个值必须是 `error` 类型。如果 `error` 不为 nil，容器将停止初始化并报错。
-
-支持的具体类型如下：
+#### 3.1.1 Input Parameter Types
+Provider function parameters declare the component's dependencies:
 
 *   **Func / Ptr / Interface**:
-    *   **行为**: 注册为该类型的标准 Provider。
-*   **Slice (`[]T`)**:
-    *   **行为**: 注册为类型 `T` 的列表 Provider。
-    *   **效果**: 允许一个 Provider 一次性提供多个 `T` 实例，或者多个 Provider 共同向 `[]T` 注入点贡献数据。
-*   **Map (`map[string]T`)**:
-    *   **行为**: 注册为类型 `T` 的映射 Provider。
-    *   **效果**: 允许 Provider 指定组件的 Key。
+    *   **Behavior**: Declared as direct dependency.
+    *   **Resolution**: Container finds matching instance from registered Providers.
 *   **Struct**:
-    *   **行为**: **递归自动分解 (Recursive Auto-Flattening)**。
-    *   **效果**: 框架会递归遍历结构体的所有**导出字段**。如果字段类型是支持的类型（Func/Ptr/Interface），该字段的值会被分别注册为对应类型的 Provider。这使得一个构造函数可以同时提供多个不同的服务组件。
+    *   **Behavior**: **Recursive Dependency Injection**.
+    *   **Resolution**: Framework recursively traverses all **exported fields**. If a field type is supported (Func/Ptr/Interface), the container automatically finds and injects the corresponding instance.
+*   **Slice (`[]T`)**:
+    *   **Behavior**: Declared as aggregate dependency (List).
+    *   **Resolution**: Container finds all Providers that can provide type `T` and aggregates results from the **default group** into a slice.
+*   **Map (`map[string]T`)**:
+    *   **Behavior**: Declared as aggregate dependency (Map).
+    *   **Resolution**: Container finds all Providers for type `T`, using their returned Keys (default "default") to form a Map.
 
-### 3.2 依赖解析与注入 (Resolution & Injection)
+#### 3.1.2 Return Value Types
+Provider function return values define what components it provides to the container.
 
-注入过程由 `Inject` 或内部的 `getValue` 驱动，采用**惰性求值（Lazy Evaluation）**策略。
+**Constraints**:
+Provider function must return **1 or 2** values.
+*   1 value: That value is the provided component.
+*   2 values: Second value must be `error` type. If `error` is not nil, container stops initialization and reports error.
 
-#### 3.2.1 注入目标类型 (Injection Targets)
+Supported types:
 
-`Inject` 函数支持对结构体指针或函数进行注入。
+*   **Func / Ptr / Interface**:
+    *   **Behavior**: Register as standard Provider for that type.
+*   **Slice (`[]T`)**:
+    *   **Behavior**: Register as list Provider for type `T`.
+    *   **Effect**: Allows one Provider to provide multiple `T` instances at once.
+*   **Map (`map[string]T`)**:
+    *   **Behavior**: Register as map Provider for type `T`.
+    *   **Effect**: Allows Provider to specify component Key.
+*   **Struct**:
+    *   **Behavior**: **Recursive Auto-Flattening**.
+    *   **Effect**: Framework recursively traverses all **exported fields**. Supported field types are registered as separate Providers.
 
-**1. 结构体指针 (Struct Pointer)**
-当传入 `&MyStruct{}` 时，框架会扫描其字段进行注入：
-*   **Func / Ptr / Interface**: 查找并注入对应类型的实例。
-*   **Struct**: **递归注入 (Recursive Injection)**。框架会深入结构体内部，继续对该字段的成员进行注入。这允许定义嵌套的配置或组件对象。
-*   **Slice / Map**: 执行聚合注入逻辑。对于 Slice，仅收集 **默认分组 (default group)** 下的实例。详细策略见 3.2.2。
-*   **方法注入**: 自动扫描对象中以 `DixInject` 为前缀的方法并执行注入（Setter 注入的一种变体）。
+### 3.2 Dependency Resolution & Injection
 
-**2. 函数 (Function)**
-当传入一个函数时（如 `dix.Inject(func(a *A, b *B){ ... })`）：
-*   参数列表被视为依赖项。
-*   解析逻辑与 Provider 的输入参数完全一致（见 3.1.1）。
-*   常用于执行初始化逻辑或启动钩子。
+Injection is driven by `Inject` or internal `getValue`, using **Lazy Evaluation** strategy.
 
-#### 3.2.2 内部存储与解析策略 (Internal Storage & Resolution Strategy)
+#### 3.2.1 Injection Target Types
 
-当存在同一类型的多个 Provider 时，`dix` 使用分组（Group/Key）机制来管理这些实例。底层的存储结构实际上是 `map[group][]value`，其中 `group` 是标签（默认为 "default"），用于区分不同的实例集合。
+`Inject` function supports injection into struct pointers or functions.
 
-针对不同的依赖声明方式，容器采用以下解析策略：
+**1. Struct Pointer**
+When passing `&MyStruct{}`, framework scans fields for injection:
+*   **Func / Ptr / Interface**: Find and inject corresponding type instance.
+*   **Struct**: **Recursive Injection** - framework continues injecting into nested struct fields.
+*   **Slice / Map**: Execute aggregation injection logic.
+*   **Method Injection**: Auto-scan and execute methods prefixed with `DixInject` (Setter injection variant).
 
-1.  **单值依赖 (`T`)**:
-    *   仅查找 **默认分组 ("default")**。
-    *   取该分组下的 **最后一个值**。
-2.  **列表依赖 (`[]T`)**:
-    *   仅查找 **默认分组 ("default")**。
-    *   取该分组下的 **所有值**。
-3.  **映射依赖 (`map[string]T`)**:
-    *   查找 **所有分组**。
-    *   对于每个分组，取其 **最后一个值**。
-4.  **完全映射依赖 (`map[string][]T`)**:
-    *   查找 **所有分组**。
-    *   取每个分组下的 **所有值**。这是获取该类型所有实例的最完整方式。
+**2. Function**
+When passing a function (e.g., `dix.Inject(func(a *A, b *B){ ... })`):
+*   Parameters are treated as dependencies.
+*   Resolution logic same as Provider input parameters (see 3.1.1).
+*   Commonly used for initialization or startup hooks.
 
-### 3.3 循环依赖检测 (Cycle Detection)
+#### 3.2.2 Internal Storage & Resolution Strategy
 
-为了防止无限递归，`dix` 在执行注入前或过程中会构建依赖图。
+When multiple Providers exist for the same type, `dix` uses grouping (Group/Key) mechanism. The underlying storage is `map[group][]value`, where `group` is a label (default "default").
 
-*   **算法**: 基于深度优先搜索 (DFS)。
-*   **实现**: `dixinternal/cycle-check.go` 中的 `detectCycle` 函数。
-*   **逻辑**: 构建 `map[reflect.Type]map[reflect.Type]bool` 的邻接表，遍历图寻找回边。如果发现循环，立即报错并打印循环路径。
+Resolution strategies for different dependency declarations:
 
-### 3.4 错误处理 (Error Handling)
+1.  **Single Value (`T`)**: Query **default group**, take **last value**.
+2.  **List (`[]T`)**: Query **default group**, take **all values**.
+3.  **Map (`map[string]T`)**: Query **all groups**, take **last value** per group.
+4.  **Full Map (`map[string][]T`)**: Query **all groups**, take **all values** per group.
 
-使用了日志系统进行错误记录。
-*   **上下文丰富**: 错误信息中包含了堆栈跟踪（Stack Trace）、Provider 函数名、参数类型等详细信息，便于调试。
-*   **Panic 捕获**: 在执行用户代码（Provider 函数）时，使用 `defer recovery` 机制捕获 Panic，防止整个应用崩溃，并将其转化为 Error 返回。
+### 3.3 Cycle Detection
 
-### 3.5 可视化 (Observability)
+To prevent infinite recursion, `dix` builds a dependency graph before or during injection.
 
-`dix` 提供了 `Graph()` 方法，利用 `DotRenderer` 生成 Graphviz DOT 格式的文本。
-*   **Provider Graph**: 展示 Provider 函数之间的调用关系。
-*   **Object Graph**: 展示实际实例化对象之间的引用关系。
+*   **Algorithm**: Depth-First Search (DFS).
+*   **Implementation**: `detectCycle` function in `dixinternal/cycle-check.go`.
+*   **Logic**: Build `map[reflect.Type]map[reflect.Type]bool` adjacency list, traverse to find back edges. If cycle found, immediately report error with cycle path.
 
-### 3.6 扩展模块 (Extension Modules)
+### 3.4 Error Handling
 
-#### 3.6.1 全局容器 (Global Container)
-`dixglobal` 包提供了全局的容器实例，方便在应用程序的不同部分共享同一个容器。
+Uses logging system for error recording.
+*   **Rich Context**: Error messages include stack traces, Provider function names, parameter types for debugging.
+*   **Panic Recovery**: Uses `defer recover` when executing user code (Provider functions) to prevent application crashes.
+*   **Safe APIs**: `TryProvide` and `TryInject` methods return errors instead of panicking, suitable for scenarios where graceful error handling is preferred.
 
-#### 3.6.2 上下文支持 (Context Support)
-`dixcontext` 包提供了将容器实例存储在 context 中的功能，便于在请求链路中传递容器。
+### 3.5 Visualization
 
-#### 3.6.3 HTTP 可视化 (HTTP Visualization)
-`dixhttp` 包提供了 HTTP 服务器，用于可视化展示依赖关系图，支持在浏览器中交互式查看依赖结构。
+`dix` provides HTTP-based visualization through the `dixhttp` module:
 
-## 4. 模块划分 (Module Breakdown)
+*   **Web Interface**: Modern UI built with Tailwind CSS + Alpine.js + vis-network
+*   **Features**:
+    *   Fuzzy search for types and functions
+    *   Package-based grouping with collapsible sidebar
+    *   Bidirectional dependency tracking (upstream & downstream)
+    *   Depth control (1-5 levels or all)
+    *   Interactive graph with drag, zoom, and click
+*   **RESTful API**: JSON endpoints for programmatic access
+    *   `/api/stats` - Summary statistics
+    *   `/api/packages` - Package list
+    *   `/api/dependencies` - Full dependency data
+    *   `/api/type/{name}` - Type-specific dependency chain
 
-| 文件 | 职责 |
+### 3.6 Extension Modules
+
+#### 3.6.1 Global Container
+`dixglobal` package provides a global container instance for sharing across application parts.
+
+#### 3.6.2 Context Support
+`dixcontext` package provides functionality to store container instance in context for passing through request chains.
+
+#### 3.6.3 HTTP Visualization
+`dixhttp` package provides HTTP server for visualizing dependency graphs with interactive web interface. See [dixhttp/README.md](../dixhttp/README.md) for details.
+
+## 4. Module Breakdown
+
+| File | Responsibility |
 | :--- | :--- |
-| `dix.go` | 核心逻辑实现，包括 `newDix` 初始化、`inject` 递归注入流程、`handleProvide` 注册逻辑。 |
-| `api.go` | 对外暴露的 API 接口 (`New`, `Provide`, `Inject`, `Graph`)。 |
-| `provider.go` | 定义 `providerFn` 结构，封装反射调用的细节，处理函数调用的输入输出转换。 |
-| `util.go` | 工具函数集合，包括反射创建 Map/Slice (`makeMap`, `makeList`)，输出类型处理 (`handleOutput`)，以及图构建逻辑。 |
-| `cycle-check.go` | 专门负责循环依赖检测的逻辑。 |
-| `logger.go` | 日志系统集成，提供结构化日志输出。 |
-| `option.go` | 配置选项模式实现（如 `WithValuesNull`）。 |
-| `dixrender/` | 依赖关系图渲染模块，负责将内部依赖关系渲染为 DOT 字符串。 |
-| `dixglobal/` | 全局容器模块，提供单例容器实例。 |
-| `dixcontext/` | Context 集成模块，支持将容器存储在 context 中。 |
-| `dixhttp/` | HTTP 可视化模块，提供 Web 界面展示依赖关系。 |
+| `dix.go` | Public API wrapper with generics support (`Inject[T]`, `InjectT[T]`, `Provide`). |
+| `dixinternal/api.go` | Core public API (`New`, `Provide`, `TryProvide`, `Inject`, `TryInject`). |
+| `dixinternal/dix.go` | Core logic: `newDix` initialization, `inject` recursive flow, Provider registration. |
+| `dixinternal/provider.go` | `providerFn` struct definition, encapsulates reflection call details. |
+| `dixinternal/util.go` | Utility functions: reflection Map/Slice creation, output type handling, graph building. |
+| `dixinternal/cycle-check.go` | Circular dependency detection logic. |
+| `dixinternal/logger.go` | Logging system integration with structured output. |
+| `dixinternal/option.go` | Configuration option pattern (e.g., `WithValuesNull`). |
+| `dixglobal/` | Global container module with singleton instance. |
+| `dixcontext/` | Context integration module for storing container in context. |
+| `dixhttp/` | HTTP visualization module with modern web interface. |
 
-## 5. 总结
+## 5. Thread Safety
 
-`dix` 是一个功能完备的 Go 依赖注入容器。它通过反射牺牲了一定的运行时性能（但在初始化阶段通常可接受），换取了极大的开发灵活性。其设计亮点在于对 Go 语言特性的充分利用（如多返回值处理 error，结构体字段标签等）以及对集合类型注入的优雅支持。此外，框架还提供了丰富的扩展功能，包括全局容器、上下文集成和可视化工具，使其成为一个完整的依赖注入解决方案。
+**Important**: The `Dix` container is **NOT thread-safe** by design. Users should not call `Provide`/`Inject` concurrently on the same container instance. This is a deliberate design choice for performance, as dependency injection typically happens during application initialization (single-threaded).
+
+For concurrent scenarios, consider:
+1. Complete all `Provide` calls before starting concurrent operations
+2. Use separate container instances per goroutine
+3. Wrap container access with external synchronization if needed
+
+## 6. Summary
+
+`dix` is a feature-complete Go dependency injection container. It trades some runtime performance (through reflection) for great development flexibility - acceptable during initialization phase. 
+
+Design highlights:
+*   Full utilization of Go language features (multi-return for error handling, struct field tags)
+*   Elegant support for collection type injection
+*   Rich extension ecosystem (global container, context integration, web visualization)
+*   Safe API variants for graceful error handling
+
+This makes `dix` a complete dependency injection solution for Go applications.

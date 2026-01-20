@@ -170,7 +170,7 @@ func getProvideAllInputs(typ reflect.Type) []*providerInputType {
 			}
 
 			inTyp := inTye.Field(j).Type
-			if !isSupportedType(typ) {
+			if !isSupportedType(inTyp) {
 				continue
 			}
 
@@ -185,7 +185,7 @@ func getProvideAllInputs(typ reflect.Type) []*providerInputType {
 	case reflect.Slice:
 		input = append(input, &providerInputType{typ: inTye.Elem(), isList: true})
 	default:
-		logger.Error("incorrect input type", "type", inTye.String(), "kind", inTye.Kind().String())
+		logger.Warn("unsupported input type for dependency analysis", "type", inTye.String(), "kind", inTye.Kind().String())
 	}
 	return input
 }
@@ -210,7 +210,7 @@ func buildDependencyGraph(providers map[outputType][]*providerFn) map[reflect.Ty
 	return graph
 }
 
-// isSupportedType 检查是否为支持的类型
+// isSupportedType checks if the type is supported for dependency injection
 func isSupportedType(typ reflect.Type) bool {
 	switch typ.Kind() {
 	case reflect.Interface, reflect.Ptr, reflect.Func, reflect.Struct:

@@ -12,9 +12,6 @@ func main() {
 			fmt.Printf("panic: %v\n", r)
 		}
 	}()
-	defer func() {
-		fmt.Println(dixglobal.Graph())
-	}()
 
 	type handler func() string
 
@@ -41,6 +38,4 @@ func main() {
 			fmt.Println("struct struct:", p.H[i]())
 		}
 	})
-
-	fmt.Println(dixglobal.Graph())
 }

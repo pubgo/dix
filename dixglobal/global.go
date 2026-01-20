@@ -47,13 +47,3 @@ func InjectT[T any](opts ...dix.Option) T {
 	_ = _dix.Inject(&data, opts...)
 	return data
 }
-
-// Graph Dix graph
-func Graph() *dix.Graph {
-	return dix.GenerateGraph(_dix)
-}
-
-// GraphWithOptions generates dependency graphs with custom options
-func GraphWithOptions(opts *dix.GraphOptions) *dix.Graph {
-	return dix.GenerateGraphWithOptions(_dix, opts)
-}
