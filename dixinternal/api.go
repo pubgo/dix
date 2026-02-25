@@ -106,8 +106,26 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 		for _, providerFn := range providerList {
 			fnName := GetFnName(providerFn.fn)
 			var inputTypes []string
+			seen := make(map[string]bool)
 			for _, input := range providerFn.inputList {
-				inputTypes = append(inputTypes, input.typ.String())
+				if input.isStruct || input.typ.Kind() == reflect.Struct {
+					for _, in := range getProvideAllInputs(input.typ) {
+						name := in.typ.String()
+						if name == "" || seen[name] {
+							continue
+						}
+						seen[name] = true
+						inputTypes = append(inputTypes, name)
+					}
+					continue
+				}
+
+				name := input.typ.String()
+				if name == "" || seen[name] {
+					continue
+				}
+				seen[name] = true
+				inputTypes = append(inputTypes, name)
 			}
 			details = append(details, ProviderDetails{
 				OutputType:   outputType.String(),
