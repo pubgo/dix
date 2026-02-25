@@ -18,13 +18,36 @@ var htmlTemplate string
 type Server struct {
 	dix *dixinternal.Dix
 	mux *http.ServeMux
+	// basePath is an optional URL prefix (no trailing slash). Example: "/dix"
+	basePath string
 }
 
 // NewServer creates a new HTTP server for dependency visualization
 func NewServer(dix *dixinternal.Dix) *Server {
+	return NewServerWithOptions(dix)
+}
+
+// ServerOption customizes the HTTP server behavior.
+type ServerOption func(*Server)
+
+// WithBasePath sets an optional URL prefix for all routes. Example: "/dix".
+func WithBasePath(basePath string) ServerOption {
+	return func(s *Server) {
+		s.basePath = normalizeBasePath(basePath)
+	}
+}
+
+// NewServerWithOptions creates a new HTTP server with options.
+func NewServerWithOptions(dix *dixinternal.Dix, opts ...ServerOption) *Server {
 	s := &Server{
-		dix: dix,
-		mux: http.NewServeMux(),
+		dix:      dix,
+		mux:      http.NewServeMux(),
+		basePath: "",
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(s)
+		}
 	}
 	s.setupRoutes()
 	return s
@@ -32,12 +55,26 @@ func NewServer(dix *dixinternal.Dix) *Server {
 
 // setupRoutes configures all HTTP routes
 func (s *Server) setupRoutes() {
-	s.mux.HandleFunc("/", s.HandleIndex)
-	s.mux.HandleFunc("/api/dependencies", s.HandleDependencies)
-	s.mux.HandleFunc("/api/stats", s.HandleStats)
-	s.mux.HandleFunc("/api/packages", s.HandlePackages)
-	s.mux.HandleFunc("/api/package/", s.HandlePackageDetails)
-	s.mux.HandleFunc("/api/type/", s.HandleTypeDetails)
+	base := s.basePath
+	indexPath := "/"
+	if base != "" {
+		indexPath = base + "/"
+		// Redirect /base -> /base/
+		s.mux.HandleFunc(base, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == base {
+				http.Redirect(w, r, indexPath, http.StatusMovedPermanently)
+				return
+			}
+			http.NotFound(w, r)
+		})
+	}
+
+	s.mux.HandleFunc(indexPath, s.HandleIndex)
+	s.mux.HandleFunc(base+"/api/dependencies", s.HandleDependencies)
+	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
+	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
+	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
+	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -54,7 +91,8 @@ func (s *Server) ListenAndServe(addr string) error {
 func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, htmlTemplate)
+	html := strings.ReplaceAll(htmlTemplate, "__DIX_BASE_PATH__", s.basePath)
+	fmt.Fprint(w, html)
 }
 
 // HandleStats returns summary statistics
@@ -500,4 +538,16 @@ func writeJSON(w http.ResponseWriter, data any) {
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
 	}
+}
+
+func normalizeBasePath(basePath string) string {
+	base := strings.TrimSpace(basePath)
+	if base == "" || base == "/" {
+		return ""
+	}
+	if !strings.HasPrefix(base, "/") {
+		base = "/" + base
+	}
+	base = strings.TrimRight(base, "/")
+	return base
 }

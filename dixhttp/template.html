@@ -350,6 +350,9 @@
     </div>
 
     <script>
+        const API_BASE = "__DIX_BASE_PATH__";
+        const apiUrl = (path) => (API_BASE ? API_BASE + path : path);
+
         function app() {
             return {
                 // State
@@ -389,7 +392,7 @@
 
                 async loadStats() {
                     try {
-                        const res = await fetch('/api/stats');
+                        const res = await fetch(apiUrl('/api/stats'));
                         this.stats = await res.json();
                     } catch (e) {
                         console.error('加载统计失败:', e);
@@ -398,7 +401,7 @@
 
                 async loadPackages() {
                     try {
-                        const res = await fetch('/api/packages');
+                        const res = await fetch(apiUrl('/api/packages'));
                         this.packages = await res.json();
                     } catch (e) {
                         console.error('加载包列表失败:', e);
@@ -413,7 +416,7 @@
                 async loadDependencies() {
                     this.loading = true;
                     try {
-                        let url = '/api/dependencies';
+                        let url = apiUrl('/api/dependencies');
                         if (this.currentPackage) {
                             url += '?package=' + encodeURIComponent(this.currentPackage);
                         }
@@ -891,7 +894,7 @@
                     this.loading = true;
                     try {
                         const depth = parseInt(this.currentDepth) || 0;
-                        const url = `/api/type/${encodeURIComponent(typeName)}?depth=${depth}`;
+                        const url = apiUrl(`/api/type/${encodeURIComponent(typeName)}?depth=${depth}`);
                         const res = await fetch(url);
                         const data = await res.json();
                         this.renderTypeGraph(data);

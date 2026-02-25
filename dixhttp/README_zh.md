@@ -54,6 +54,18 @@ func main() {
 
 打开浏览器访问 `http://localhost:8080` 即可查看依赖关系图。
 
+### 配置访问前缀
+
+如果需要将页面和 API 挂载到一个前缀路径（例如网关转发），可以使用 `WithBasePath`：
+
+```go
+server := dixhttp.NewServerWithOptions(
+  (*dixinternal.Dix)(di),
+  dixhttp.WithBasePath("/dix"),
+)
+// 访问 http://localhost:8080/dix/
+```
+
 ## 界面布局
 
 ```

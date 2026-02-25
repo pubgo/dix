@@ -54,6 +54,18 @@ func main() {
 
 Open browser and visit `http://localhost:8080` to view the dependency graph.
 
+### Base Path / Prefix
+
+If you need to mount the UI and API under a path prefix (e.g. behind a gateway), use `WithBasePath`:
+
+```go
+server := dixhttp.NewServerWithOptions(
+  (*dixinternal.Dix)(di),
+  dixhttp.WithBasePath("/dix"),
+)
+// Visit http://localhost:8080/dix/
+```
+
 ## UI Layout
 
 ```
