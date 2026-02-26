@@ -3,6 +3,7 @@ package dixinternal
 import (
 	"errors"
 	"reflect"
+	"strings"
 )
 
 // New Dix new
@@ -95,8 +96,11 @@ func (dix *Dix) GetObjects() map[reflect.Type]map[string][]reflect.Value {
 // ProviderDetails contains detailed information about a provider
 type ProviderDetails struct {
 	OutputType   string
+	OutputPkg    string
 	FunctionName string
+	FunctionPkg  string
 	InputTypes   []string
+	InputPkgs    []string
 }
 
 // GetProviderDetails returns detailed information about all providers
@@ -106,6 +110,7 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 		for _, providerFn := range providerList {
 			fnName := GetFnName(providerFn.fn)
 			var inputTypes []string
+			var inputPkgs []string
 			seen := make(map[string]bool)
 			for _, input := range providerFn.inputList {
 				if input.isStruct || input.typ.Kind() == reflect.Struct {
@@ -116,6 +121,7 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 						}
 						seen[name] = true
 						inputTypes = append(inputTypes, name)
+						inputPkgs = append(inputPkgs, resolveTypePkgPath(in.typ))
 					}
 					continue
 				}
@@ -126,13 +132,44 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 				}
 				seen[name] = true
 				inputTypes = append(inputTypes, name)
+				inputPkgs = append(inputPkgs, resolveTypePkgPath(input.typ))
 			}
 			details = append(details, ProviderDetails{
 				OutputType:   outputType.String(),
+				OutputPkg:    resolveTypePkgPath(outputType),
 				FunctionName: fnName,
+				FunctionPkg:  resolveFuncPkgPath(fnName),
 				InputTypes:   inputTypes,
+				InputPkgs:    inputPkgs,
 			})
 		}
 	}
 	return details
+}
+
+func resolveTypePkgPath(typ reflect.Type) string {
+	if typ == nil {
+		return ""
+	}
+	for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		typ = typ.Elem()
+		if typ == nil {
+			return ""
+		}
+	}
+	if typ.Kind() == reflect.Map {
+		return resolveTypePkgPath(typ.Elem())
+	}
+	return typ.PkgPath()
+}
+
+func resolveFuncPkgPath(fnName string) string {
+	name := strings.TrimSpace(fnName)
+	if name == "" {
+		return ""
+	}
+	if idx := strings.LastIndex(name, "."); idx > 0 {
+		return name[:idx]
+	}
+	return ""
 }

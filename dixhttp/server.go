@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/pubgo/dix/v2/dixinternal"
 )
@@ -20,6 +21,62 @@ type Server struct {
 	mux *http.ServeMux
 	// basePath is an optional URL prefix (no trailing slash). Example: "/dix"
 	basePath string
+}
+
+// GroupRule defines a group name with prefix list for aggregation.
+type GroupRule struct {
+	Name     string   `json:"name"`
+	Prefixes []string `json:"prefixes"`
+}
+
+var (
+	groupRulesMu sync.RWMutex
+	groupRules   []GroupRule
+)
+
+// RegisterGroupRules registers global group rules for visualization.
+// This can be called by business code to predefine group rules.
+func RegisterGroupRules(rules ...GroupRule) {
+	groupRulesMu.Lock()
+	defer groupRulesMu.Unlock()
+	groupRules = sanitizeGroupRules(rules)
+}
+
+func getGroupRules() []GroupRule {
+	groupRulesMu.RLock()
+	defer groupRulesMu.RUnlock()
+	if len(groupRules) == 0 {
+		return nil
+	}
+	result := make([]GroupRule, 0, len(groupRules))
+	for _, r := range groupRules {
+		result = append(result, GroupRule{Name: r.Name, Prefixes: append([]string{}, r.Prefixes...)})
+	}
+	return result
+}
+
+func sanitizeGroupRules(rules []GroupRule) []GroupRule {
+	var result []GroupRule
+	seen := make(map[string]bool)
+	for _, r := range rules {
+		name := strings.TrimSpace(r.Name)
+		if name == "" || seen[name] {
+			continue
+		}
+		seen[name] = true
+		var prefixes []string
+		prefixSeen := make(map[string]bool)
+		for _, p := range r.Prefixes {
+			pp := strings.TrimSpace(p)
+			if pp == "" || prefixSeen[pp] {
+				continue
+			}
+			prefixSeen[pp] = true
+			prefixes = append(prefixes, pp)
+		}
+		result = append(result, GroupRule{Name: name, Prefixes: prefixes})
+	}
+	return result
 }
 
 // NewServer creates a new HTTP server for dependency visualization
@@ -75,6 +132,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
+	s.mux.HandleFunc(base+"/api/group-rules", s.HandleGroupRules)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -336,6 +394,15 @@ func (s *Server) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, data)
 }
 
+// HandleGroupRules returns global group rules for visualization.
+func (s *Server) HandleGroupRules(w http.ResponseWriter, r *http.Request) {
+	rules := getGroupRules()
+	if rules == nil {
+		rules = []GroupRule{}
+	}
+	writeJSON(w, rules)
+}
+
 // extractDependencyData extracts structured data from the Dix container
 func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyData {
 	data := &DependencyData{
@@ -367,8 +434,11 @@ func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyD
 		providerInfo := ProviderInfo{
 			ID:           providerID,
 			OutputType:   detail.OutputType,
+			OutputPkg:    detail.OutputPkg,
 			FunctionName: detail.FunctionName,
+			FunctionPkg:  detail.FunctionPkg,
 			InputTypes:   detail.InputTypes,
+			InputPkgs:    detail.InputPkgs,
 		}
 
 		// Add edges from input types to provider output
@@ -472,8 +542,11 @@ type DependencyData struct {
 type ProviderInfo struct {
 	ID           string   `json:"id"`
 	OutputType   string   `json:"output_type"`
+	OutputPkg    string   `json:"output_pkg"`
 	FunctionName string   `json:"function_name"`
+	FunctionPkg  string   `json:"function_pkg"`
 	InputTypes   []string `json:"input_types"`
+	InputPkgs    []string `json:"input_pkgs"`
 }
 
 // ObjectInfo contains information about an object instance

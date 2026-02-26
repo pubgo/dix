@@ -177,6 +177,7 @@
                         <span class="text-xs font-medium text-gray-500">深度:</span>
                         <select 
                             x-model="currentDepth"
+                            @change="onDepthChange()"
                             class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none"
                         >
                             <option value="1">1 级</option>
@@ -186,6 +187,129 @@
                             <option value="0">全部</option>
                         </select>
                     </div>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 text-xs font-medium text-gray-500 cursor-pointer">
+                            <input type="checkbox" x-model="aggregateGroups" @change="saveLocalState(); renderGraph()" class="rounded border-gray-300">
+                            按分组聚合
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label class="flex items-center gap-2 text-xs font-medium text-gray-500 cursor-pointer">
+                            <input type="checkbox" x-model="debugGroupMatching" class="rounded border-gray-300">
+                            调试分组匹配
+                        </label>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs font-medium text-gray-500">前缀过滤:</span>
+                        <input
+                            type="text"
+                            x-model="filterPrefix"
+                            @input="renderGraph()"
+                            placeholder="输入包路径/类型/函数前缀"
+                            class="w-64 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
+                        >
+                        <button
+                            @click="filterPrefix=''; renderGraph()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                        >
+                            清除
+                        </button>
+                    </div>
+                    <details class="text-xs">
+                        <summary class="cursor-pointer text-gray-500">分组清单</summary>
+                        <div class="mt-2 bg-white border border-gray-200 rounded-lg p-3 w-[520px]">
+                            <div class="flex items-center gap-2 mb-2">
+                                <input
+                                    type="text"
+                                    x-model="newGroupName"
+                                    placeholder="组名（如 service）"
+                                    class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
+                                >
+                                <input
+                                    type="text"
+                                    x-model="newGroupPrefix"
+                                    placeholder="匹配前缀（如 github.com/acme/app/service/）"
+                                    class="flex-[2] px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
+                                >
+                                <button
+                                    @click="addGroup()"
+                                    class="px-2 py-1 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600"
+                                >
+                                    添加
+                                </button>
+                            </div>
+                            <div class="mb-2">
+                                <div class="text-[11px] text-gray-500 mb-1">可选前缀（来自包路径，点击填充）</div>
+                                <div class="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
+                                    <template x-for="p in prefixSuggestions" :key="p">
+                                        <button
+                                            @click="newGroupPrefix = p"
+                                            class="px-2 py-1 text-[11px] border border-gray-200 rounded-md hover:bg-gray-50"
+                                            x-text="p"
+                                        ></button>
+                                    </template>
+                                    <div x-show="prefixSuggestions.length === 0" class="text-[11px] text-gray-400">暂无可选前缀</div>
+                                </div>
+                            </div>
+                            <div class="space-y-2 max-h-48 overflow-y-auto">
+                                <template x-for="(grp, gidx) in groupRules" :key="grp.name">
+                                    <div class="border border-gray-200 rounded-md p-2">
+                                        <div class="flex items-center justify-between mb-1">
+                                            <div class="font-medium text-gray-700" x-text="grp.name"></div>
+                                            <button
+                                                @click="removeGroup(gidx)"
+                                                class="text-xs text-red-500 hover:underline"
+                                            >
+                                                删除组
+                                            </button>
+                                        </div>
+                                        <div class="flex items-center gap-2 mb-2">
+                                            <input
+                                                type="text"
+                                                x-model="grp._rename"
+                                                placeholder="新组名"
+                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
+                                            >
+                                            <button
+                                                @click="renameGroup(gidx)"
+                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                                            >
+                                                修改
+                                            </button>
+                                        </div>
+                                        <div class="space-y-1">
+                                            <template x-for="(p, pidx) in grp.prefixes" :key="p + pidx">
+                                                <div class="flex items-center gap-2">
+                                                    <span class="text-gray-500 break-all" x-text="p"></span>
+                                                    <button
+                                                        @click="removePrefix(gidx, pidx)"
+                                                        class="text-xs text-red-400 hover:underline"
+                                                    >
+                                                        移除
+                                                    </button>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <div class="flex items-center gap-2 mt-2">
+                                            <input
+                                                type="text"
+                                                x-model="grp._newPrefix"
+                                                placeholder="新增前缀"
+                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
+                                            >
+                                            <button
+                                                @click="addPrefix(gidx)"
+                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                                            >
+                                                添加前缀
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                                <div x-show="groupRules.length === 0" class="text-gray-400 text-xs">暂无分组</div>
+                            </div>
+                        </div>
+                    </details>
                     <button 
                         @click="resetView()"
                         class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
@@ -314,12 +438,43 @@
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">类型</h4>
                                 <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.fullType"></div>
                             </div>
+                            <div class="mb-5" x-show="selectedNode.data.packagePath">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包路径</h4>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.packagePath"></div>
+                            </div>
                             <button 
                                 @click="showDependencyGraph(selectedNode.data.fullType, 'type')"
                                 class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
                             >
                                 <span>🔍</span> 查看依赖关系
                             </button>
+                        </div>
+                    </template>
+                    <!-- Group Detail -->
+                    <template x-if="selectedNode && selectedNode.data && selectedNode.data.type === 'group'">
+                        <div>
+                            <div class="mb-5">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">分组</h4>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.group"></div>
+                            </div>
+                            <button
+                                @click="showGroupGraph(selectedNode.data.group)"
+                                class="w-full px-4 py-2 mb-4 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
+                            >
+                                <span>🧩</span> 查看组内依赖图
+                            </button>
+                            <div class="mb-5">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包含节点</h4>
+                                <div class="text-xs text-gray-500 mb-2" x-text="(groupMembers[selectedNode.data.group] || []).length + ' 个'"></div>
+                                <ul class="space-y-1 max-h-64 overflow-y-auto">
+                                    <template x-for="item in (groupMembers[selectedNode.data.group] || [])" :key="item.id">
+                                        <li class="px-3 py-2 bg-gray-100 rounded text-xs break-all">
+                                            <div class="text-gray-700" x-text="item.id"></div>
+                                            <div class="text-gray-400" x-text="item.packagePath"></div>
+                                        </li>
+                                    </template>
+                                </ul>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -370,6 +525,17 @@
                 allData: null,
                 selectedNode: null,
                 network: null,
+                focusedType: null,
+                focusedGraph: null,
+                focusedGroup: null,
+                aggregateGroups: true,
+                debugGroupMatching: false,
+                groupRules: [],
+                newGroupName: '',
+                newGroupPrefix: '',
+                storageKey: 'dix.groupRules.v1',
+                groupMembers: {},
+                filterPrefix: '',
 
                 // Computed
                 get filteredPackages() {
@@ -383,11 +549,37 @@
                     return this.packages.reduce((sum, p) => sum + p.provider_count, 0);
                 },
 
+                get prefixSuggestions() {
+                    return this.getPackagePrefixSuggestions();
+                },
+
                 // Methods
                 async init() {
+                    this.loadLocalState();
+                    await this.loadGroupRules();
                     await this.loadStats();
                     await this.loadPackages();
                     await this.loadDependencies();
+                },
+
+                async loadGroupRules() {
+                    try {
+                        const res = await fetch(apiUrl('/api/group-rules'));
+                        const rules = await res.json();
+                        if (Array.isArray(rules) && rules.length > 0) {
+                            if (!this.groupRules || this.groupRules.length === 0) {
+                                this.groupRules = rules.map(g => ({
+                                    name: g.name,
+                                    prefixes: Array.isArray(g.prefixes) ? g.prefixes : [],
+                                    _newPrefix: '',
+                                    _rename: ''
+                                }));
+                                this.saveLocalState();
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('加载分组清单失败:', e);
+                    }
                 },
 
                 async loadStats() {
@@ -432,6 +624,8 @@
 
                 switchView(view) {
                     this.currentView = view;
+                    this.focusedType = null;
+                    this.focusedGraph = null;
                     this.renderGraph();
                 },
 
@@ -442,7 +636,28 @@
                     this.globalSearch = '';
                     this.searchResults = [];
                     this.selectedNode = null;
+                    this.focusedType = null;
+                    this.focusedGraph = null;
+                    this.saveLocalState();
                     this.loadDependencies();
+                },
+
+                onDepthChange() {
+                    if (this.focusedType) {
+                        if (this.focusedGraph === 'dependency') {
+                            this.showDependencyGraph(this.focusedType, 'type');
+                            return;
+                        }
+                        if (this.focusedGraph === 'type') {
+                            this.focusOnType(this.focusedType);
+                            return;
+                        }
+                    }
+                    if (this.focusedGraph === 'group' && this.focusedGroup) {
+                        this.showGroupGraph(this.focusedGroup);
+                        return;
+                    }
+                    this.renderGraph();
                 },
 
                 // Global search functionality
@@ -530,10 +745,15 @@
                 showDependencyGraph(targetType, nodeType) {
                     if (!this.allData) return;
 
+                    this.focusedType = targetType;
+                    this.focusedGraph = 'dependency';
+                    this.focusedGroup = null;
+
                     const depth = parseInt(this.currentDepth) || 2;
                     const nodes = [];
                     const edges = [];
                     const nodeMap = new Map();
+                    const typePkgMap = this.buildTypePkgMap();
 
                     // 构建类型到 Provider 的映射
                     const typeToProviders = new Map(); // outputType -> providers
@@ -634,7 +854,7 @@
                                 title: `类型: ${type}\n层级: ${level}\n${direction === 'dependency' ? '← 依赖' : '→ 被依赖'}`,
                                 color: { background: bgColor, border: borderColor },
                                 level: direction === 'dependency' ? -level : level,
-                                data: { type: 'type', fullType: type }
+                                data: { type: 'type', fullType: type, packagePath: typePkgMap.get(type) || '' }
                             });
                             nodeMap.set(type, true);
                         }
@@ -660,10 +880,13 @@
                     });
 
                     // 渲染图形
+                    const aggregated = this.aggregateByGroups(nodes, edges, new Set([targetType]));
+                    const filteredByPrefix = this.filterByPrefix(aggregated.nodes, aggregated.edges, new Set([targetType]));
+
                     const container = document.getElementById('network');
                     const graphData = {
-                        nodes: new vis.DataSet(nodes),
-                        edges: new vis.DataSet(edges)
+                        nodes: new vis.DataSet(filteredByPrefix.nodes),
+                        edges: new vis.DataSet(filteredByPrefix.edges)
                     };
 
                     if (this.network) {
@@ -703,9 +926,14 @@
                 renderGraph() {
                     if (!this.allData) return;
 
+                    this.focusedType = null;
+                    this.focusedGraph = null;
+                    this.focusedGroup = null;
+
                     const nodes = [];
                     const edges = [];
                     const nodeMap = new Map();
+                    const typePkgMap = this.buildTypePkgMap();
 
                     if (this.currentView === 'providers') {
                         this.allData.providers.forEach((provider) => {
@@ -722,7 +950,7 @@
                                     color: { background: '#bbf7d0', border: '#22c55e' },
                                     shape: 'box',
                                     font: { size: 11 },
-                                    data: provider
+                                    data: { ...provider, type: 'provider', packagePath: provider.function_pkg || '' }
                                 });
                                 nodeMap.set(providerNodeId, true);
                             }
@@ -736,7 +964,7 @@
                                     color: { background: '#bfdbfe', border: '#3b82f6' },
                                     shape: 'ellipse',
                                     font: { size: 10 },
-                                    data: { type: 'type', fullType: provider.output_type }
+                                    data: { type: 'type', fullType: provider.output_type, packagePath: typePkgMap.get(provider.output_type) || provider.output_pkg || '' }
                                 });
                                 nodeMap.set(provider.output_type, true);
                             }
@@ -759,7 +987,7 @@
                                         color: { background: '#bfdbfe', border: '#3b82f6' },
                                         shape: 'ellipse',
                                         font: { size: 10 },
-                                        data: { type: 'type', fullType: inputType }
+                                        data: { type: 'type', fullType: inputType, packagePath: typePkgMap.get(inputType) || '' }
                                     });
                                     nodeMap.set(inputType, true);
                                 }
@@ -784,7 +1012,7 @@
                                     label: this.formatTypeName(edge.from),
                                     title: '类型: ' + edge.from,
                                     color: { background: '#bfdbfe', border: '#3b82f6' },
-                                    data: { type: 'type', fullType: edge.from }
+                                    data: { type: 'type', fullType: edge.from, packagePath: typePkgMap.get(edge.from) || '' }
                                 });
                                 nodeMap.set(edge.from, true);
                             }
@@ -795,7 +1023,7 @@
                                     label: this.formatTypeName(edge.to),
                                     title: '类型: ' + edge.to,
                                     color: { background: '#bfdbfe', border: '#3b82f6' },
-                                    data: { type: 'type', fullType: edge.to }
+                                    data: { type: 'type', fullType: edge.to, packagePath: typePkgMap.get(edge.to) || '' }
                                 });
                                 nodeMap.set(edge.to, true);
                             }
@@ -810,10 +1038,13 @@
                     }
 
                     // Create network
+                    const aggregated = this.aggregateByGroups(nodes, edges);
+                    const filteredByPrefix = this.filterByPrefix(aggregated.nodes, aggregated.edges);
+
                     const container = document.getElementById('network');
                     const data = {
-                        nodes: new vis.DataSet(nodes),
-                        edges: new vis.DataSet(edges)
+                        nodes: new vis.DataSet(filteredByPrefix.nodes),
+                        edges: new vis.DataSet(filteredByPrefix.edges)
                     };
 
                     const options = this.getNetworkOptions();
@@ -845,8 +1076,11 @@
                     });
                 },
 
-                getNetworkOptions() {
-                    const isHierarchical = this.currentLayout === 'hierarchical';
+                getNetworkOptions(forceHierarchical = false) {
+                    const isHierarchical = forceHierarchical || this.currentLayout === 'hierarchical';
+                    const levelSeparation = 120;
+                    const nodeSpacing = 150;
+                    const treeSpacing = 150;
                     return {
                         nodes: {
                             shape: 'box',
@@ -880,9 +1114,9 @@
                                 enabled: true,
                                 direction: 'UD',
                                 sortMethod: 'directed',
-                                levelSeparation: 120,
-                                nodeSpacing: 150,
-                                treeSpacing: 150
+                                levelSeparation,
+                                nodeSpacing,
+                                treeSpacing
                             }
                         } : {
                             hierarchical: { enabled: false }
@@ -892,6 +1126,9 @@
 
                 async focusOnType(typeName) {
                     this.loading = true;
+                    this.focusedType = typeName;
+                    this.focusedGraph = 'type';
+                    this.focusedGroup = null;
                     try {
                         const depth = parseInt(this.currentDepth) || 0;
                         const url = apiUrl(`/api/type/${encodeURIComponent(typeName)}?depth=${depth}`);
@@ -909,6 +1146,7 @@
                     const nodes = [];
                     const edges = [];
                     const nodeMap = new Map();
+                    const typePkgMap = this.buildTypePkgMap();
 
                     data.nodes.forEach(node => {
                         if (!nodeMap.has(node.id)) {
@@ -921,7 +1159,7 @@
                                     ? { background: '#fde68a', border: '#f59e0b' }
                                     : { background: '#bfdbfe', border: '#3b82f6' },
                                 level: node.level,
-                                data: { type: 'type', fullType: node.type }
+                                data: { type: 'type', fullType: node.type, packagePath: typePkgMap.get(node.type) || node.package || '' }
                             });
                             nodeMap.set(node.id, true);
                         }
@@ -936,10 +1174,13 @@
                         });
                     });
 
+                    const aggregated = this.aggregateByGroups(nodes, edges, new Set([data.root_type]));
+                    const filteredByPrefix = this.filterByPrefix(aggregated.nodes, aggregated.edges, new Set([data.root_type]));
+
                     const container = document.getElementById('network');
                     const graphData = {
-                        nodes: new vis.DataSet(nodes),
-                        edges: new vis.DataSet(edges)
+                        nodes: new vis.DataSet(filteredByPrefix.nodes),
+                        edges: new vis.DataSet(filteredByPrefix.edges)
                     };
 
                     if (this.network) {
@@ -956,6 +1197,130 @@
                         }
                     });
                 },
+
+                showGroupGraph(groupName) {
+                    if (!groupName || !this.groupMembers || !this.groupMembers[groupName]) return;
+                    this.focusedGraph = 'group';
+                    this.focusedGroup = groupName;
+                    const memberList = this.groupMembers[groupName] || [];
+                    if (memberList.length === 0) return;
+
+                    const depth = parseInt(this.currentDepth) || 0;
+                    const depthLimit = depth > 0 ? depth : Number.POSITIVE_INFINITY;
+
+                    const memberIds = new Set(memberList.map(m => m.id));
+                    const nodes = [];
+                    const edges = [];
+                    const nodeMap = new Map();
+                    const typePkgMap = this.buildTypePkgMap();
+
+                    // Build full graph nodes and edges
+                    (this.allData.providers || []).forEach(provider => {
+                        const providerNodeId = provider.id;
+                        if (!nodeMap.has(providerNodeId)) {
+                            nodes.push({
+                                id: providerNodeId,
+                                label: this.formatFunctionName(provider.function_name),
+                                title: this.buildProviderTooltip(provider),
+                                color: { background: '#bbf7d0', border: '#22c55e' },
+                                shape: 'box',
+                                font: { size: 11 },
+                                data: { ...provider, type: 'provider', packagePath: provider.function_pkg || '' }
+                            });
+                            nodeMap.set(providerNodeId, true);
+                        }
+
+                        const outputType = provider.output_type;
+                        if (!nodeMap.has(outputType)) {
+                            nodes.push({
+                                id: outputType,
+                                label: this.formatTypeName(outputType),
+                                title: '类型: ' + outputType,
+                                color: { background: '#bfdbfe', border: '#3b82f6' },
+                                shape: 'ellipse',
+                                font: { size: 10 },
+                                data: { type: 'type', fullType: outputType, packagePath: typePkgMap.get(outputType) || provider.output_pkg || '' }
+                            });
+                            nodeMap.set(outputType, true);
+                        }
+
+                        edges.push({
+                            from: providerNodeId,
+                            to: outputType,
+                            arrows: 'to',
+                            color: { color: '#22c55e' }
+                        });
+
+                        (provider.input_types || []).forEach(inputType => {
+                            if (!nodeMap.has(inputType)) {
+                                nodes.push({
+                                    id: inputType,
+                                    label: this.formatTypeName(inputType),
+                                    title: '类型: ' + inputType,
+                                    color: { background: '#bfdbfe', border: '#3b82f6' },
+                                    shape: 'ellipse',
+                                    font: { size: 10 },
+                                    data: { type: 'type', fullType: inputType, packagePath: typePkgMap.get(inputType) || '' }
+                                });
+                                nodeMap.set(inputType, true);
+                            }
+
+                            edges.push({
+                                from: inputType,
+                                to: providerNodeId,
+                                arrows: 'to',
+                                dashes: true,
+                                color: { color: '#f59e0b' }
+                            });
+                        });
+                    });
+
+                    // BFS from group members to include upstream/downstream within depth
+                    const adjacency = new Map();
+                    nodes.forEach(n => adjacency.set(n.id, []));
+                    edges.forEach(e => {
+                        if (adjacency.has(e.from)) adjacency.get(e.from).push(e.to);
+                        if (adjacency.has(e.to)) adjacency.get(e.to).push(e.from);
+                    });
+
+                    const keep = new Set();
+                    const queue = Array.from(memberIds).map(id => ({ id, level: 0 }));
+                    while (queue.length > 0) {
+                        const { id, level } = queue.shift();
+                        if (keep.has(id) || level > depthLimit) continue;
+                        keep.add(id);
+                        const neighbors = adjacency.get(id) || [];
+                        neighbors.forEach(next => {
+                            if (!keep.has(next)) {
+                                queue.push({ id: next, level: level + 1 });
+                            }
+                        });
+                    }
+
+                    const filteredNodes = nodes.filter(n => keep.has(n.id));
+                    const filteredEdges = edges.filter(e => keep.has(e.from) && keep.has(e.to));
+
+                    const container = document.getElementById('network');
+                    const filteredByPrefix = this.filterByPrefix(filteredNodes, filteredEdges, memberIds);
+                    const graphData = {
+                        nodes: new vis.DataSet(filteredByPrefix.nodes),
+                        edges: new vis.DataSet(filteredByPrefix.edges)
+                    };
+
+                    if (this.network) {
+                        this.network.destroy();
+                    }
+
+                    this.network = new vis.Network(container, graphData, this.getNetworkOptions(true));
+                    this.network.on('click', params => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            const node = graphData.nodes.get(nodeId);
+                            this.selectedNode = node;
+                        }
+                    });
+                },
+
 
                 // Helpers
                 formatPackageName(name) {
@@ -1000,7 +1365,311 @@
                         });
                     }
                     return tip;
-                }
+                },
+
+                addGroup() {
+                    const name = (this.newGroupName || '').trim();
+                    const prefix = (this.newGroupPrefix || '').trim();
+                    if (!name || !prefix) return;
+                    const exists = this.groupRules.find(g => g.name === name);
+                    if (exists) {
+                        if (!exists.prefixes.includes(prefix)) {
+                            exists.prefixes.push(prefix);
+                        }
+                    } else {
+                        this.groupRules.push({ name, prefixes: [prefix], _newPrefix: '', _rename: '' });
+                    }
+                    this.newGroupName = '';
+                    this.newGroupPrefix = '';
+                    this.saveLocalState();
+                    this.renderGraph();
+                },
+
+                removeGroup(index) {
+                    this.groupRules.splice(index, 1);
+                    this.saveLocalState();
+                    this.renderGraph();
+                },
+
+                renameGroup(groupIndex) {
+                    const grp = this.groupRules[groupIndex];
+                    if (!grp) return;
+                    const nextName = (grp._rename || '').trim();
+                    if (!nextName || nextName === grp.name) return;
+                    if (this.groupRules.some((g, i) => i !== groupIndex && g.name === nextName)) {
+                        return;
+                    }
+                    grp.name = nextName;
+                    grp._rename = '';
+                    this.saveLocalState();
+                    this.renderGraph();
+                },
+
+                addPrefix(groupIndex) {
+                    const grp = this.groupRules[groupIndex];
+                    if (!grp) return;
+                    const prefix = (grp._newPrefix || '').trim();
+                    if (!prefix) return;
+                    if (!grp.prefixes.includes(prefix)) {
+                        grp.prefixes.push(prefix);
+                    }
+                    grp._newPrefix = '';
+                    this.saveLocalState();
+                    this.renderGraph();
+                },
+
+                removePrefix(groupIndex, prefixIndex) {
+                    const grp = this.groupRules[groupIndex];
+                    if (!grp) return;
+                    grp.prefixes.splice(prefixIndex, 1);
+                    this.saveLocalState();
+                    this.renderGraph();
+                },
+
+                loadLocalState() {
+                    try {
+                        const raw = localStorage.getItem(this.storageKey);
+                        if (!raw) return;
+                        const data = JSON.parse(raw);
+                        if (typeof data.aggregateGroups === 'boolean') {
+                            this.aggregateGroups = data.aggregateGroups;
+                        }
+                        if (Array.isArray(data.groupRules)) {
+                            this.groupRules = data.groupRules.map(g => ({
+                                name: g.name,
+                                prefixes: Array.isArray(g.prefixes) ? g.prefixes : [],
+                                _newPrefix: '',
+                                _rename: ''
+                            }));
+                        }
+                    } catch (e) {
+                        console.warn('[dix] failed to load group rules from storage', e);
+                    }
+                },
+
+                saveLocalState() {
+                    try {
+                        const payload = {
+                            aggregateGroups: this.aggregateGroups,
+                            groupRules: this.groupRules.map(g => ({
+                                name: g.name,
+                                prefixes: g.prefixes || []
+                            }))
+                        };
+                        localStorage.setItem(this.storageKey, JSON.stringify(payload));
+                    } catch (e) {
+                        console.warn('[dix] failed to save group rules to storage', e);
+                    }
+                },
+
+                aggregateByGroups(nodes, edges, protectedIds = new Set()) {
+                    if (!this.aggregateGroups || this.groupRules.length === 0) {
+                        this.groupMembers = {};
+                        return { nodes, edges };
+                    }
+
+                    const mapping = new Map();
+                    const groupNodes = new Map();
+                    const debugStats = new Map();
+                    let typeNodeCount = 0;
+                    let emptyPkgCount = 0;
+                    const pkgSamples = [];
+                    const members = {};
+
+                    const makeGroup = (name) => ({
+                        id: `group:${name}`,
+                        label: name,
+                        color: { background: '#e5e7eb', border: '#6b7280' },
+                        data: { type: 'group', group: name }
+                    });
+
+                    nodes.forEach(n => {
+                        if (protectedIds.has(n.id)) return;
+                        const isTypeNode = n.data && n.data.type === 'type';
+                        const isProviderNode = n.data && n.data.type === 'provider';
+                        if (!isTypeNode && !isProviderNode) return;
+                        typeNodeCount += 1;
+                        if (!n.data.packagePath) {
+                            emptyPkgCount += 1;
+                            if (pkgSamples.length < 20) {
+                                pkgSamples.push({ id: n.id, packagePath: n.data.packagePath || '' });
+                            }
+                        }
+                        const groupName = this.matchGroup(n.id, n.data && n.data.packagePath ? n.data.packagePath : '');
+                        if (!groupName) return;
+                        mapping.set(n.id, `group:${groupName}`);
+                        if (!groupNodes.has(groupName)) {
+                            groupNodes.set(groupName, makeGroup(groupName));
+                        }
+
+                        if (!members[groupName]) {
+                            members[groupName] = [];
+                        }
+                        if (members[groupName].length < 200) {
+                            members[groupName].push({
+                                id: n.id,
+                                packagePath: n.data.packagePath || '',
+                                nodeType: n.data.type
+                            });
+                        }
+
+                        if (this.debugGroupMatching) {
+                            const pkg = n.data && n.data.packagePath ? n.data.packagePath : '';
+                            if (!debugStats.has(groupName)) {
+                                debugStats.set(groupName, []);
+                            }
+                            if (debugStats.get(groupName).length < 50) {
+                                debugStats.get(groupName).push({ id: n.id, packagePath: pkg });
+                            }
+                        }
+                    });
+
+                    if (this.debugGroupMatching) {
+                        console.group('[dix] group matching');
+                        console.log('rules', JSON.parse(JSON.stringify(this.groupRules)));
+                        console.log('type nodes', typeNodeCount, 'empty packagePath', emptyPkgCount, 'samples', pkgSamples);
+                        this.groupRules.forEach(grp => {
+                            const items = debugStats.get(grp.name) || [];
+                            console.log(`group=${grp.name} matched=${items.length}`, items);
+                        });
+                        console.groupEnd();
+                    }
+
+                    this.groupMembers = members;
+
+                    if (mapping.size === 0) {
+                        return { nodes, edges };
+                    }
+
+                    const mappedNodes = nodes.filter(n => !mapping.has(n.id));
+                    groupNodes.forEach(n => mappedNodes.push(n));
+
+                    const edgeMap = new Map();
+                    edges.forEach(e => {
+                        const from = mapping.get(e.from) || e.from;
+                        const to = mapping.get(e.to) || e.to;
+                        if (from === to) return;
+                        const key = `${from}=>${to}`;
+                        if (edgeMap.has(key)) return;
+                        edgeMap.set(key, { ...e, from, to });
+                    });
+
+                    return { nodes: mappedNodes, edges: Array.from(edgeMap.values()) };
+                },
+
+                matchGroup(typeName, pkgPathOverride = '') {
+                    if (!typeName) return null;
+                    const normalized = this.normalizeTypeForMatch(typeName);
+                    const pkgPath = pkgPathOverride || this.extractPackagePath(normalized);
+                    for (const grp of this.groupRules) {
+                        for (const prefix of (grp.prefixes || [])) {
+                            const p = String(prefix || '').trim();
+                            if (!p) continue;
+                            const target = pkgPath || normalized;
+                            if (this.isPathLikePrefix(p)) {
+                                if (target.startsWith(p) || target.includes(p)) {
+                                    return grp.name;
+                                }
+                                continue;
+                            }
+                            if (target.includes(p)) {
+                                return grp.name;
+                            }
+                        }
+                    }
+                    return null;
+                },
+
+                isPathLikePrefix(prefix) {
+                    return prefix.includes('/') || prefix.startsWith('github.com/') || prefix.startsWith('gitee.com/') || prefix.startsWith('gitlab.com/');
+                },
+
+                normalizeTypeForMatch(typeName) {
+                    let t = String(typeName).trim();
+                    t = t.replace(/^\*/, '').replace(/^\[\]/, '');
+                    if (t.startsWith('map[')) {
+                        const idx = t.indexOf(']');
+                        if (idx > -1 && idx < t.length - 1) {
+                            t = t.slice(idx + 1);
+                            t = t.replace(/^\*/, '');
+                        }
+                    }
+                    return t;
+                },
+
+                extractPackagePath(typeName) {
+                    const t = String(typeName || '').trim();
+                    if (!t) return '';
+                    const lastSlash = t.lastIndexOf('/');
+                    const lastDot = t.lastIndexOf('.');
+                    if (lastDot > -1 && lastDot > lastSlash) {
+                        return t.slice(0, lastDot);
+                    }
+                    return '';
+                },
+
+                buildTypePkgMap() {
+                    const map = new Map();
+                    if (!this.allData || !this.allData.providers) return map;
+                    this.allData.providers.forEach(p => {
+                        if (p.output_type) {
+                            map.set(p.output_type, p.output_pkg || '');
+                        }
+                        if (p.input_types && p.input_types.length) {
+                            p.input_types.forEach((t, i) => {
+                                const pkg = (p.input_pkgs && p.input_pkgs[i]) ? p.input_pkgs[i] : '';
+                                if (!map.has(t)) {
+                                    map.set(t, pkg);
+                                }
+                            });
+                        }
+                    });
+                    return map;
+                },
+
+                getPackagePrefixSuggestions() {
+                    if (!this.allData || !this.allData.providers) return [];
+                    const set = new Set();
+                    this.allData.providers.forEach(p => {
+                        if (p.output_pkg) set.add(p.output_pkg);
+                        if (p.function_pkg) set.add(p.function_pkg);
+                        if (p.input_pkgs && p.input_pkgs.length) {
+                            p.input_pkgs.forEach(pkg => {
+                                if (pkg) set.add(pkg);
+                            });
+                        }
+                    });
+                    return Array.from(set).sort();
+                },
+
+
+
+                filterByPrefix(nodes, edges, protectedIds = new Set()) {
+                    const prefix = (this.filterPrefix || '').trim();
+                    if (!prefix) {
+                        return { nodes, edges };
+                    }
+
+                    const matches = (node) => {
+                        if (!node || !node.data) return false;
+                        const pkg = (node.data.packagePath || '').toString();
+                        const id = (node.id || '').toString();
+                        const fullType = (node.data.fullType || '').toString();
+                        const fn = (node.data.function_name || '').toString();
+                        return pkg.includes(prefix) || id.includes(prefix) || fullType.includes(prefix) || fn.includes(prefix);
+                    };
+
+                    const keep = new Set();
+                    nodes.forEach(n => {
+                        if (protectedIds.has(n.id) || matches(n)) {
+                            keep.add(n.id);
+                        }
+                    });
+
+                    const filteredNodes = nodes.filter(n => keep.has(n.id));
+                    const filteredEdges = edges.filter(e => keep.has(e.from) && keep.has(e.to));
+                    return { nodes: filteredNodes, edges: filteredEdges };
+                },
             };
         }
     </script>
