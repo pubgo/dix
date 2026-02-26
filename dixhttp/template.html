@@ -316,6 +316,13 @@
                     >
                         <span>🔄</span> 重置
                     </button>
+                    <button
+                        @click="exportSvg()"
+                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
+                        :disabled="!network"
+                    >
+                        <span>⬇️</span> 下载 SVG
+                    </button>
                     
                     <!-- Global Search -->
                     <div class="flex-1"></div>
@@ -1640,6 +1647,131 @@
                         }
                     });
                     return Array.from(set).sort();
+                },
+
+                async exportSvg() {
+                    try {
+                        if (!this.network || !this.network.body) return;
+                        const nodesData = this.network.body.data.nodes.get();
+                        const edgesData = this.network.body.data.edges.get();
+                        if (!nodesData || nodesData.length === 0) return;
+
+                        const positions = this.network.getPositions(nodesData.map(n => n.id));
+                        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+                        nodesData.forEach(n => {
+                            const id = n.id;
+                            let box;
+                            try {
+                                box = this.network.getBoundingBox(id);
+                            } catch (e) {
+                                box = null;
+                            }
+                            const pos = positions[id] || { x: 0, y: 0 };
+                            const left = box ? box.left : pos.x - 50;
+                            const right = box ? box.right : pos.x + 50;
+                            const top = box ? box.top : pos.y - 25;
+                            const bottom = box ? box.bottom : pos.y + 25;
+                            minX = Math.min(minX, left);
+                            minY = Math.min(minY, top);
+                            maxX = Math.max(maxX, right);
+                            maxY = Math.max(maxY, bottom);
+                        });
+
+                        if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) return;
+
+                        const padding = 20;
+                        const width = Math.max(1, Math.round(maxX - minX + padding * 2));
+                        const height = Math.max(1, Math.round(maxY - minY + padding * 2));
+
+                        const mapX = (x) => x - minX + padding;
+                        const mapY = (y) => y - minY + padding;
+
+                        const escapeXml = (s) => String(s || '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#39;');
+
+                        const parts = [];
+                        parts.push(`<?xml version="1.0" encoding="UTF-8"?>`);
+                        parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`);
+                        parts.push(`<defs>`);
+                        parts.push(`<marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">`);
+                        parts.push(`<path d="M0,0 L0,6 L9,3 z" fill="#9ca3af" />`);
+                        parts.push(`</marker>`);
+                        parts.push(`</defs>`);
+
+                        edgesData.forEach(e => {
+                            const from = positions[e.from];
+                            const to = positions[e.to];
+                            if (!from || !to) return;
+                            const x1 = mapX(from.x);
+                            const y1 = mapY(from.y);
+                            const x2 = mapX(to.x);
+                            const y2 = mapY(to.y);
+                            const color = (e.color && e.color.color) ? e.color.color : '#9ca3af';
+                            const dash = e.dashes ? ' stroke-dasharray="6 4"' : '';
+                            parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="1.5" marker-end="url(#arrow)"${dash} />`);
+                        });
+
+                        nodesData.forEach(n => {
+                            const id = n.id;
+                            const pos = positions[id] || { x: 0, y: 0 };
+                            let box;
+                            try {
+                                box = this.network.getBoundingBox(id);
+                            } catch (e) {
+                                box = null;
+                            }
+                            const left = box ? box.left : pos.x - 50;
+                            const right = box ? box.right : pos.x + 50;
+                            const top = box ? box.top : pos.y - 25;
+                            const bottom = box ? box.bottom : pos.y + 25;
+                            const w = Math.max(10, right - left);
+                            const h = Math.max(10, bottom - top);
+                            const x = mapX(left);
+                            const y = mapY(top);
+                            const cx = mapX(pos.x);
+                            const cy = mapY(pos.y);
+
+                            const bg = n.color && n.color.background ? n.color.background : '#bfdbfe';
+                            const border = n.color && n.color.border ? n.color.border : '#3b82f6';
+                            const fontSize = (n.font && n.font.size) ? n.font.size : 12;
+                            const fontColor = (n.font && n.font.color) ? n.font.color : '#111827';
+
+                            const nodeType = n.data && n.data.type ? n.data.type : '';
+                            const isBox = n.shape === 'box' || nodeType === 'provider' || nodeType === 'group';
+
+                            if (isBox) {
+                                const rx = nodeType === 'group' ? 8 : 4;
+                                parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" ry="${rx}" fill="${bg}" stroke="${border}" stroke-width="2" />`);
+                            } else {
+                                parts.push(`<ellipse cx="${cx}" cy="${cy}" rx="${w / 2}" ry="${h / 2}" fill="${bg}" stroke="${border}" stroke-width="2" />`);
+                            }
+
+                            const label = escapeXml(n.label || '');
+                            if (label) {
+                                parts.push(`<text x="${cx}" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${fontSize}" font-family="system-ui, sans-serif" fill="${fontColor}">${label}</text>`);
+                            }
+                        });
+
+                        parts.push(`</svg>`);
+
+                        const svg = parts.join('\n');
+                        const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `dix-graph-${Date.now()}.svg`;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    } catch (e) {
+                        console.warn('导出 SVG 失败:', e);
+                    }
                 },
 
 
