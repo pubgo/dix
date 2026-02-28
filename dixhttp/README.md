@@ -16,6 +16,7 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🔎 **Prefix Filter** - Show only nodes/providers matching a prefix
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
 - 📡 **RESTful API** - Provide JSON format dependency data
+- 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
 ## Quick Start
 
@@ -221,6 +222,15 @@ Left panel features:
 | **Drag Node** | Move node position |
 | **Scroll Zoom** | Zoom in/out graph |
 | **Click Type in Details** | Jump to view that type's dependencies |
+
+## Mermaid Support
+
+The toolbar includes a **Mermaid** button. It generates a Mermaid `flowchart` from the **current graph view** (including grouping, depth, and prefix filters), opens a preview modal, and lets you copy the Mermaid source.
+
+**Typical usage**:
+1. Adjust view / grouping / filters.
+2. Click **Mermaid**.
+3. Copy the generated Mermaid text or use the preview.
 
 ## API Endpoints
 

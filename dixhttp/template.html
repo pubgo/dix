@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
         [x-cloak] { display: none !important; }
         .vis-tooltip {
@@ -19,6 +20,10 @@
             line-height: 1.6 !important;
             max-width: 400px !important;
             font-family: ui-monospace, monospace !important;
+        }
+        .mermaid-preview svg {
+            max-width: 100%;
+            height: auto;
         }
     </style>
     <script>
@@ -323,6 +328,13 @@
                     >
                         <span>⬇️</span> 下载 SVG
                     </button>
+                    <button
+                        @click="openMermaid()"
+                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
+                        :disabled="!network"
+                    >
+                        <span>🧩</span> Mermaid
+                    </button>
                     
                     <!-- Global Search -->
                     <div class="flex-1"></div>
@@ -470,6 +482,11 @@
                             >
                                 <span>🧩</span> 查看组内依赖图
                             </button>
+                            <button
+                                @click="toggleGroupExpand(selectedNode.data.group)"
+                                class="w-full px-4 py-2 mb-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2"
+                                x-text="isGroupExpanded(selectedNode.data.group) ? '收起到分组节点' : '展开组内节点'"
+                            ></button>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包含节点</h4>
                                 <div class="text-xs text-gray-500 mb-2" x-text="(groupMembers[selectedNode.data.group] || []).length + ' 个'"></div>
@@ -509,6 +526,53 @@
                 </div>
             </aside>
         </div>
+        <!-- Mermaid Modal -->
+        <div
+            x-show="mermaidOpen"
+            x-cloak
+            class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+            @keydown.escape.window="mermaidOpen = false"
+        >
+            <div class="bg-white w-[90vw] h-[85vh] rounded-xl shadow-xl flex flex-col">
+                <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <div class="font-semibold text-gray-700">🧩 Mermaid 预览</div>
+                    <button
+                        @click="mermaidOpen = false"
+                        class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                        关闭
+                    </button>
+                </div>
+                <div class="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
+                    <div class="flex flex-col h-full">
+                        <div class="text-xs text-gray-500 mb-2">Mermaid 源码</div>
+                        <textarea
+                            x-model="mermaidSource"
+                            class="flex-1 w-full text-xs font-mono border border-gray-200 rounded-lg p-2 resize-none"
+                        ></textarea>
+                        <div class="mt-2 flex items-center gap-2">
+                            <button
+                                @click="copyMermaidSource()"
+                                class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                            >
+                                复制源码
+                            </button>
+                            <button
+                                @click="renderMermaid()"
+                                class="px-3 py-1.5 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600"
+                            >
+                                重新渲染
+                            </button>
+                            <div x-show="mermaidError" class="text-xs text-red-500" x-text="mermaidError"></div>
+                        </div>
+                    </div>
+                    <div class="flex flex-col h-full">
+                        <div class="text-xs text-gray-500 mb-2">预览</div>
+                        <div class="flex-1 border border-gray-200 rounded-lg p-3 overflow-auto mermaid-preview" x-html="mermaidSvg"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -543,6 +607,12 @@
                 storageKey: 'dix.groupRules.v1',
                 groupMembers: {},
                 filterPrefix: '',
+                mermaidOpen: false,
+                mermaidSource: '',
+                mermaidSvg: '',
+                mermaidError: '',
+                lastGraphData: null,
+                expandedGroups: [],
 
                 // Computed
                 get filteredPackages() {
@@ -567,6 +637,9 @@
                     await this.loadStats();
                     await this.loadPackages();
                     await this.loadDependencies();
+                    if (window.mermaid && window.mermaid.initialize) {
+                        window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+                    }
                 },
 
                 async loadGroupRules() {
@@ -665,6 +738,38 @@
                         return;
                     }
                     this.renderGraph();
+                },
+
+                rerenderCurrentGraph() {
+                    if (this.focusedType) {
+                        if (this.focusedGraph === 'dependency') {
+                            this.showDependencyGraph(this.focusedType, 'type');
+                            return;
+                        }
+                        if (this.focusedGraph === 'type') {
+                            this.focusOnType(this.focusedType);
+                            return;
+                        }
+                    }
+                    if (this.focusedGraph === 'group' && this.focusedGroup) {
+                        this.showGroupGraph(this.focusedGroup);
+                        return;
+                    }
+                    this.renderGraph();
+                },
+
+                isGroupExpanded(groupName) {
+                    return this.expandedGroups.includes(groupName);
+                },
+
+                toggleGroupExpand(groupName) {
+                    if (!groupName) return;
+                    if (this.isGroupExpanded(groupName)) {
+                        this.expandedGroups = this.expandedGroups.filter(g => g !== groupName);
+                    } else {
+                        this.expandedGroups = [...this.expandedGroups, groupName];
+                    }
+                    this.rerenderCurrentGraph();
                 },
 
                 // Global search functionality
@@ -895,6 +1000,9 @@
                         nodes: new vis.DataSet(filteredByPrefix.nodes),
                         edges: new vis.DataSet(filteredByPrefix.edges)
                     };
+                    this.lastGraphData = graphData;
+                    this.lastGraphData = graphData;
+                    this.lastGraphData = graphData;
 
                     if (this.network) {
                         this.network.destroy();
@@ -923,6 +1031,10 @@
                         if (params.nodes.length > 0) {
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
+                            if (node && node.data && node.data.type === 'group') {
+                                this.toggleGroupExpand(node.data.group);
+                                return;
+                            }
                             if (node && node.data && node.data.fullType) {
                                 this.showDependencyGraph(node.data.fullType, 'type');
                             }
@@ -1053,6 +1165,7 @@
                         nodes: new vis.DataSet(filteredByPrefix.nodes),
                         edges: new vis.DataSet(filteredByPrefix.edges)
                     };
+                    this.lastGraphData = data;
 
                     const options = this.getNetworkOptions();
 
@@ -1076,6 +1189,10 @@
                         if (params.nodes.length > 0) {
                             const nodeId = params.nodes[0];
                             const node = data.nodes.get(nodeId);
+                            if (node && node.data && node.data.type === 'group') {
+                                this.toggleGroupExpand(node.data.group);
+                                return;
+                            }
                             if (node && node.data && node.data.type === 'type') {
                                 this.focusOnType(node.data.fullType);
                             }
@@ -1201,6 +1318,16 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                        }
+                    });
+
+                    this.network.on('doubleClick', params => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            const node = graphData.nodes.get(nodeId);
+                            if (node && node.data && node.data.type === 'group') {
+                                this.toggleGroupExpand(node.data.group);
+                            }
                         }
                     });
                 },
@@ -1504,6 +1631,7 @@
                         }
                         const groupName = this.matchGroup(n.id, n.data && n.data.packagePath ? n.data.packagePath : '');
                         if (!groupName) return;
+                        if (this.isGroupExpanded(groupName)) return;
                         mapping.set(n.id, `group:${groupName}`);
                         if (!groupNodes.has(groupName)) {
                             groupNodes.set(groupName, makeGroup(groupName));
@@ -1771,6 +1899,78 @@
                         setTimeout(() => URL.revokeObjectURL(url), 1000);
                     } catch (e) {
                         console.warn('导出 SVG 失败:', e);
+                    }
+                },
+
+                openMermaid() {
+                    this.mermaidError = '';
+                    this.mermaidSource = this.buildMermaidSource();
+                    this.mermaidOpen = true;
+                    this.renderMermaid();
+                },
+
+                buildMermaidSource() {
+                    const data = this.lastGraphData;
+                    if (!data || !data.nodes || !data.edges) {
+                        return 'flowchart TD\n  A[No data]';
+                    }
+
+                    const nodes = typeof data.nodes.get === 'function' ? data.nodes.get() : data.nodes;
+                    const edges = typeof data.edges.get === 'function' ? data.edges.get() : data.edges;
+                    const idMap = new Map();
+                    const lines = ['flowchart TD'];
+
+                    (nodes || []).forEach((n, idx) => {
+                        const safeId = `N${idx}`;
+                        idMap.set(n.id, safeId);
+                        const label = this.escapeMermaidLabel(n.label || n.id);
+                        lines.push(`  ${safeId}["${label}"]`);
+                    });
+
+                    (edges || []).forEach(e => {
+                        const from = idMap.get(e.from);
+                        const to = idMap.get(e.to);
+                        if (!from || !to) return;
+                        lines.push(`  ${from} --> ${to}`);
+                    });
+
+                    return lines.join('\n');
+                },
+
+                escapeMermaidLabel(label) {
+                    return String(label || '')
+                        .replace(/"/g, "'")
+                        .replace(/\n/g, ' ')
+                        .replace(/\r/g, ' ');
+                },
+
+                async renderMermaid() {
+                    this.mermaidError = '';
+                    const source = (this.mermaidSource || '').trim();
+                    if (!source) {
+                        this.mermaidSvg = '';
+                        return;
+                    }
+                    if (!window.mermaid || !window.mermaid.render) {
+                        this.mermaidError = 'Mermaid 脚本未加载';
+                        return;
+                    }
+                    try {
+                        const id = `dix-mermaid-${Date.now()}`;
+                        const res = await window.mermaid.render(id, source);
+                        this.mermaidSvg = res.svg || '';
+                    } catch (e) {
+                        this.mermaidError = 'Mermaid 渲染失败';
+                    }
+                },
+
+                async copyMermaidSource() {
+                    try {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            await navigator.clipboard.writeText(this.mermaidSource || '');
+                        }
+                    } catch (e) {
+                        console.warn('复制失败:', e);
                     }
                 },
 
