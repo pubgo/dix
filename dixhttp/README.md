@@ -12,7 +12,11 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🔄 **Bidirectional Dependency Tracking** - Show both upstream (dependencies) and downstream (dependents)
 - 📏 **Depth Control** - Limit dependency graph display levels (1-5 or all)
 - 🎨 **Multiple Layouts** - Support hierarchical and force-directed layouts
+- 🧩 **Group Rules (Prefix Aggregation)** - Aggregate nodes by package/prefix rules
+- 🔎 **Prefix Filter** - Show only nodes/providers matching a prefix
+- 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
 - 📡 **RESTful API** - Provide JSON format dependency data
+- 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
 ## Quick Start
 
@@ -53,6 +57,18 @@ func main() {
 ```
 
 Open browser and visit `http://localhost:8080` to view the dependency graph.
+
+### Base Path / Prefix
+
+If you need to mount the UI and API under a path prefix (e.g. behind a gateway), use `WithBasePath`:
+
+```go
+server := dixhttp.NewServerWithOptions(
+  (*dixinternal.Dix)(di),
+  dixhttp.WithBasePath("/dix"),
+)
+// Visit http://localhost:8080/dix/
+```
 
 ## UI Layout
 
@@ -143,6 +159,52 @@ Search `UserService` with different depths:
 - Depth 1: `Database ← UserService → Handler`
 - Depth 2: `Config ← Database ← UserService → Handler`
 
+### 🧩 Group Rules (Prefix Aggregation)
+
+You can aggregate nodes by **package or prefix** using group rules. Rules can be configured:
+
+- **In UI** (group list)
+- **From backend** via `RegisterGroupRules` (recommended for production)
+
+Backend registration:
+
+```go
+import "github.com/pubgo/dix/v2/dixhttp"
+
+dixhttp.RegisterGroupRules(
+  dixhttp.GroupRule{
+    Name: "service",
+    Prefixes: []string{
+      "github.com/acme/app/service",
+      "github.com/acme/app/internal/service",
+    },
+  },
+  dixhttp.GroupRule{
+    Name: "router",
+    Prefixes: []string{"github.com/acme/app/router"},
+  },
+)
+```
+
+The UI will auto-load `/api/group-rules` if local rules are empty.
+
+### 🔎 Prefix Filter
+
+The toolbar provides a **Prefix Filter** field. It filters the current graph to show only nodes/providers
+whose package/type/function name contains the given prefix. This works in:
+
+- Providers/Types view
+- Type-focused dependency view
+- Group subgraph view
+
+### 🧭 Group Subgraph
+
+Click a virtual group node to open the **group detail panel**, then click **View group graph** to see:
+
+- Internal nodes
+- Upstream & downstream dependencies
+- Depth control applied from the toolbar
+
 ### 📦 Package Grouping
 
 Left panel features:
@@ -160,6 +222,15 @@ Left panel features:
 | **Drag Node** | Move node position |
 | **Scroll Zoom** | Zoom in/out graph |
 | **Click Type in Details** | Jump to view that type's dependencies |
+
+## Mermaid Support
+
+The toolbar includes a **Mermaid** button. It generates a Mermaid `flowchart` from the **current graph view** (including grouping, depth, and prefix filters), opens a preview modal, and lets you copy the Mermaid source.
+
+**Typical usage**:
+1. Adjust view / grouping / filters.
+2. Click **Mermaid**.
+3. Copy the generated Mermaid text or use the preview.
 
 ## API Endpoints
 
@@ -200,8 +271,11 @@ Returns dependency data, supports package filtering
     {
       "id": "provider_*main.ServiceA_0",
       "output_type": "*main.ServiceA",
+      "output_pkg": "github.com/example/app/service",
       "function_name": "main.NewServiceA",
-      "input_types": ["*main.Config"]
+      "function_pkg": "github.com/example/app",
+      "input_types": ["*main.Config"],
+      "input_pkgs": ["github.com/example/app/config"]
     }
   ],
   "objects": [...],
@@ -226,6 +300,15 @@ Returns dependency chain for specified type
     {"from": "*db.Database", "to": "*service.UserService", "type": "dependency"}
   ]
 }
+
+### GET `/api/group-rules`
+Returns backend-registered group rules (used as UI defaults)
+
+```json
+[
+  {"name": "service", "prefixes": ["github.com/acme/app/service"]}
+]
+```
 ```
 
 ## Tech Stack

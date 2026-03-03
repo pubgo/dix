@@ -24,10 +24,6 @@ func main() {
 		}
 	}()
 
-	defer func() {
-		fmt.Println(dixglobal.Graph())
-	}()
-
 	dixglobal.Provide(func() *log.Logger {
 		return log.New(os.Stderr, "example: ", log.LstdFlags|log.Lshortfile)
 	})
@@ -46,8 +42,6 @@ func main() {
 			"ns": {name: "hello1"},
 		}
 	})
-
-	fmt.Println(dixglobal.Graph())
 
 	dixglobal.Inject(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
 		l.Println("invoke redis")

@@ -12,7 +12,11 @@
 - 🔄 **双向依赖追踪** - 同时展示依赖（上游）和被依赖（下游）关系
 - 📏 **深度控制** - 限制依赖图的展示层级（1-5级或全部）
 - 🎨 **多种布局** - 支持层级布局和力导向布局
+- 🧩 **分组清单（前缀聚合）** - 通过包路径/前缀聚合节点
+- 🔎 **前缀过滤** - 只显示匹配前缀的节点/Provider
+- 🧭 **组内子图** - 查看组内及上下游依赖
 - 📡 **RESTful API** - 提供 JSON 格式的依赖关系数据
+- 🧩 **Mermaid 预览/导出** - 将当前图生成 Mermaid 流程图（支持分组/过滤）
 
 ## 快速开始
 
@@ -53,6 +57,18 @@ func main() {
 ```
 
 打开浏览器访问 `http://localhost:8080` 即可查看依赖关系图。
+
+### 配置访问前缀
+
+如果需要将页面和 API 挂载到一个前缀路径（例如网关转发），可以使用 `WithBasePath`：
+
+```go
+server := dixhttp.NewServerWithOptions(
+  (*dixinternal.Dix)(di),
+  dixhttp.WithBasePath("/dix"),
+)
+// 访问 http://localhost:8080/dix/
+```
 
 ## 界面布局
 
@@ -143,6 +159,51 @@ func main() {
 - 深度 1: `Database ← UserService → Handler`
 - 深度 2: `Config ← Database ← UserService → Handler`
 
+### 🧩 分组清单（前缀聚合）
+
+支持通过**包路径/前缀**聚合节点，规则来源：
+
+- **前端分组清单**
+- **后端全局注册**（推荐生产使用）
+
+后端注册示例：
+
+```go
+import "github.com/pubgo/dix/v2/dixhttp"
+
+dixhttp.RegisterGroupRules(
+  dixhttp.GroupRule{
+    Name: "service",
+    Prefixes: []string{
+      "github.com/acme/app/service",
+      "github.com/acme/app/internal/service",
+    },
+  },
+  dixhttp.GroupRule{
+    Name: "router",
+    Prefixes: []string{"github.com/acme/app/router"},
+  },
+)
+```
+
+当本地未配置分组清单时，前端会自动加载 `/api/group-rules`。
+
+### 🔎 前缀过滤
+
+工具栏提供“前缀过滤”，可按包路径/类型名/函数名过滤当前图：
+
+- Providers/类型视图
+- 类型依赖视图
+- 组内依赖视图
+
+### 🧭 组内子图
+
+点击虚拟组节点 → 详情面板 → “查看组内依赖图”，可以看到：
+
+- 组内节点
+- 上下游依赖
+- 受工具栏“深度”控制
+
 ### 📦 按包分组
 
 左侧面板功能：
@@ -160,6 +221,15 @@ func main() {
 | **拖拽节点** | 移动节点位置 |
 | **滚轮缩放** | 放大/缩小图形 |
 | **点击详情中的类型** | 跳转查看该类型的依赖 |
+
+## Mermaid 支持
+
+工具栏新增 **Mermaid** 按钮，会基于**当前视图**生成 Mermaid `flowchart`，并弹出预览窗口，支持一键复制源码。
+
+**典型用法**：
+1. 调整视图/分组/过滤条件。
+2. 点击 **Mermaid**。
+3. 复制生成的 Mermaid 文本或直接预览。
 
 ## API 端点
 
@@ -200,8 +270,11 @@ func main() {
     {
       "id": "provider_*main.ServiceA_0",
       "output_type": "*main.ServiceA",
+      "output_pkg": "github.com/example/app/service",
       "function_name": "main.NewServiceA",
-      "input_types": ["*main.Config"]
+      "function_pkg": "github.com/example/app",
+      "input_types": ["*main.Config"],
+      "input_pkgs": ["github.com/example/app/config"]
     }
   ],
   "objects": [...],
@@ -226,6 +299,15 @@ func main() {
     {"from": "*db.Database", "to": "*service.UserService", "type": "dependency"}
   ]
 }
+
+### GET `/api/group-rules`
+返回后端注册的分组清单（前端默认配置）
+
+```json
+[
+  {"name": "service", "prefixes": ["github.com/acme/app/service"]}
+]
+```
 ```
 
 ## 技术栈

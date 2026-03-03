@@ -50,7 +50,6 @@ func main() {
 				err = fmt.Errorf("panic: %v", r)
 			}
 			fmt.Printf("panic: %v\n", err)
-			fmt.Println(dixglobal.Graph()) // Original behavior from recovery.Exit's func
 		}
 	}()
 
@@ -97,6 +96,4 @@ func main() {
 		fmt.Println(dm)
 		fmt.Println(d5)
 	})
-
-	fmt.Println(dixglobal.Graph())
 }
