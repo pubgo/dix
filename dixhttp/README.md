@@ -15,6 +15,7 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🧩 **Group Rules (Prefix Aggregation)** - Aggregate nodes by package/prefix rules
 - 🔎 **Prefix Filter** - Show only nodes/providers matching a prefix
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
+- ⏱️ **Startup Runtime Stats** - Show all providers' startup durations (total/avg/last, call count), with executed-only filter (`call_count > 0`)
 - 📡 **RESTful API** - Provide JSON format dependency data
 - 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
@@ -97,11 +98,11 @@ server := dixhttp.NewServerWithOptions(
 
 ### Three-Panel Layout
 
-| Area | Description |
-|------|-------------|
-| **Left - Package List** | Provider list grouped by package, searchable, collapsible |
-| **Center - Dependency Graph** | Interactive graph with drag, zoom, click support |
-| **Right - Details Panel** | Show selected node details with clickable navigation |
+| Area                          | Description                                               |
+| ----------------------------- | --------------------------------------------------------- |
+| **Left - Package List**       | Provider list grouped by package, searchable, collapsible |
+| **Center - Dependency Graph** | Interactive graph with drag, zoom, click support          |
+| **Right - Details Panel**     | Show selected node details with clickable navigation      |
 
 ## Core Features
 
@@ -146,12 +147,12 @@ After searching or clicking a type, the system shows that type as center:
 
 Depth determines how many levels to expand up/down:
 
-| Depth | Description | Use Case |
-|-------|-------------|----------|
-| 1 | Only direct dependencies/dependents | Quick view of direct relationships |
-| 2 | Two levels (default) | Recommended for daily use |
-| 3-5 | More levels | Track complex dependency chains |
-| All | Show complete dependency tree | Small projects or specific analysis |
+| Depth | Description                         | Use Case                            |
+| ----- | ----------------------------------- | ----------------------------------- |
+| 1     | Only direct dependencies/dependents | Quick view of direct relationships  |
+| 2     | Two levels (default)                | Recommended for daily use           |
+| 3-5   | More levels                         | Track complex dependency chains     |
+| All   | Show complete dependency tree       | Small projects or specific analysis |
 
 **Example**: Assume dependency chain is `Config → Database → UserService → Handler`
 
@@ -215,13 +216,13 @@ Left panel features:
 
 ## Interactions
 
-| Operation | Effect |
-|-----------|--------|
-| **Single Click** | Show details in right panel |
-| **Double Click** | Show dependency graph centered on that node |
-| **Drag Node** | Move node position |
-| **Scroll Zoom** | Zoom in/out graph |
-| **Click Type in Details** | Jump to view that type's dependencies |
+| Operation                 | Effect                                      |
+| ------------------------- | ------------------------------------------- |
+| **Single Click**          | Show details in right panel                 |
+| **Double Click**          | Show dependency graph centered on that node |
+| **Drag Node**             | Move node position                          |
+| **Scroll Zoom**           | Zoom in/out graph                           |
+| **Click Type in Details** | Jump to view that type's dependencies       |
 
 ## Mermaid Support
 
@@ -247,6 +248,23 @@ Returns summary statistics
   "package_count": 8,
   "edge_count": 67
 }
+```
+
+### GET `/api/runtime-stats?limit=20`
+Returns provider runtime metrics sorted by total duration (desc), useful for finding slow startup components.
+
+```json
+[
+  {
+    "function_name": "main.NewUserService",
+    "output_type": "*service.UserService",
+    "call_count": 1,
+    "total_duration": 3456789,
+    "average_duration": 3456789,
+    "last_duration": 3456789,
+    "last_run_at_unix_nano": 1700000000000000000
+  }
+]
 ```
 
 ### GET `/api/packages`

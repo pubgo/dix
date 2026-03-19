@@ -129,6 +129,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(indexPath, s.HandleIndex)
 	s.mux.HandleFunc(base+"/api/dependencies", s.HandleDependencies)
 	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
+	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
@@ -186,6 +187,25 @@ func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
 		ObjectCount:   objectCount,
 		PackageCount:  len(packages),
 		EdgeCount:     edgeCount,
+	}
+
+	writeJSON(w, stats)
+}
+
+// HandleRuntimeStats returns provider runtime stats for startup/perf diagnosis.
+// Query params:
+// - limit: optional positive integer to limit returned rows.
+func (s *Server) HandleRuntimeStats(w http.ResponseWriter, r *http.Request) {
+	limit := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	stats := s.dix.GetProviderRuntimeStats()
+	if limit > 0 && len(stats) > limit {
+		stats = stats[:limit]
 	}
 
 	writeJSON(w, stats)
@@ -437,6 +457,8 @@ func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyD
 			OutputPkg:    detail.OutputPkg,
 			FunctionName: detail.FunctionName,
 			FunctionPkg:  detail.FunctionPkg,
+			FunctionFile: detail.FunctionFile,
+			FunctionLine: detail.FunctionLine,
 			InputTypes:   detail.InputTypes,
 			InputPkgs:    detail.InputPkgs,
 		}
@@ -545,6 +567,8 @@ type ProviderInfo struct {
 	OutputPkg    string   `json:"output_pkg"`
 	FunctionName string   `json:"function_name"`
 	FunctionPkg  string   `json:"function_pkg"`
+	FunctionFile string   `json:"function_file"`
+	FunctionLine int      `json:"function_line"`
 	InputTypes   []string `json:"input_types"`
 	InputPkgs    []string `json:"input_pkgs"`
 }

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"strings"
 	"time"
 )
@@ -13,7 +12,7 @@ import (
 func newDix(opts ...Option) (d *Dix) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
+			maybePrintStack()
 			err, ok := r.(error)
 			if !ok {
 				err = fmt.Errorf("panic: %v", r)
@@ -32,10 +31,11 @@ func newDix(opts ...Option) (d *Dix) {
 	}
 
 	container := &Dix{
-		option:      options,
-		providers:   make(map[outputType][]*providerFn),
-		objects:     make(map[outputType]map[group][]value),
-		initializer: make(map[reflect.Value]bool),
+		option:        options,
+		providers:     make(map[outputType][]*providerFn),
+		objects:       make(map[outputType]map[group][]value),
+		initializer:   make(map[reflect.Value]bool),
+		providerStats: make(map[reflect.Value]*providerRuntimeStat),
 	}
 
 	// Register the container itself
@@ -45,10 +45,21 @@ func newDix(opts ...Option) (d *Dix) {
 }
 
 type Dix struct {
-	option      Options
-	providers   map[outputType][]*providerFn
-	objects     map[outputType]map[group][]value
-	initializer map[reflect.Value]bool
+	option        Options
+	providers     map[outputType][]*providerFn
+	objects       map[outputType]map[group][]value
+	initializer   map[reflect.Value]bool
+	providerStats map[reflect.Value]*providerRuntimeStat
+}
+
+type providerRuntimeStat struct {
+	FunctionName  string
+	OutputType    string
+	CallCount     int
+	TotalDuration time.Duration
+	LastDuration  time.Duration
+	LastError     string
+	LastRunAt     time.Time
 }
 
 func (dix *Dix) Option() Options {
@@ -115,19 +126,23 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 	logger.Debug("evaluating provider", "provider", fnName)
 
 	outputs, err := p.call(inputs)
+	duration := time.Since(start)
 	if err != nil {
+		dix.recordProviderStat(p, duration, err)
 		return fmt.Errorf("provider call failed for %s: %w", fnName, err)
 	}
-
-	dix.initializer[p.fn] = true
-	logger.Debug("provider evaluated successfully", "duration", time.Since(start).String(), "provider", fnName)
 
 	// 3. Check for error return
 	if p.hasError && len(outputs) > 1 && !outputs[1].IsNil() {
 		if err, ok := outputs[1].Interface().(error); ok && err != nil {
+			dix.recordProviderStat(p, duration, err)
 			return fmt.Errorf("provider execution failed: %s: %w", fnName, err)
 		}
 	}
+
+	dix.initializer[p.fn] = true
+	dix.recordProviderStat(p, duration, nil)
+	logger.Debug("provider evaluated successfully", "duration", duration.String(), "provider", fnName)
 
 	// 4. Process output values and update cache
 	dix.processProviderOutput(outTyp, p, outputs[0])
@@ -157,6 +172,35 @@ func (dix *Dix) processProviderOutput(requestedType outputType, p *providerFn, o
 		for groupKey, values := range groups {
 			dix.objects[typeKey][groupKey] = append(dix.objects[typeKey][groupKey], values...)
 		}
+	}
+}
+
+func (dix *Dix) recordProviderStat(p *providerFn, duration time.Duration, err error) {
+	if p == nil {
+		return
+	}
+
+	stat, ok := dix.providerStats[p.fn]
+	if !ok {
+		outputType := ""
+		if p.output != nil && p.output.typ != nil {
+			outputType = p.output.typ.String()
+		}
+		stat = &providerRuntimeStat{
+			FunctionName: GetFnName(p.fn),
+			OutputType:   outputType,
+		}
+		dix.providerStats[p.fn] = stat
+	}
+
+	stat.CallCount++
+	stat.TotalDuration += duration
+	stat.LastDuration = duration
+	stat.LastRunAt = time.Now()
+	if err != nil {
+		stat.LastError = err.Error()
+	} else {
+		stat.LastError = ""
 	}
 }
 
@@ -233,7 +277,7 @@ func (dix *Dix) createNotFoundError(typ reflect.Type, valMap map[group][]value, 
 func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
+			maybePrintStack()
 			var ok bool
 			err, ok = r.(error)
 			if !ok {
@@ -350,7 +394,7 @@ func (dix *Dix) injectStruct(structVal reflect.Value, opt Options) error {
 func (dix *Dix) inject(param any, opts ...Option) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
+			maybePrintStack()
 			var ok bool
 			err, ok = r.(error)
 			if !ok {
@@ -501,7 +545,7 @@ func parseInputType(typ reflect.Type) []*providerInputType {
 func (dix *Dix) provide(param any) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
+			maybePrintStack()
 			err, ok := r.(error)
 			if !ok {
 				err = fmt.Errorf("panic: %v", r)

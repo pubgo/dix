@@ -3,7 +3,6 @@ package dixinternal
 import (
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"strings"
 )
 
@@ -46,7 +45,7 @@ type providerFn struct {
 func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
+			maybePrintStack()
 			if rErr, ok := r.(error); ok {
 				err = rErr
 			} else {

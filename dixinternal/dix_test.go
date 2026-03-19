@@ -3,11 +3,38 @@ package dixinternal
 import (
 	"bytes"
 	"errors"
+	"io"
 	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	original := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+
+	os.Stderr = w
+	defer func() {
+		os.Stderr = original
+		_ = r.Close()
+	}()
+
+	fn()
+	_ = w.Close()
+
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured stderr: %v", err)
+	}
+	return string(out)
+}
 
 // Types for TestListInjection and TestMapInjection
 type testInterface interface {
@@ -1763,6 +1790,18 @@ func TestTryProvide(t *testing.T) {
 	}
 }
 
+func TestTryProvideNoStackTraceByDefault(t *testing.T) {
+	d := New()
+
+	output := captureStderr(t, func() {
+		_ = d.TryProvide(nil)
+	})
+
+	if strings.Contains(output, "runtime/debug.Stack") || strings.Contains(output, "goroutine ") {
+		t.Fatalf("expected no stack trace output by default log level, got: %s", output)
+	}
+}
+
 // TestTryInject tests the TryInject method which returns error instead of panic
 func TestTryInject(t *testing.T) {
 	d := New()
@@ -1896,5 +1935,44 @@ func TestParseInputType(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetProviderRuntimeStatsIncludeAllProviders(t *testing.T) {
+	type depA struct{}
+	type depB struct{}
+
+	d := New()
+	d.Provide(func() *depA { return &depA{} })
+	d.Provide(func() *depB { return &depB{} })
+
+	// Only trigger depA to be initialized.
+	if err := d.TryInject(func(*depA) {}); err != nil {
+		t.Fatalf("failed to inject depA: %v", err)
+	}
+
+	stats := d.GetProviderRuntimeStats()
+	if len(stats) < 2 {
+		t.Fatalf("expected at least 2 runtime stats (user providers), got %d", len(stats))
+	}
+
+	var foundA, foundB bool
+	for _, s := range stats {
+		switch s.OutputType {
+		case "*dixinternal.depA":
+			foundA = true
+			if s.CallCount < 1 {
+				t.Fatalf("depA should be initialized at least once, got call_count=%d", s.CallCount)
+			}
+		case "*dixinternal.depB":
+			foundB = true
+			if s.CallCount != 0 {
+				t.Fatalf("depB should not be initialized, got call_count=%d", s.CallCount)
+			}
+		}
+	}
+
+	if !foundA || !foundB {
+		t.Fatalf("expected both depA and depB stats, foundA=%v foundB=%v", foundA, foundB)
 	}
 }

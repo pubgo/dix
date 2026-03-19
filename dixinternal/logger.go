@@ -1,8 +1,10 @@
 package dixinternal
 
 import (
+	"context"
 	"log/slog"
 	"os"
+	"runtime/debug"
 
 	"github.com/lmittmann/tint"
 )
@@ -18,4 +20,17 @@ func createDefaultLogger() *slog.Logger {
 
 func SetLog(handler slog.Handler) {
 	logger = slog.New(handler).WithGroup(getLogPackage())
+}
+
+func shouldPrintStack() bool {
+	if logger == nil {
+		return false
+	}
+	return logger.Enabled(context.Background(), slog.LevelDebug)
+}
+
+func maybePrintStack() {
+	if shouldPrintStack() {
+		debug.PrintStack()
+	}
 }

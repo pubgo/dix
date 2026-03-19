@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +10,10 @@
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
-        [x-cloak] { display: none !important; }
+        [x-cloak] {
+            display: none !important;
+        }
+
         .vis-tooltip {
             background: white !important;
             border: 1px solid #e5e7eb !important;
@@ -21,6 +25,7 @@
             max-width: 400px !important;
             font-family: ui-monospace, monospace !important;
         }
+
         .mermaid-preview svg {
             max-width: 100%;
             height: auto;
@@ -44,6 +49,7 @@
         }
     </script>
 </head>
+
 <body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
     <div x-data="app()" x-init="init()" class="flex flex-col h-full">
         <!-- Header -->
@@ -65,82 +71,72 @@
         <!-- Main Content -->
         <div class="flex flex-1 overflow-hidden">
             <!-- Left Sidebar - Package List (Collapsible) -->
-            <aside 
-                :class="sidebarCollapsed ? 'w-12' : 'w-72'"
-                class="bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300"
-            >
+            <aside :class="sidebarCollapsed ? 'w-12' : 'w-72'"
+                class="bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300">
                 <!-- Collapse Toggle Button -->
-                <div class="p-2 border-b border-gray-200 bg-gray-50 flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
+                <div class="p-2 border-b border-gray-200 bg-gray-50 flex items-center"
+                    :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
                     <h3 x-show="!sidebarCollapsed" class="text-sm font-semibold text-gray-600 pl-2">📦 包列表</h3>
-                    <button 
-                        @click="sidebarCollapsed = !sidebarCollapsed"
+                    <button @click="sidebarCollapsed = !sidebarCollapsed"
                         class="p-1.5 hover:bg-gray-200 rounded transition"
-                        :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
-                    >
-                        <svg x-show="!sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+                        :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'">
+                        <svg x-show="!sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                         </svg>
-                        <svg x-show="sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+                        <svg x-show="sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                         </svg>
                     </button>
                 </div>
-                
+
                 <!-- Sidebar Content (hidden when collapsed) -->
                 <template x-if="!sidebarCollapsed">
                     <div class="flex flex-col flex-1 overflow-hidden">
                         <div class="p-4 border-b border-gray-200">
                             <div class="relative">
-                                <input 
-                                    type="text" 
-                                    x-model="packageSearch"
-                                    placeholder="搜索包名..."
-                                    class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                                >
+                                <input type="text" x-model="packageSearch" placeholder="搜索包名..."
+                                    class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition">
                                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
                             </div>
                         </div>
                         <div class="flex-1 overflow-y-auto p-2">
                             <!-- All packages option -->
-                            <div 
-                                @click="selectPackage(null)"
+                            <div @click="selectPackage(null)"
                                 :class="{'bg-primary-500 text-white': !currentPackage, 'hover:bg-gray-100': currentPackage}"
-                                class="p-3 rounded-lg cursor-pointer mb-1 transition"
-                            >
+                                class="p-3 rounded-lg cursor-pointer mb-1 transition">
                                 <div class="font-medium text-sm">📁 全部</div>
-                                <span 
+                                <span
                                     :class="{'bg-white/20 text-white': !currentPackage, 'bg-gray-200 text-gray-600': currentPackage}"
                                     class="inline-block mt-1 px-2 py-0.5 rounded-full text-xs"
-                                    x-text="totalProviders + ' providers'"
-                                ></span>
+                                    x-text="totalProviders + ' providers'"></span>
                             </div>
                             <!-- Package items -->
                             <template x-for="pkg in filteredPackages" :key="pkg.name">
-                                <div 
-                                    @click="selectPackage(pkg.name)"
+                                <div @click="selectPackage(pkg.name)"
                                     :class="{'bg-primary-500 text-white': currentPackage === pkg.name, 'hover:bg-gray-100': currentPackage !== pkg.name}"
-                                    class="p-3 rounded-lg cursor-pointer mb-1 transition"
-                                >
-                                    <div class="font-medium text-sm break-all" x-text="formatPackageName(pkg.name)"></div>
-                                    <span 
+                                    class="p-3 rounded-lg cursor-pointer mb-1 transition">
+                                    <div class="font-medium text-sm break-all" x-text="formatPackageName(pkg.name)">
+                                    </div>
+                                    <span
                                         :class="{'bg-white/20 text-white': currentPackage === pkg.name, 'bg-gray-200 text-gray-600': currentPackage !== pkg.name}"
                                         class="inline-block mt-1 px-2 py-0.5 rounded-full text-xs"
-                                        x-text="pkg.provider_count + ' providers'"
-                                    ></span>
+                                        x-text="pkg.provider_count + ' providers'"></span>
                                 </div>
                             </template>
                         </div>
                     </div>
                 </template>
-                
+
                 <!-- Collapsed state icons -->
                 <div x-show="sidebarCollapsed" class="flex-1 overflow-y-auto py-2">
-                    <div 
-                        @click="sidebarCollapsed = false; selectPackage(null)"
+                    <div @click="sidebarCollapsed = false; selectPackage(null)"
                         :class="{'bg-primary-500 text-white': !currentPackage}"
                         class="mx-2 p-2 rounded-lg cursor-pointer mb-1 flex items-center justify-center hover:bg-gray-100 transition"
-                        title="全部"
-                    >
+                        title="全部">
                         📁
                     </div>
                 </div>
@@ -152,39 +148,29 @@
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-4 flex-wrap">
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">视图:</span>
-                        <button 
-                            @click="switchView('providers')"
+                        <button @click="switchView('providers')"
                             :class="{'bg-primary-500 text-white border-primary-500': currentView === 'providers', 'bg-white hover:bg-gray-50': currentView !== 'providers'}"
-                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1"
-                        >
+                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1">
                             <span>⚡</span> Providers
                         </button>
-                        <button 
-                            @click="switchView('types')"
+                        <button @click="switchView('types')"
                             :class="{'bg-primary-500 text-white border-primary-500': currentView === 'types', 'bg-white hover:bg-gray-50': currentView !== 'types'}"
-                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1"
-                        >
+                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1">
                             <span>🔷</span> 类型依赖
                         </button>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">布局:</span>
-                        <select 
-                            x-model="currentLayout"
-                            @change="renderGraph()"
-                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
+                        <select x-model="currentLayout" @change="renderGraph()"
+                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
                             <option value="hierarchical">层级布局</option>
                             <option value="force">力导向</option>
                         </select>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">深度:</span>
-                        <select 
-                            x-model="currentDepth"
-                            @change="onDepthChange()"
-                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
+                        <select x-model="currentDepth" @change="onDepthChange()"
+                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
                             <option value="1">1 级</option>
                             <option value="2">2 级</option>
                             <option value="3">3 级</option>
@@ -194,7 +180,8 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="flex items-center gap-2 text-xs font-medium text-gray-500 cursor-pointer">
-                            <input type="checkbox" x-model="aggregateGroups" @change="saveLocalState(); renderGraph()" class="rounded border-gray-300">
+                            <input type="checkbox" x-model="aggregateGroups" @change="saveLocalState(); renderGraph()"
+                                class="rounded border-gray-300">
                             按分组聚合
                         </label>
                     </div>
@@ -206,17 +193,10 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">前缀过滤:</span>
-                        <input
-                            type="text"
-                            x-model="filterPrefix"
-                            @input="renderGraph()"
-                            placeholder="输入包路径/类型/函数前缀"
-                            class="w-64 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
-                        <button
-                            @click="filterPrefix=''; renderGraph()"
-                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                        >
+                        <input type="text" x-model="filterPrefix" @input="renderGraph()" placeholder="输入包路径/类型/函数前缀"
+                            class="w-64 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                        <button @click="filterPrefix=''; renderGraph()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                             清除
                         </button>
                     </div>
@@ -224,22 +204,13 @@
                         <summary class="cursor-pointer text-gray-500">分组清单</summary>
                         <div class="mt-2 bg-white border border-gray-200 rounded-lg p-3 w-[520px]">
                             <div class="flex items-center gap-2 mb-2">
-                                <input
-                                    type="text"
-                                    x-model="newGroupName"
-                                    placeholder="组名（如 service）"
-                                    class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                >
-                                <input
-                                    type="text"
-                                    x-model="newGroupPrefix"
+                                <input type="text" x-model="newGroupName" placeholder="组名（如 service）"
+                                    class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                <input type="text" x-model="newGroupPrefix"
                                     placeholder="匹配前缀（如 github.com/acme/app/service/）"
-                                    class="flex-[2] px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                >
-                                <button
-                                    @click="addGroup()"
-                                    class="px-2 py-1 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600"
-                                >
+                                    class="flex-[2] px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                <button @click="addGroup()"
+                                    class="px-2 py-1 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600">
                                     添加
                                 </button>
                             </div>
@@ -247,13 +218,12 @@
                                 <div class="text-[11px] text-gray-500 mb-1">可选前缀（来自包路径，点击填充）</div>
                                 <div class="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
                                     <template x-for="p in prefixSuggestions" :key="p">
-                                        <button
-                                            @click="newGroupPrefix = p"
+                                        <button @click="newGroupPrefix = p"
                                             class="px-2 py-1 text-[11px] border border-gray-200 rounded-md hover:bg-gray-50"
-                                            x-text="p"
-                                        ></button>
+                                            x-text="p"></button>
                                     </template>
-                                    <div x-show="prefixSuggestions.length === 0" class="text-[11px] text-gray-400">暂无可选前缀</div>
+                                    <div x-show="prefixSuggestions.length === 0" class="text-[11px] text-gray-400">
+                                        暂无可选前缀</div>
                                 </div>
                             </div>
                             <div class="space-y-2 max-h-48 overflow-y-auto">
@@ -261,24 +231,16 @@
                                     <div class="border border-gray-200 rounded-md p-2">
                                         <div class="flex items-center justify-between mb-1">
                                             <div class="font-medium text-gray-700" x-text="grp.name"></div>
-                                            <button
-                                                @click="removeGroup(gidx)"
-                                                class="text-xs text-red-500 hover:underline"
-                                            >
+                                            <button @click="removeGroup(gidx)"
+                                                class="text-xs text-red-500 hover:underline">
                                                 删除组
                                             </button>
                                         </div>
                                         <div class="flex items-center gap-2 mb-2">
-                                            <input
-                                                type="text"
-                                                x-model="grp._rename"
-                                                placeholder="新组名"
-                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                            >
-                                            <button
-                                                @click="renameGroup(gidx)"
-                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                            >
+                                            <input type="text" x-model="grp._rename" placeholder="新组名"
+                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                            <button @click="renameGroup(gidx)"
+                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                                 修改
                                             </button>
                                         </div>
@@ -286,26 +248,18 @@
                                             <template x-for="(p, pidx) in grp.prefixes" :key="p + pidx">
                                                 <div class="flex items-center gap-2">
                                                     <span class="text-gray-500 break-all" x-text="p"></span>
-                                                    <button
-                                                        @click="removePrefix(gidx, pidx)"
-                                                        class="text-xs text-red-400 hover:underline"
-                                                    >
+                                                    <button @click="removePrefix(gidx, pidx)"
+                                                        class="text-xs text-red-400 hover:underline">
                                                         移除
                                                     </button>
                                                 </div>
                                             </template>
                                         </div>
                                         <div class="flex items-center gap-2 mt-2">
-                                            <input
-                                                type="text"
-                                                x-model="grp._newPrefix"
-                                                placeholder="新增前缀"
-                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                            >
-                                            <button
-                                                @click="addPrefix(gidx)"
-                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                            >
+                                            <input type="text" x-model="grp._newPrefix" placeholder="新增前缀"
+                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                            <button @click="addPrefix(gidx)"
+                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                                 添加前缀
                                             </button>
                                         </div>
@@ -315,70 +269,52 @@
                             </div>
                         </div>
                     </details>
-                    <button 
-                        @click="resetView()"
-                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
-                    >
+                    <button @click="resetView()"
+                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1">
                         <span>🔄</span> 重置
                     </button>
-                    <button
-                        @click="exportSvg()"
+                    <button @click="exportSvg()"
                         class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
-                        :disabled="!network"
-                    >
+                        :disabled="!network">
                         <span>⬇️</span> 下载 SVG
                     </button>
-                    <button
-                        @click="openMermaid()"
+                    <button @click="openMermaid()"
                         class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
-                        :disabled="!network"
-                    >
+                        :disabled="!network">
                         <span>🧩</span> Mermaid
                     </button>
-                    
+
                     <!-- Global Search -->
                     <div class="flex-1"></div>
                     <div class="relative" x-data="{ open: false }">
-                        <input 
-                            type="text" 
-                            x-model="globalSearch"
-                            @input="onGlobalSearchInput()"
-                            @focus="open = true"
-                            @keydown.escape="open = false"
-                            @keydown.enter="selectFirstSearchResult()"
+                        <input type="text" x-model="globalSearch" @input="onGlobalSearchInput()" @focus="open = true"
+                            @keydown.escape="open = false" @keydown.enter="selectFirstSearchResult()"
                             placeholder="搜索类型或函数名..."
-                            class="w-64 pl-9 pr-4 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                        >
+                            class="w-64 pl-9 pr-4 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-                        
+
                         <!-- Search Results Dropdown -->
-                        <div 
-                            x-show="open && globalSearch.length > 0 && searchResults.length > 0"
-                            @click.outside="open = false"
-                            x-cloak
-                            class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto z-50"
-                        >
+                        <div x-show="open && globalSearch.length > 0 && searchResults.length > 0"
+                            @click.outside="open = false" x-cloak
+                            class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto z-50">
                             <template x-for="(result, index) in searchResults" :key="result.id">
-                                <div 
-                                    @click="selectSearchResult(result); open = false"
+                                <div @click="selectSearchResult(result); open = false"
                                     :class="{'bg-primary-50': index === 0}"
-                                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0"
-                                >
+                                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0">
                                     <div class="flex items-center gap-2">
-                                        <span 
-                                            :class="{
+                                        <span :class="{
                                                 'bg-green-100 text-green-700': result.type === 'provider',
                                                 'bg-blue-100 text-blue-700': result.type === 'type'
-                                            }"
-                                            class="px-1.5 py-0.5 rounded text-xs font-medium"
-                                            x-text="result.type === 'provider' ? 'Provider' : 'Type'"
-                                        ></span>
-                                        <span class="text-sm font-medium text-gray-700 truncate" x-text="result.label"></span>
+                                            }" class="px-1.5 py-0.5 rounded text-xs font-medium"
+                                            x-text="result.type === 'provider' ? 'Provider' : 'Type'"></span>
+                                        <span class="text-sm font-medium text-gray-700 truncate"
+                                            x-text="result.label"></span>
                                     </div>
                                     <div class="text-xs text-gray-400 truncate mt-0.5" x-text="result.fullName"></div>
                                 </div>
                             </template>
-                            <div x-show="searchResults.length === 0 && globalSearch.length > 0" class="px-3 py-4 text-center text-gray-400 text-sm">
+                            <div x-show="searchResults.length === 0 && globalSearch.length > 0"
+                                class="px-3 py-4 text-center text-gray-400 text-sm">
                                 未找到匹配结果
                             </div>
                         </div>
@@ -389,13 +325,12 @@
                 <div class="flex-1 relative">
                     <div id="network" class="w-full h-full"></div>
                     <!-- Loading Overlay -->
-                    <div 
-                        x-show="loading" 
-                        x-cloak
-                        class="absolute inset-0 bg-white/90 flex items-center justify-center z-50"
-                    >
+                    <div x-show="loading" x-cloak
+                        class="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
                         <div class="text-center">
-                            <div class="w-10 h-10 border-3 border-gray-200 border-t-primary-500 rounded-full animate-spin mx-auto mb-3"></div>
+                            <div
+                                class="w-10 h-10 border-3 border-gray-200 border-t-primary-500 rounded-full animate-spin mx-auto mb-3">
+                            </div>
                             <div class="text-gray-500 text-sm">加载中...</div>
                         </div>
                     </div>
@@ -418,34 +353,68 @@
                         <div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">函数名</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.function_name"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.function_name"></div>
                             </div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">输出类型</h4>
-                                <div 
-                                    @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
-                                    class="text-sm text-primary-600 break-all leading-relaxed cursor-pointer hover:underline" 
-                                    x-text="selectedNode.data.output_type"
-                                ></div>
+                                <div @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
+                                    class="text-sm text-primary-600 break-all leading-relaxed cursor-pointer hover:underline"
+                                    x-text="selectedNode.data.output_type"></div>
+                            </div>
+                            <div class="mb-5" x-show="selectedNode.data.function_pkg">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">函数包路径</h4>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.function_pkg"></div>
+                            </div>
+                            <div class="mb-5" x-show="selectedNode.data.function_file">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">代码位置</h4>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="`${selectedNode.data.function_file || ''}:${selectedNode.data.function_line || 0}`">
+                                </div>
                             </div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">
                                     输入类型 (<span x-text="(selectedNode.data.input_types || []).length"></span>)
                                 </h4>
                                 <ul class="space-y-1">
-                                    <template x-for="inputType in (selectedNode.data.input_types || [])" :key="inputType">
-                                        <li 
-                                            @click="showDependencyGraph(inputType, 'type')"
+                                    <template x-for="inputType in (selectedNode.data.input_types || [])"
+                                        :key="inputType">
+                                        <li @click="showDependencyGraph(inputType, 'type')"
                                             class="px-3 py-2 bg-gray-100 rounded text-xs break-all cursor-pointer hover:bg-primary-100 transition"
-                                            x-text="inputType"
-                                        ></li>
+                                            x-text="inputType"></li>
                                     </template>
                                 </ul>
                             </div>
-                            <button 
-                                @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
-                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
-                            >
+                            <template x-if="getRuntimeStatForProvider(selectedNode.data)">
+                                <div class="mb-5">
+                                    <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">启动耗时</h4>
+                                    <div class="space-y-1 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">总耗时</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(selectedNode.data).total_duration)"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">平均耗时</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(selectedNode.data).average_duration)"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">最后一次</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(selectedNode.data).last_duration)"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">调用次数</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="getRuntimeStatForProvider(selectedNode.data).call_count"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <button @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
+                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🔍</span> 查看依赖关系图
                             </button>
                         </div>
@@ -455,16 +424,16 @@
                         <div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">类型</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.fullType"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.fullType"></div>
                             </div>
                             <div class="mb-5" x-show="selectedNode.data.packagePath">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包路径</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.packagePath"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.packagePath"></div>
                             </div>
-                            <button 
-                                @click="showDependencyGraph(selectedNode.data.fullType, 'type')"
-                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
-                            >
+                            <button @click="showDependencyGraph(selectedNode.data.fullType, 'type')"
+                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🔍</span> 查看依赖关系
                             </button>
                         </div>
@@ -474,24 +443,23 @@
                         <div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">分组</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.group"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.group"></div>
                             </div>
-                            <button
-                                @click="showGroupGraph(selectedNode.data.group)"
-                                class="w-full px-4 py-2 mb-4 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
-                            >
+                            <button @click="showGroupGraph(selectedNode.data.group)"
+                                class="w-full px-4 py-2 mb-4 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🧩</span> 查看组内依赖图
                             </button>
-                            <button
-                                @click="toggleGroupExpand(selectedNode.data.group)"
+                            <button @click="toggleGroupExpand(selectedNode.data.group)"
                                 class="w-full px-4 py-2 mb-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2"
-                                x-text="isGroupExpanded(selectedNode.data.group) ? '收起到分组节点' : '展开组内节点'"
-                            ></button>
+                                x-text="isGroupExpanded(selectedNode.data.group) ? '收起到分组节点' : '展开组内节点'"></button>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包含节点</h4>
-                                <div class="text-xs text-gray-500 mb-2" x-text="(groupMembers[selectedNode.data.group] || []).length + ' 个'"></div>
+                                <div class="text-xs text-gray-500 mb-2"
+                                    x-text="(groupMembers[selectedNode.data.group] || []).length + ' 个'"></div>
                                 <ul class="space-y-1 max-h-64 overflow-y-auto">
-                                    <template x-for="item in (groupMembers[selectedNode.data.group] || [])" :key="item.id">
+                                    <template x-for="item in (groupMembers[selectedNode.data.group] || [])"
+                                        :key="item.id">
                                         <li class="px-3 py-2 bg-gray-100 rounded text-xs break-all">
                                             <div class="text-gray-700" x-text="item.id"></div>
                                             <div class="text-gray-400" x-text="item.packagePath"></div>
@@ -502,6 +470,62 @@
                         </div>
                     </template>
                 </div>
+
+                <!-- Startup Runtime Stats -->
+                <div class="p-4 border-t border-gray-200 bg-white">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="text-xs font-semibold text-gray-500 uppercase">⏱ Provider 启动耗时</h4>
+                        <button @click="loadRuntimeStats()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                            :disabled="runtimeStatsLoading">
+                            <span x-text="runtimeStatsLoading ? '刷新中...' : '刷新'"></span>
+                        </button>
+                    </div>
+
+                    <div class="mb-2">
+                        <input type="text" x-model="runtimeStatsSearch" placeholder="搜索 provider 函数名"
+                            class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                    </div>
+
+                    <label class="mb-2 flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" x-model="runtimeStatsOnlyExecuted" class="rounded border-gray-300">
+                        仅显示已执行 provider（call_count &gt; 0）
+                    </label>
+
+                    <div class="text-[11px] text-gray-500 mb-2 flex items-center justify-between">
+                        <span x-text="`共 ${filteredRuntimeStats.length} / ${runtimeStats.length} 个 provider`"></span>
+                        <span x-show="runtimeStatsUpdatedAt" x-text="`更新时间 ${runtimeStatsUpdatedAt}`"></span>
+                    </div>
+
+                    <div x-show="runtimeStatsError" class="text-xs text-red-500 mb-2" x-text="runtimeStatsError"></div>
+
+                    <div class="max-h-72 overflow-y-auto border border-gray-200 rounded-lg">
+                        <template x-if="filteredRuntimeStats.length === 0">
+                            <div class="p-3 text-xs text-gray-400"
+                                x-text="runtimeStatsOnlyExecuted ? '暂无已执行 provider（请先触发一次注入）' : '暂无启动耗时数据（请先触发一次注入）'">
+                            </div>
+                        </template>
+                        <template x-for="(item, idx) in filteredRuntimeStats" :key="runtimeStatKey(item, idx)">
+                            <button @click="focusProviderByRuntime(item)"
+                                class="w-full text-left px-3 py-2 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 transition">
+                                <div class="flex items-start justify-between gap-2">
+                                    <div class="min-w-0">
+                                        <div class="text-xs font-medium text-gray-700 truncate"
+                                            x-text="item.function_name || '(unknown)'"></div>
+                                        <div class="text-[11px] text-gray-400 truncate" x-text="item.output_type || ''">
+                                        </div>
+                                    </div>
+                                    <div class="text-right shrink-0">
+                                        <div class="text-xs font-semibold text-gray-700"
+                                            x-text="formatDurationNs(item.total_duration)"></div>
+                                        <div class="text-[11px] text-gray-400" x-text="`${item.call_count} 次`"></div>
+                                    </div>
+                                </div>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+
                 <!-- Legend -->
                 <div class="p-4 border-t border-gray-200 bg-gray-50">
                     <h4 class="text-xs font-semibold text-gray-400 uppercase mb-3">图例</h4>
@@ -527,40 +551,28 @@
             </aside>
         </div>
         <!-- Mermaid Modal -->
-        <div
-            x-show="mermaidOpen"
-            x-cloak
-            class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-            @keydown.escape.window="mermaidOpen = false"
-        >
+        <div x-show="mermaidOpen" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+            @keydown.escape.window="mermaidOpen = false">
             <div class="bg-white w-[90vw] h-[85vh] rounded-xl shadow-xl flex flex-col">
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div class="font-semibold text-gray-700">🧩 Mermaid 预览</div>
-                    <button
-                        @click="mermaidOpen = false"
-                        class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                    >
+                    <button @click="mermaidOpen = false"
+                        class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                         关闭
                     </button>
                 </div>
                 <div class="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
                     <div class="flex flex-col h-full">
                         <div class="text-xs text-gray-500 mb-2">Mermaid 源码</div>
-                        <textarea
-                            x-model="mermaidSource"
-                            class="flex-1 w-full text-xs font-mono border border-gray-200 rounded-lg p-2 resize-none"
-                        ></textarea>
+                        <textarea x-model="mermaidSource"
+                            class="flex-1 w-full text-xs font-mono border border-gray-200 rounded-lg p-2 resize-none"></textarea>
                         <div class="mt-2 flex items-center gap-2">
-                            <button
-                                @click="copyMermaidSource()"
-                                class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                            >
+                            <button @click="copyMermaidSource()"
+                                class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                 复制源码
                             </button>
-                            <button
-                                @click="renderMermaid()"
-                                class="px-3 py-1.5 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600"
-                            >
+                            <button @click="renderMermaid()"
+                                class="px-3 py-1.5 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600">
                                 重新渲染
                             </button>
                             <div x-show="mermaidError" class="text-xs text-red-500" x-text="mermaidError"></div>
@@ -568,7 +580,8 @@
                     </div>
                     <div class="flex flex-col h-full">
                         <div class="text-xs text-gray-500 mb-2">预览</div>
-                        <div class="flex-1 border border-gray-200 rounded-lg p-3 overflow-auto mermaid-preview" x-html="mermaidSvg"></div>
+                        <div class="flex-1 border border-gray-200 rounded-lg p-3 overflow-auto mermaid-preview"
+                            x-html="mermaidSvg"></div>
                     </div>
                 </div>
             </div>
@@ -613,6 +626,12 @@
                 mermaidError: '',
                 lastGraphData: null,
                 expandedGroups: [],
+                runtimeStats: [],
+                runtimeStatsLoading: false,
+                runtimeStatsError: '',
+                runtimeStatsSearch: '',
+                runtimeStatsUpdatedAt: '',
+                runtimeStatsOnlyExecuted: false,
 
                 // Computed
                 get filteredPackages() {
@@ -630,6 +649,21 @@
                     return this.getPackagePrefixSuggestions();
                 },
 
+                get filteredRuntimeStats() {
+                    const q = (this.runtimeStatsSearch || '').toLowerCase().trim();
+                    return (this.runtimeStats || []).filter(s => {
+                        if (this.runtimeStatsOnlyExecuted && Number(s.call_count || 0) <= 0) {
+                            return false;
+                        }
+                        if (!q) {
+                            return true;
+                        }
+                        const fn = String(s.function_name || '').toLowerCase();
+                        const out = String(s.output_type || '').toLowerCase();
+                        return fn.includes(q) || out.includes(q);
+                    });
+                },
+
                 // Methods
                 async init() {
                     this.loadLocalState();
@@ -637,6 +671,7 @@
                     await this.loadStats();
                     await this.loadPackages();
                     await this.loadDependencies();
+                    await this.loadRuntimeStats();
                     if (window.mermaid && window.mermaid.initialize) {
                         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
                     }
@@ -677,6 +712,25 @@
                         this.packages = await res.json();
                     } catch (e) {
                         console.error('加载包列表失败:', e);
+                    }
+                },
+
+                async loadRuntimeStats() {
+                    this.runtimeStatsLoading = true;
+                    this.runtimeStatsError = '';
+                    try {
+                        const res = await fetch(apiUrl('/api/runtime-stats'));
+                        if (!res.ok) {
+                            throw new Error('HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.runtimeStats = Array.isArray(data) ? data : [];
+                        this.runtimeStatsUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                    } catch (e) {
+                        this.runtimeStatsError = '加载 provider 启动耗时失败';
+                        console.error('加载 provider 启动耗时失败:', e);
+                    } finally {
+                        this.runtimeStatsLoading = false;
                     }
                 },
 
@@ -787,7 +841,7 @@
                     this.allData.providers.forEach(provider => {
                         const fnName = provider.function_name || '';
                         const outputType = provider.output_type || '';
-                        
+
                         if (fnName.toLowerCase().includes(query) || outputType.toLowerCase().includes(query)) {
                             if (!seen.has(provider.id)) {
                                 seen.add(provider.id);
@@ -836,7 +890,7 @@
                 selectSearchResult(result) {
                     this.globalSearch = '';
                     this.searchResults = [];
-                    
+
                     if (result.type === 'type') {
                         // 类型：显示依赖关系图
                         this.showDependencyGraph(result.fullName, 'type');
@@ -870,7 +924,7 @@
                     // 构建类型到 Provider 的映射
                     const typeToProviders = new Map(); // outputType -> providers
                     const typeToConsumers = new Map(); // inputType -> providers that use it
-                    
+
                     this.allData.providers.forEach(provider => {
                         const outputType = provider.output_type;
                         if (outputType) {
@@ -879,7 +933,7 @@
                             }
                             typeToProviders.get(outputType).push(provider);
                         }
-                        
+
                         (provider.input_types || []).forEach(inputType => {
                             if (!typeToConsumers.has(inputType)) {
                                 typeToConsumers.set(inputType, []);
@@ -951,7 +1005,7 @@
                         if (!nodeMap.has(type)) {
                             const isTarget = type === targetType;
                             let bgColor, borderColor;
-                            
+
                             if (isTarget) {
                                 bgColor = '#fde68a'; borderColor = '#f59e0b'; // 目标：黄色
                             } else if (direction === 'dependency') {
@@ -1015,7 +1069,7 @@
                         try {
                             this.network.selectNodes([targetType]);
                             this.network.focus(targetType, { scale: 1, animation: true });
-                        } catch (e) {}
+                        } catch (e) { }
                     }, 100);
 
                     this.network.on('click', params => {
@@ -1487,6 +1541,92 @@
                         name = '...' + name.slice(-32);
                     }
                     return name;
+                },
+
+                formatDurationNs(v) {
+                    const ns = Number(v || 0);
+                    if (!Number.isFinite(ns) || ns <= 0) return '0 ms';
+                    if (ns < 1000) return `${Math.round(ns)} ns`;
+                    if (ns < 1000000) return `${(ns / 1000).toFixed(2)} µs`;
+                    if (ns < 1000000000) return `${(ns / 1000000).toFixed(2)} ms`;
+                    return `${(ns / 1000000000).toFixed(3)} s`;
+                },
+
+                runtimeStatKey(item, idx) {
+                    return `${item.function_name || 'unknown'}|${item.output_type || ''}|${idx}`;
+                },
+
+                getRuntimeStatForProvider(provider) {
+                    if (!provider || !this.runtimeStats || this.runtimeStats.length === 0) {
+                        return null;
+                    }
+                    const exact = this.runtimeStats.find(s =>
+                        s.function_name === provider.function_name && s.output_type === provider.output_type
+                    );
+                    if (exact) return exact;
+                    return this.runtimeStats.find(s => s.function_name === provider.function_name) || null;
+                },
+
+                findProviderByRuntimeStat(stat) {
+                    return (this.allData?.providers || []).find(p =>
+                        p.function_name === stat.function_name && p.output_type === stat.output_type
+                    ) || (this.allData?.providers || []).find(p => p.function_name === stat.function_name) || null;
+                },
+
+                async focusProviderByRuntime(stat) {
+                    if (!stat || !this.allData) return;
+
+                    let provider = this.findProviderByRuntimeStat(stat);
+
+                    // 如果当前按包过滤导致 provider 不在当前图里，自动切回“全部”再定位。
+                    if (!provider && this.currentPackage) {
+                        this.currentPackage = null;
+                        await this.loadDependencies();
+                        provider = this.findProviderByRuntimeStat(stat);
+                    }
+
+                    if (!provider) {
+                        this.runtimeStatsError = '当前图中未找到该 provider，请清除过滤后重试';
+                        this.selectedNode = {
+                            data: {
+                                type: 'provider',
+                                function_name: stat.function_name,
+                                output_type: stat.output_type,
+                                input_types: []
+                            }
+                        };
+                        return;
+                    }
+
+                    // 先展示详情，避免后续聚焦失败时右侧空白。
+                    this.selectedNode = { id: provider.id, data: { ...provider, type: 'provider' } };
+
+                    this.currentView = 'providers';
+                    this.focusedType = null;
+                    this.focusedGraph = null;
+                    this.focusedGroup = null;
+                    this.renderGraph();
+
+                    setTimeout(() => {
+                        if (!this.network || !this.network.body || !this.network.body.data || !this.network.body.data.nodes) {
+                            return;
+                        }
+
+                        const targetNode = this.network.body.data.nodes.get(provider.id);
+                        if (!targetNode) {
+                            // 可能被分组聚合隐藏，降级到类型依赖视图，帮助用户定位。
+                            this.showDependencyGraph(provider.output_type, 'type');
+                            return;
+                        }
+
+                        try {
+                            this.network.selectNodes([provider.id]);
+                            this.network.focus(provider.id, { scale: 1.15, animation: true });
+                            this.selectedNode = targetNode;
+                        } catch (e) {
+                            // ignore focus errors
+                        }
+                    }, 120);
                 },
 
                 buildProviderTooltip(provider) {
@@ -2006,4 +2146,5 @@
         }
     </script>
 </body>
+
 </html>

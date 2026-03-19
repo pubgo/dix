@@ -3,7 +3,10 @@ package dixinternal
 import (
 	"errors"
 	"reflect"
+	"runtime"
+	"sort"
 	"strings"
+	"time"
 )
 
 // New Dix new
@@ -99,8 +102,22 @@ type ProviderDetails struct {
 	OutputPkg    string
 	FunctionName string
 	FunctionPkg  string
+	FunctionFile string
+	FunctionLine int
 	InputTypes   []string
 	InputPkgs    []string
+}
+
+// ProviderRuntimeStats contains provider runtime metrics for diagnostics.
+type ProviderRuntimeStats struct {
+	FunctionName      string        `json:"function_name"`
+	OutputType        string        `json:"output_type"`
+	CallCount         int           `json:"call_count"`
+	TotalDuration     time.Duration `json:"total_duration"`
+	AverageDuration   time.Duration `json:"average_duration"`
+	LastDuration      time.Duration `json:"last_duration"`
+	LastError         string        `json:"last_error,omitempty"`
+	LastRunAtUnixNano int64         `json:"last_run_at_unix_nano"`
 }
 
 // GetProviderDetails returns detailed information about all providers
@@ -109,6 +126,7 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 	for outputType, providerList := range dix.providers {
 		for _, providerFn := range providerList {
 			fnName := GetFnName(providerFn.fn)
+			fnFile, fnLine := resolveFuncLocation(providerFn.fn)
 			var inputTypes []string
 			var inputPkgs []string
 			seen := make(map[string]bool)
@@ -139,12 +157,68 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 				OutputPkg:    resolveTypePkgPath(outputType),
 				FunctionName: fnName,
 				FunctionPkg:  resolveFuncPkgPath(fnName),
+				FunctionFile: fnFile,
+				FunctionLine: fnLine,
 				InputTypes:   inputTypes,
 				InputPkgs:    inputPkgs,
 			})
 		}
 	}
 	return details
+}
+
+// GetProviderRuntimeStats returns runtime stats sorted by total duration (descending).
+// This is helpful for startup latency diagnosis.
+func (dix *Dix) GetProviderRuntimeStats() []ProviderRuntimeStats {
+	stats := make([]ProviderRuntimeStats, 0, len(dix.providers))
+	seen := make(map[reflect.Value]bool)
+
+	for _, providerList := range dix.providers {
+		for _, p := range providerList {
+			if p == nil || seen[p.fn] {
+				continue
+			}
+			seen[p.fn] = true
+
+			outputType := ""
+			if p.output != nil && p.output.typ != nil {
+				outputType = p.output.typ.String()
+			}
+
+			item := ProviderRuntimeStats{
+				FunctionName: GetFnName(p.fn),
+				OutputType:   outputType,
+			}
+
+			if s, ok := dix.providerStats[p.fn]; ok && s != nil {
+				avg := time.Duration(0)
+				if s.CallCount > 0 {
+					avg = s.TotalDuration / time.Duration(s.CallCount)
+				}
+				item.FunctionName = s.FunctionName
+				if s.OutputType != "" {
+					item.OutputType = s.OutputType
+				}
+				item.CallCount = s.CallCount
+				item.TotalDuration = s.TotalDuration
+				item.AverageDuration = avg
+				item.LastDuration = s.LastDuration
+				item.LastError = s.LastError
+				item.LastRunAtUnixNano = s.LastRunAt.UnixNano()
+			}
+
+			stats = append(stats, item)
+		}
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].TotalDuration == stats[j].TotalDuration {
+			return stats[i].FunctionName < stats[j].FunctionName
+		}
+		return stats[i].TotalDuration > stats[j].TotalDuration
+	})
+
+	return stats
 }
 
 func resolveTypePkgPath(typ reflect.Type) string {
@@ -172,4 +246,19 @@ func resolveFuncPkgPath(fnName string) string {
 		return name[:idx]
 	}
 	return ""
+}
+
+func resolveFuncLocation(fn reflect.Value) (string, int) {
+	if !fn.IsValid() || fn.IsZero() {
+		return "", 0
+	}
+
+	pc := fn.Pointer()
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		return "", 0
+	}
+
+	file, line := f.FileLine(pc)
+	return file, line
 }
