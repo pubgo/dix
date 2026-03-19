@@ -119,10 +119,19 @@ err := dix.TryInject(di, func(svc *Service) {
 
 可在启动阶段限制 provider 执行时间，并对慢调用输出告警：
 
+- 默认 `ProviderTimeout` 为 `15s`
+- 可用 `dix.WithProviderTimeout(0)` 显式关闭 provider 超时
+- 默认 `SlowProviderThreshold` 为 `2s`
+- 可用 `dix.WithSlowProviderThreshold(0)` 显式关闭慢 provider 告警
+
 ```go
 di := dix.New(
-    dix.WithProviderTimeout(2*time.Second),               // 单个 provider 超时（0 = 不限制）
-    dix.WithSlowProviderThreshold(300*time.Millisecond),  // 慢调用阈值告警（0 = 关闭）
+    // 默认 `ProviderTimeout` 为 `15s`
+    // 使用 `dix.WithProviderTimeout(0)` 可关闭 provider 超时
+    // 默认 `SlowProviderThreshold` 为 `2s`
+    // 使用 `dix.WithSlowProviderThreshold(0)` 可关闭慢 provider 告警
+    dix.WithProviderTimeout(2*time.Second),               // 覆盖默认值（default: 15s, 0 = 不限制）
+    dix.WithSlowProviderThreshold(300*time.Millisecond),  // 覆盖默认值（default: 2s, 0 = 关闭）
 )
 ```
 

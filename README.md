@@ -119,10 +119,19 @@ err := dix.TryInject(di, func(svc *Service) {
 
 Control long-running providers during startup:
 
+- Default provider timeout: `15s`
+- Disable provider timeout explicitly: `dix.WithProviderTimeout(0)`
+- Default slow provider warning threshold: `2s`
+- Disable slow provider warning: `dix.WithSlowProviderThreshold(0)`
+
 ```go
 di := dix.New(
-    dix.WithProviderTimeout(2*time.Second),        // hard timeout per provider (0 = disabled)
-    dix.WithSlowProviderThreshold(300*time.Millisecond), // warn when provider is slow (0 = disabled)
+    // Default `ProviderTimeout` is `15s`
+    // Use `dix.WithProviderTimeout(0)` to disable provider timeout
+    // Default `SlowProviderThreshold` is `2s`
+    // Use `dix.WithSlowProviderThreshold(0)` to disable slow-provider warnings
+    dix.WithProviderTimeout(2*time.Second),        // override default (default: 15s, 0 = disabled)
+    dix.WithSlowProviderThreshold(300*time.Millisecond), // override default (default: 2s, 0 = disabled)
 )
 ```
 

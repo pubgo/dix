@@ -1997,6 +1997,34 @@ func TestProviderTimeout(t *testing.T) {
 	}
 }
 
+func TestDefaultProviderTimeout(t *testing.T) {
+	d := New()
+	if got := d.Option().ProviderTimeout; got != DefaultProviderTimeout {
+		t.Fatalf("expected default ProviderTimeout=%s, got %s", DefaultProviderTimeout, got)
+	}
+}
+
+func TestDisableDefaultProviderTimeout(t *testing.T) {
+	d := New(WithProviderTimeout(0))
+	if got := d.Option().ProviderTimeout; got != 0 {
+		t.Fatalf("expected ProviderTimeout=0 when disabled explicitly, got %s", got)
+	}
+}
+
+func TestDefaultSlowProviderThreshold(t *testing.T) {
+	d := New()
+	if got := d.Option().SlowProviderThreshold; got != DefaultSlowProviderThreshold {
+		t.Fatalf("expected default SlowProviderThreshold=%s, got %s", DefaultSlowProviderThreshold, got)
+	}
+}
+
+func TestDisableDefaultSlowProviderThreshold(t *testing.T) {
+	d := New(WithSlowProviderThreshold(0))
+	if got := d.Option().SlowProviderThreshold; got != 0 {
+		t.Fatalf("expected SlowProviderThreshold=0 when disabled explicitly, got %s", got)
+	}
+}
+
 func TestTimeoutOptionValidate(t *testing.T) {
 	opts := Options{ProviderTimeout: -1 * time.Second}
 	err := opts.Validate()

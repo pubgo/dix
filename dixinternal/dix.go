@@ -21,7 +21,11 @@ func newDix(opts ...Option) (d *Dix) {
 		}
 	}()
 
-	options := Options{AllowValuesNull: true}
+	options := Options{
+		AllowValuesNull:       true,
+		ProviderTimeout:       DefaultProviderTimeout,
+		SlowProviderThreshold: DefaultSlowProviderThreshold,
+	}
 	for _, opt := range opts {
 		opt(&options)
 	}

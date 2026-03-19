@@ -5,6 +5,16 @@ import (
 	"time"
 )
 
+const (
+	// DefaultProviderTimeout is the default max execution time for a single provider call.
+	// Set WithProviderTimeout(0) to disable timeout control.
+	DefaultProviderTimeout = 15 * time.Second
+
+	// DefaultSlowProviderThreshold is the default warning threshold for provider execution latency.
+	// Set WithSlowProviderThreshold(0) to disable slow-provider warnings.
+	DefaultSlowProviderThreshold = 2 * time.Second
+)
+
 type (
 	Option  func(opts *Options)
 	Options struct {
