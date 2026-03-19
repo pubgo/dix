@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"log/slog"
 	"reflect"
+	"time"
 
 	"github.com/pubgo/dix/v2/dixinternal"
 )
@@ -22,6 +23,14 @@ type (
 func SetLog(log slog.Handler) { dixinternal.SetLog(log) }
 
 func WithValuesNull() Option { return dixinternal.WithValuesNull() }
+
+func WithProviderTimeout(timeout time.Duration) Option {
+	return dixinternal.WithProviderTimeout(timeout)
+}
+
+func WithSlowProviderThreshold(threshold time.Duration) Option {
+	return dixinternal.WithSlowProviderThreshold(threshold)
+}
 
 func New(opts ...Option) *Dix { return dixinternal.New(opts...) }
 

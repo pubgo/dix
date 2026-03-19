@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 )
 
 type providerInputType struct {
@@ -42,6 +43,11 @@ type providerFn struct {
 	hasError  bool
 }
 
+type providerCallResult struct {
+	outputs []reflect.Value
+	err     error
+}
+
 func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -63,6 +69,29 @@ func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error
 	}()
 
 	return n.fn.Call(in), nil
+}
+
+func (n providerFn) callWithTimeout(in []reflect.Value, timeout time.Duration) (outputs []reflect.Value, err error, timedOut bool) {
+	if timeout <= 0 {
+		outputs, err = n.call(in)
+		return outputs, err, false
+	}
+
+	resultCh := make(chan providerCallResult, 1)
+	go func() {
+		outputs, callErr := n.call(in)
+		resultCh <- providerCallResult{outputs: outputs, err: callErr}
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case res := <-resultCh:
+		return res.outputs, res.err, false
+	case <-timer.C:
+		return nil, fmt.Errorf("provider execution timeout after %s", timeout), true
+	}
 }
 
 // reflectTypesToString converts input type list to readable string

@@ -125,10 +125,17 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 
 	logger.Debug("evaluating provider", "provider", fnName)
 
-	outputs, err := p.call(inputs)
+	outputs, err, timedOut := p.callWithTimeout(inputs, opt.ProviderTimeout)
 	duration := time.Since(start)
 	if err != nil {
 		dix.recordProviderStat(p, duration, err)
+		if timedOut {
+			logger.Error("provider execution timeout",
+				"provider", fnName,
+				"timeout", opt.ProviderTimeout.String(),
+				"duration", duration.String(),
+			)
+		}
 		return fmt.Errorf("provider call failed for %s: %w", fnName, err)
 	}
 
@@ -142,6 +149,13 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 
 	dix.initializer[p.fn] = true
 	dix.recordProviderStat(p, duration, nil)
+	if opt.SlowProviderThreshold > 0 && duration > opt.SlowProviderThreshold {
+		logger.Warn("slow provider execution detected",
+			"provider", fnName,
+			"duration", duration.String(),
+			"threshold", opt.SlowProviderThreshold.String(),
+		)
+	}
 	logger.Debug("provider evaluated successfully", "duration", duration.String(), "provider", fnName)
 
 	// 4. Process output values and update cache

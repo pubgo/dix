@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func captureStderr(t *testing.T, fn func()) string {
@@ -1974,5 +1975,38 @@ func TestGetProviderRuntimeStatsIncludeAllProviders(t *testing.T) {
 
 	if !foundA || !foundB {
 		t.Fatalf("expected both depA and depB stats, foundA=%v foundB=%v", foundA, foundB)
+	}
+}
+
+func TestProviderTimeout(t *testing.T) {
+	type slowDep struct{}
+
+	d := New(WithProviderTimeout(20 * time.Millisecond))
+	d.Provide(func() *slowDep {
+		time.Sleep(120 * time.Millisecond)
+		return &slowDep{}
+	})
+
+	err := d.TryInject(func(*slowDep) {})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+
+	if !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("expected timeout error, got: %v", err)
+	}
+}
+
+func TestTimeoutOptionValidate(t *testing.T) {
+	opts := Options{ProviderTimeout: -1 * time.Second}
+	err := opts.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for negative ProviderTimeout")
+	}
+
+	opts = Options{SlowProviderThreshold: -1 * time.Second}
+	err = opts.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for negative SlowProviderThreshold")
 	}
 }

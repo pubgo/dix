@@ -11,16 +11,16 @@
 
 ## ✨ 功能特性
 
-| 特性 | 说明 |
-|------|------|
-| 🔄 **循环检测** | 自动检测依赖循环，避免死循环 |
-| 📦 **多种注入** | 支持 func、struct、map、list 作为注入参数 |
-| 🏷️ **命名空间** | 通过 map key 实现依赖隔离 |
-| 🎯 **多输出** | struct 可对外提供多组依赖对象 |
-| 🪆 **嵌套支持** | 支持 struct 依赖嵌套 |
-| 🔧 **无侵入** | 对原对象零侵入 |
+| 特性           | 说明                                              |
+| -------------- | ------------------------------------------------- |
+| 🔄 **循环检测** | 自动检测依赖循环，避免死循环                      |
+| 📦 **多种注入** | 支持 func、struct、map、list 作为注入参数         |
+| 🏷️ **命名空间** | 通过 map key 实现依赖隔离                         |
+| 🎯 **多输出**   | struct 可对外提供多组依赖对象                     |
+| 🪆 **嵌套支持** | 支持 struct 依赖嵌套                              |
+| 🔧 **无侵入**   | 对原对象零侵入                                    |
 | 🛡️ **安全 API** | 提供 `TryProvide`/`TryInject` 不 panic 的安全版本 |
-| 🌐 **可视化** | HTTP 模块图形化展示依赖关系 |
+| 🌐 **可视化**   | HTTP 模块图形化展示依赖关系                       |
 
 ## 📦 安装
 
@@ -113,6 +113,17 @@ dix.Inject(di, app)
 err := dix.TryInject(di, func(svc *Service) {
     // ...
 })
+```
+
+### 启动超时 / 慢 Provider 告警
+
+可在启动阶段限制 provider 执行时间，并对慢调用输出告警：
+
+```go
+di := dix.New(
+    dix.WithProviderTimeout(2*time.Second),               // 单个 provider 超时（0 = 不限制）
+    dix.WithSlowProviderThreshold(300*time.Millisecond),  // 慢调用阈值告警（0 = 关闭）
+)
 ```
 
 ## 🎯 注入模式
@@ -242,29 +253,29 @@ task build
 
 ## 📚 示例
 
-| 示例 | 说明 |
-|------|------|
-| [struct-in](./example/struct-in/) | 结构体输入注入 |
-| [struct-out](./example/struct-out/) | 结构体多输出 |
-| [func](./example/func/) | 函数注入 |
-| [map](./example/map/) | Map/命名空间注入 |
-| [map-nil](./example/map-nil/) | Map 空值处理 |
-| [list](./example/list/) | List 注入 |
-| [list-nil](./example/list-nil/) | List 空值处理 |
-| [lazy](./example/lazy/) | 延迟注入 |
-| [cycle](./example/cycle/) | 循环检测示例 |
-| [handler](./example/handler/) | Handler 模式 |
-| [inject_method](./example/inject_method/) | 方法注入 |
-| [test-return-error](./example/test-return-error/) | 错误处理 |
-| [http](./example/http/) | HTTP 可视化 |
+| 示例                                              | 说明             |
+| ------------------------------------------------- | ---------------- |
+| [struct-in](./example/struct-in/)                 | 结构体输入注入   |
+| [struct-out](./example/struct-out/)               | 结构体多输出     |
+| [func](./example/func/)                           | 函数注入         |
+| [map](./example/map/)                             | Map/命名空间注入 |
+| [map-nil](./example/map-nil/)                     | Map 空值处理     |
+| [list](./example/list/)                           | List 注入        |
+| [list-nil](./example/list-nil/)                   | List 空值处理    |
+| [lazy](./example/lazy/)                           | 延迟注入         |
+| [cycle](./example/cycle/)                         | 循环检测示例     |
+| [handler](./example/handler/)                     | Handler 模式     |
+| [inject_method](./example/inject_method/)         | 方法注入         |
+| [test-return-error](./example/test-return-error/) | 错误处理         |
+| [http](./example/http/)                           | HTTP 可视化      |
 
 ## 📖 文档
 
-| 文档 | 说明 |
-|------|------|
-| [设计文档](./docs/design_zh.md) | 架构和详细设计 |
-| [审计报告](./docs/audit_zh.md) | 项目审计、评价和对比 |
-| [dixhttp 文档](./dixhttp/README_zh.md) | HTTP 可视化模块文档 |
+| 文档                                   | 说明                 |
+| -------------------------------------- | -------------------- |
+| [设计文档](./docs/design_zh.md)        | 架构和详细设计       |
+| [审计报告](./docs/audit_zh.md)         | 项目审计、评价和对比 |
+| [dixhttp 文档](./dixhttp/README_zh.md) | HTTP 可视化模块文档  |
 
 ## 📄 License
 

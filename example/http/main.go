@@ -2,6 +2,9 @@ package main
 
 import (
 	"log"
+	"net"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/pubgo/dix/v2"
@@ -197,6 +200,16 @@ func (n *NotificationService) Name() string {
 	return "NotificationService"
 }
 
+// SlowRemoteClient 模拟一个外部慢依赖
+type SlowRemoteClient struct {
+	Ready bool
+}
+
+// TimeoutProbe 仅用于触发 SlowRemoteClient 的构建
+type TimeoutProbe struct {
+	Client *SlowRemoteClient
+}
+
 // ==================== 业务逻辑层 ====================
 
 // UserController 用户控制器
@@ -225,9 +238,60 @@ type Application struct {
 	ServiceMap          map[string]Service // 服务映射（使用具体接口类型）
 }
 
+const defaultHTTPAddr = ":8080"
+
+func startVisualizationServer(server *dixhttp.Server) error {
+	addr := os.Getenv("DIX_HTTP_ADDR")
+	if addr == "" {
+		addr = defaultHTTPAddr
+	}
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if addr == defaultHTTPAddr {
+			log.Printf("⚠️ Port %s unavailable (%v), trying a random available port...", addr, err)
+			ln, err = net.Listen("tcp", ":0")
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	actualAddr := ln.Addr().String()
+	displayAddr := actualAddr
+	if _, port, splitErr := net.SplitHostPort(actualAddr); splitErr == nil && port != "" {
+		displayAddr = "localhost:" + port
+	}
+
+	log.Printf("🚀 Starting HTTP server on http://%s", displayAddr)
+	log.Printf("📊 Open http://%s in your browser to view dependency relationships", displayAddr)
+	log.Println("📡 API endpoints:")
+	log.Println("   - GET /api/dependencies - JSON data of dependencies")
+	log.Println("   - GET /api/graph?type=providers - DOT graph format")
+	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
+	log.Println("   - GET /api/graph?type=objects - Objects graph")
+	log.Println("")
+	log.Println("💡 This example demonstrates:")
+	log.Println("   - Interface-based dependency injection")
+	log.Println("   - Multiple implementations (RedisCache, FileCache)")
+	log.Println("   - Map and Slice dependencies")
+	log.Println("   - Struct output (auto-flattening)")
+	log.Println("   - Multi-layer architecture (Config -> Services -> Controllers -> Application)")
+	log.Println("   - Complex dependency chains")
+	log.Println("   - Simulated timeout provider (for red-highlight diagnosis)")
+	log.Println("")
+	log.Println("💡 Runtime stats will include a timeout provider sample for diagnostics!")
+
+	httpServer := &http.Server{Handler: server}
+	return httpServer.Serve(ln)
+}
+
 func main() {
 	// Create a Dix container
-	di := dix.New()
+	di := dix.New(
+		dix.WithProviderTimeout(200*time.Millisecond),
+		dix.WithSlowProviderThreshold(80*time.Millisecond),
+	)
 
 	// ==================== 注册基础组件 ====================
 
@@ -292,6 +356,21 @@ func main() {
 			Timeout: config.Timeout,
 			Logger:  logger,
 		}
+	})
+
+	// ==================== 模拟异常场景（用于可视化排查） ====================
+
+	// 模拟慢依赖：刻意 sleep 超过 ProviderTimeout，触发 timeout
+	dix.Provide(di, func(logger Logger) *SlowRemoteClient {
+		logger.Info("[demo] SlowRemoteClient start (expected timeout)")
+		time.Sleep(450 * time.Millisecond)
+		logger.Info("[demo] SlowRemoteClient done")
+		return &SlowRemoteClient{Ready: true}
+	})
+
+	// 触发 SlowRemoteClient 的解析
+	dix.Provide(di, func(client *SlowRemoteClient) *TimeoutProbe {
+		return &TimeoutProbe{Client: client}
 	})
 
 	// ==================== 注册服务层 ====================
@@ -452,6 +531,11 @@ func main() {
 		}
 	})
 
+	// 模拟一次超时 provider 执行，用于在可视化中展示“超时标红”
+	if err := di.TryInject(func(*TimeoutProbe) {}); err != nil {
+		log.Printf("⚠️ [demo] expected timeout case captured: %v", err)
+	}
+
 	log.Println("")
 
 	// ==================== 启动HTTP服务器 ====================
@@ -459,26 +543,7 @@ func main() {
 	// Create HTTP server for visualization
 	server := dixhttp.NewServer((*dixinternal.Dix)(di))
 
-	// Start the HTTP server
-	log.Println("🚀 Starting HTTP server on http://localhost:8080")
-	log.Println("📊 Open http://localhost:8080 in your browser to view dependency relationships")
-	log.Println("📡 API endpoints:")
-	log.Println("   - GET /api/dependencies - JSON data of dependencies")
-	log.Println("   - GET /api/graph?type=providers - DOT graph format")
-	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
-	log.Println("   - GET /api/graph?type=objects - Objects graph")
-	log.Println("")
-	log.Println("💡 This example demonstrates:")
-	log.Println("   - Interface-based dependency injection")
-	log.Println("   - Multiple implementations (RedisCache, FileCache)")
-	log.Println("   - Map and Slice dependencies")
-	log.Println("   - Struct output (auto-flattening)")
-	log.Println("   - Multi-layer architecture (Config -> Services -> Controllers -> Application)")
-	log.Println("   - Complex dependency chains")
-	log.Println("")
-	log.Println("💡 Objects view will now show all created instances!")
-
-	if err := server.ListenAndServe(":8080"); err != nil {
+	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
 		log.Fatal("Server error:", err)
 	}
 }

@@ -11,16 +11,16 @@ Inspired by [uber-go/dig](https://github.com/uber-go/dig), with support for adva
 
 ## ✨ Features
 
-| Feature | Description |
-|---------|-------------|
-| 🔄 **Cycle Detection** | Auto-detect dependency cycles |
-| 📦 **Multiple Injection** | Support func, struct, map, list |
-| 🏷️ **Namespace** | Dependency isolation via map key |
-| 🎯 **Multi-Output** | Struct can provide multiple dependencies |
-| 🪆 **Nested Support** | Support nested struct injection |
-| 🔧 **Non-Invasive** | Zero intrusion to original objects |
-| 🛡️ **Safe API** | `TryProvide`/`TryInject` won't panic |
-| 🌐 **Visualization** | HTTP module for dependency graph |
+| Feature                  | Description                              |
+| ------------------------ | ---------------------------------------- |
+| 🔄 **Cycle Detection**    | Auto-detect dependency cycles            |
+| 📦 **Multiple Injection** | Support func, struct, map, list          |
+| 🏷️ **Namespace**          | Dependency isolation via map key         |
+| 🎯 **Multi-Output**       | Struct can provide multiple dependencies |
+| 🪆 **Nested Support**     | Support nested struct injection          |
+| 🔧 **Non-Invasive**       | Zero intrusion to original objects       |
+| 🛡️ **Safe API**           | `TryProvide`/`TryInject` won't panic     |
+| 🌐 **Visualization**      | HTTP module for dependency graph         |
 
 ## 📦 Installation
 
@@ -113,6 +113,17 @@ dix.Inject(di, app)
 err := dix.TryInject(di, func(svc *Service) {
     // ...
 })
+```
+
+### Startup Timeout / Slow Provider Warning
+
+Control long-running providers during startup:
+
+```go
+di := dix.New(
+    dix.WithProviderTimeout(2*time.Second),        // hard timeout per provider (0 = disabled)
+    dix.WithSlowProviderThreshold(300*time.Millisecond), // warn when provider is slow (0 = disabled)
+)
 ```
 
 ## 🎯 Injection Patterns
@@ -242,29 +253,29 @@ task build
 
 ## 📚 Examples
 
-| Example | Description |
-|---------|-------------|
-| [struct-in](./example/struct-in/) | Struct input injection |
-| [struct-out](./example/struct-out/) | Struct multi-output |
-| [func](./example/func/) | Function injection |
-| [map](./example/map/) | Map/namespace injection |
-| [map-nil](./example/map-nil/) | Map with nil handling |
-| [list](./example/list/) | List injection |
-| [list-nil](./example/list-nil/) | List with nil handling |
-| [lazy](./example/lazy/) | Lazy injection |
-| [cycle](./example/cycle/) | Cycle detection example |
-| [handler](./example/handler/) | Handler pattern |
-| [inject_method](./example/inject_method/) | Method injection |
-| [test-return-error](./example/test-return-error/) | Error handling |
-| [http](./example/http/) | HTTP visualization |
+| Example                                           | Description             |
+| ------------------------------------------------- | ----------------------- |
+| [struct-in](./example/struct-in/)                 | Struct input injection  |
+| [struct-out](./example/struct-out/)               | Struct multi-output     |
+| [func](./example/func/)                           | Function injection      |
+| [map](./example/map/)                             | Map/namespace injection |
+| [map-nil](./example/map-nil/)                     | Map with nil handling   |
+| [list](./example/list/)                           | List injection          |
+| [list-nil](./example/list-nil/)                   | List with nil handling  |
+| [lazy](./example/lazy/)                           | Lazy injection          |
+| [cycle](./example/cycle/)                         | Cycle detection example |
+| [handler](./example/handler/)                     | Handler pattern         |
+| [inject_method](./example/inject_method/)         | Method injection        |
+| [test-return-error](./example/test-return-error/) | Error handling          |
+| [http](./example/http/)                           | HTTP visualization      |
 
 ## 📖 Documentation
 
-| Document | Description |
-|----------|-------------|
-| [Design Document](./docs/design.md) | Architecture and detailed design |
-| [Audit Report](./docs/audit.md) | Project audit, evaluation and comparison |
-| [dixhttp README](./dixhttp/README.md) | HTTP visualization module documentation |
+| Document                              | Description                              |
+| ------------------------------------- | ---------------------------------------- |
+| [Design Document](./docs/design.md)   | Architecture and detailed design         |
+| [Audit Report](./docs/audit.md)       | Project audit, evaluation and comparison |
+| [dixhttp README](./dixhttp/README.md) | HTTP visualization module documentation  |
 
 ## 📄 License
 
