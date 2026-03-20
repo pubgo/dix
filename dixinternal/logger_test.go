@@ -106,3 +106,35 @@ func TestDITraceLogsInInjectFlow(t *testing.T) {
 		t.Fatalf("expected provider.call.start trace log, got: %s", output)
 	}
 }
+
+func TestDITraceLogsInProvideFlow(t *testing.T) {
+	t.Setenv(diTraceEnv, "true")
+	t.Setenv(llmDiagModeEnv, llmDiagModeHuman)
+
+	originalLogger := logger
+	var buf bytes.Buffer
+	logger = slog.New(slog.NewTextHandler(&buf, nil)).WithGroup(getLogPackage())
+	defer func() {
+		logger = originalLogger
+	}()
+
+	type provideTraceDep struct{}
+	d := New()
+	buf.Reset()
+
+	d.Provide(func() *provideTraceDep { return &provideTraceDep{} })
+
+	output := buf.String()
+
+	if !strings.Contains(output, "di_trace provide.start") {
+		t.Fatalf("expected provide.start trace log, got: %s", output)
+	}
+
+	if !strings.Contains(output, "di_trace provide.signature") {
+		t.Fatalf("expected provide.signature trace log, got: %s", output)
+	}
+
+	if !strings.Contains(output, "di_trace provide.register.output.done") {
+		t.Fatalf("expected provide.register.output.done trace log, got: %s", output)
+	}
+}

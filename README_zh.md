@@ -157,6 +157,10 @@ export DIX_TRACE_DI=true
 | ---------------------------------------------- | ----------------------------------------------------------------------- |
 | `di_trace inject.start`                        | 开始一次注入请求（`component`、`param_type`）                           |
 | `di_trace inject.route`                        | 注入路径已确定（`function` 或 `struct`）                                |
+| `di_trace provide.start`                       | 开始一次 provider 注册请求（`component`）                               |
+| `di_trace provide.signature`                   | provider 函数签名分析完成（`input_count`、`output_count`）              |
+| `di_trace provide.register.output.done`        | provider 输出类型注册成功                                               |
+| `di_trace provide.register.failed`             | provider 注册失败（含 `reason` 或 `error`）                             |
 | `di_trace resolve.value.search_provider.start` | 开始为某个依赖类型查找 provider                                         |
 | `di_trace resolve.value.found`                 | 依赖值查找成功                                                          |
 | `di_trace resolve.value.not_found`             | 依赖值查找失败（含 `reason`）                                           |

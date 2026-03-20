@@ -157,6 +157,10 @@ Quick event dictionary:
 | ---------------------------------------------- | -------------------------------------------------------------------------- |
 | `di_trace inject.start`                        | Begin an injection request (`component`, `param_type`)                     |
 | `di_trace inject.route`                        | Injection route selected (`function` or `struct`)                          |
+| `di_trace provide.start`                       | Begin a provider registration request (`component`)                        |
+| `di_trace provide.signature`                   | Provider function signature analyzed (`input_count`, `output_count`)       |
+| `di_trace provide.register.output.done`        | Provider output type registered successfully                               |
+| `di_trace provide.register.failed`             | Provider registration failed (`reason` or `error`)                         |
 | `di_trace resolve.value.search_provider.start` | Start searching providers for a dependency type                            |
 | `di_trace resolve.value.found`                 | Dependency value resolved successfully                                     |
 | `di_trace resolve.value.not_found`             | Dependency resolution failed (`reason` included)                           |

@@ -138,7 +138,7 @@ func (dix *Dix) getOutputTypeValues(outTyp outputType, opt Options) (map[group][
 
 	// 4. Iterate over providers and execute them if not already initialized
 	for _, provider := range dix.providers[outTyp] {
-		providerName := GetFnName(provider.fn)
+		providerName := GetFnTraceName(provider.fn)
 		if dix.initializer[provider.fn] {
 			logDITrace("provider.skip.initialized", "provider", providerName, "output_type", outTyp.String())
 			continue
@@ -164,9 +164,10 @@ func (dix *Dix) getOutputTypeValues(outTyp outputType, opt Options) (map[group][
 // executeProvider handles the execution of a single provider function
 func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) error {
 	fnName := GetFnName(p.fn)
+	traceFnName := GetFnTraceName(p.fn)
 	inputTypes := providerInputTypeNames(p.inputList)
 	logDITrace("provider.execute.start",
-		"provider", fnName,
+		"provider", traceFnName,
 		"output_type", outTyp.String(),
 		"input_types", strings.Join(inputTypes, ", "),
 	)
@@ -175,7 +176,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 	var inputs []reflect.Value
 	for _, in := range p.inputList {
 		logDITrace("provider.input.resolve.start",
-			"provider", fnName,
+			"provider", traceFnName,
 			"output_type", outTyp.String(),
 			"input_type", in.typ.String(),
 			"query_kind", dependencyQueryKind(in.isMap, in.isList),
@@ -184,7 +185,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 		val, err := dix.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
 		if err != nil {
 			logDITrace("provider.input.resolve.failed",
-				"provider", fnName,
+				"provider", traceFnName,
 				"output_type", outTyp.String(),
 				"input_type", in.typ.String(),
 				"query_kind", dependencyQueryKind(in.isMap, in.isList),
@@ -214,7 +215,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 			return wrappedErr
 		}
 		logDITrace("provider.input.resolve.found",
-			"provider", fnName,
+			"provider", traceFnName,
 			"input_type", in.typ.String(),
 			"query_kind", dependencyQueryKind(in.isMap, in.isList),
 		)
@@ -224,14 +225,14 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 	// 2. Call provider function
 	start := time.Now()
 
-	logDITrace("provider.call.start", "provider", fnName, "output_type", outTyp.String(), "timeout", opt.ProviderTimeout.String())
+	logDITrace("provider.call.start", "provider", traceFnName, "output_type", outTyp.String(), "timeout", opt.ProviderTimeout.String())
 	logger.Debug("evaluating provider", "provider", fnName)
 
 	outputs, err, timedOut := p.callWithTimeout(inputs, opt.ProviderTimeout)
 	duration := time.Since(start)
 	if err != nil {
 		logDITrace("provider.call.failed",
-			"provider", fnName,
+			"provider", traceFnName,
 			"output_type", outTyp.String(),
 			"timed_out", timedOut,
 			"duration", duration.String(),
@@ -266,7 +267,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 	// 3. Check for error return
 	if p.hasError && len(outputs) > 1 && !outputs[1].IsNil() {
 		if err, ok := outputs[1].Interface().(error); ok && err != nil {
-			logDITrace("provider.call.return_error", "provider", fnName, "output_type", outTyp.String(), "duration", duration.String(), "error", err)
+			logDITrace("provider.call.return_error", "provider", traceFnName, "output_type", outTyp.String(), "duration", duration.String(), "error", err)
 			wrappedErr := fmt.Errorf("provider execution failed: %s: %w", fnName, err)
 			dix.recordProviderStat(p, duration, err)
 			dix.recordRecentErrorWithContext("provider_execute", fnName, wrappedErr, recentErrorContext{
@@ -302,11 +303,11 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 		)
 	}
 	logger.Debug("provider evaluated successfully", "duration", duration.String(), "provider", fnName)
-	logDITrace("provider.call.done", "provider", fnName, "output_type", outTyp.String(), "duration", duration.String())
+	logDITrace("provider.call.done", "provider", traceFnName, "output_type", outTyp.String(), "duration", duration.String())
 
 	// 4. Process output values and update cache
 	dix.processProviderOutput(outTyp, p, outputs[0])
-	logDITrace("provider.output.cached", "provider", fnName, "output_type", outTyp.String())
+	logDITrace("provider.output.cached", "provider", traceFnName, "output_type", outTyp.String())
 	return nil
 }
 
@@ -696,8 +697,8 @@ func (dix *Dix) createNotFoundError(typ reflect.Type, valMap map[group][]value, 
 
 // injectFunc injects dependencies into a function and executes it
 func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
-	fnName := GetFnName(fnVal)
-	logDITrace("inject.func.start", "function", fnName)
+	traceFnName := GetFnTraceName(fnVal)
+	logDITrace("inject.func.start", "function", traceFnName)
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -707,17 +708,17 @@ func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 			if !ok {
 				err = fmt.Errorf("panic: %v", r)
 			}
-			logDITrace("inject.func.panic", "function", fnName, "error", err)
+			logDITrace("inject.func.panic", "function", traceFnName, "error", err)
 		}
 	}()
 
 	fnType := fnVal.Type()
 	if fnType.NumOut() > 1 {
-		logDITrace("inject.func.invalid", "function", fnName, "reason", "too_many_outputs", "outputs", fnType.NumOut())
+		logDITrace("inject.func.invalid", "function", traceFnName, "reason", "too_many_outputs", "outputs", fnType.NumOut())
 		return errors.New("injected function output count must be <= 1")
 	}
 	if fnType.NumIn() == 0 {
-		logDITrace("inject.func.invalid", "function", fnName, "reason", "no_inputs")
+		logDITrace("inject.func.invalid", "function", traceFnName, "reason", "no_inputs")
 		return errors.New("injected function input count must be > 0")
 	}
 
@@ -726,7 +727,7 @@ func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 	if fnType.NumOut() == 1 {
 		outType := fnType.Out(0)
 		if !outType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
-			logDITrace("inject.func.invalid", "function", fnName, "reason", "non_error_return", "return_type", outType.String())
+			logDITrace("inject.func.invalid", "function", traceFnName, "reason", "non_error_return", "return_type", outType.String())
 			return fmt.Errorf("injected function return type must be error, but got %s", outType)
 		}
 		hasErrorReturn = true
@@ -738,7 +739,7 @@ func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 		inType := fnType.In(i)
 		inputTypeInfo := dix.analyzeInputType(inType)
 		logDITrace("inject.func.resolve_input.start",
-			"function", fnName,
+			"function", traceFnName,
 			"index", i,
 			"input_type", inputTypeInfo.typ.String(),
 			"query_kind", dependencyQueryKind(inputTypeInfo.isMap, inputTypeInfo.isList),
@@ -746,26 +747,26 @@ func (dix *Dix) injectFunc(fnVal reflect.Value, opt Options) (err error) {
 
 		val, err := dix.getValue(inputTypeInfo.typ, opt, inputTypeInfo.isMap, inputTypeInfo.isList, fnType)
 		if err != nil {
-			logDITrace("inject.func.resolve_input.failed", "function", fnName, "index", i, "input_type", inputTypeInfo.typ.String(), "error", err)
+			logDITrace("inject.func.resolve_input.failed", "function", traceFnName, "index", i, "input_type", inputTypeInfo.typ.String(), "error", err)
 			return err
 		}
-		logDITrace("inject.func.resolve_input.done", "function", fnName, "index", i, "input_type", inputTypeInfo.typ.String())
+		logDITrace("inject.func.resolve_input.done", "function", traceFnName, "index", i, "input_type", inputTypeInfo.typ.String())
 		inputs = append(inputs, val)
 	}
 
 	// Execute
-	logDITrace("inject.func.call.start", "function", fnName, "input_count", len(inputs))
+	logDITrace("inject.func.call.start", "function", traceFnName, "input_count", len(inputs))
 	results := fnVal.Call(inputs)
-	logDITrace("inject.func.call.done", "function", fnName, "result_count", len(results))
+	logDITrace("inject.func.call.done", "function", traceFnName, "result_count", len(results))
 
 	// Handle error return
 	if hasErrorReturn && len(results) > 0 && !results[0].IsNil() {
 		if err, ok := results[0].Interface().(error); ok {
-			logDITrace("inject.func.call.return_error", "function", fnName, "error", err)
+			logDITrace("inject.func.call.return_error", "function", traceFnName, "error", err)
 			return fmt.Errorf("injected function returned error: %w", err)
 		}
 	}
-	logDITrace("inject.func.done", "function", fnName)
+	logDITrace("inject.func.done", "function", traceFnName)
 	return nil
 }
 
@@ -924,13 +925,23 @@ func (dix *Dix) inject(param any, opts ...Option) (err error) {
 
 // handleProvide registers a provider function for a specific output type
 func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs []*providerInputType) error {
+	traceFnName := GetFnTraceName(fnVal)
+	logDITrace("provide.register.start",
+		"provider", traceFnName,
+		"declared_output_type", outType.String(),
+		"declared_output_kind", outType.Kind().String(),
+		"input_types", strings.Join(providerInputTypeNames(inputs), ", "),
+	)
+
 	// Check for error return value
 	hasError := false
 	if fnVal.Type().NumOut() == 2 {
 		errorType := fnVal.Type().Out(1)
 		if errorType.Implements(reflect.TypeOf((*error)(nil)).Elem()) {
 			hasError = true
+			logDITrace("provide.register.return_error.enabled", "provider", traceFnName, "error_type", errorType.String())
 		} else {
+			logDITrace("provide.register.failed", "provider", traceFnName, "declared_output_type", outType.String(), "reason", "second_return_not_error", "second_return", errorType.String())
 			return fmt.Errorf("second return value must be error type, but got %s for fn %v", errorType, fnVal)
 		}
 	}
@@ -942,6 +953,12 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 	case reflect.Slice:
 		provider.output = &providerOutputType{isList: true, typ: outType.Elem()}
 		dix.providers[provider.output.typ] = append(dix.providers[provider.output.typ], provider)
+		logDITrace("provide.register.output.done",
+			"provider", traceFnName,
+			"declared_output_type", outType.String(),
+			"registered_output_type", provider.output.typ.String(),
+			"query_kind", dependencyQueryKind(false, true),
+		)
 
 	case reflect.Map:
 		elemType := outType.Elem()
@@ -952,31 +969,52 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 		}
 		provider.output = &providerOutputType{isMap: true, isList: isList, typ: elemType}
 		dix.providers[provider.output.typ] = append(dix.providers[provider.output.typ], provider)
+		logDITrace("provide.register.output.done",
+			"provider", traceFnName,
+			"declared_output_type", outType.String(),
+			"registered_output_type", provider.output.typ.String(),
+			"query_kind", dependencyQueryKind(true, isList),
+		)
 
 	case reflect.Ptr, reflect.Interface, reflect.Func:
 		provider.output = &providerOutputType{typ: outType}
 		dix.providers[provider.output.typ] = append(dix.providers[provider.output.typ], provider)
+		logDITrace("provide.register.output.done",
+			"provider", traceFnName,
+			"declared_output_type", outType.String(),
+			"registered_output_type", provider.output.typ.String(),
+			"query_kind", dependencyQueryKind(false, false),
+		)
 
 	case reflect.Struct:
 		// Recursively register exported fields of the struct
 		for i := 0; i < outType.NumField(); i++ {
 			field := outType.Field(i)
 			if !field.IsExported() {
+				logDITrace("provide.register.struct_field.skip", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String(), "reason", "unexported")
 				continue
 			}
 			if !isSupportedType(field.Type) {
+				logDITrace("provide.register.struct_field.skip", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String(), "reason", "unsupported_kind")
 				continue
 			}
 
+			logDITrace("provide.register.struct_field.start", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String())
+
 			// Recursive call
 			if err := dix.handleProvide(fnVal, field.Type, inputs); err != nil {
+				logDITrace("provide.register.struct_field.failed", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String(), "error", err)
 				return err
 			}
+			logDITrace("provide.register.struct_field.done", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String())
 		}
+		logDITrace("provide.register.output.done", "provider", traceFnName, "declared_output_type", outType.String(), "registered_output_type", outType.String(), "query_kind", "struct")
 
 	default:
+		logDITrace("provide.register.output.unsupported", "provider", traceFnName, "declared_output_type", outType.String(), "declared_output_kind", outType.Kind().String())
 		logger.Warn("unsupported output type", "type", outType.String(), "kind", outType.Kind().String(), "provider", fnVal)
 	}
+	logDITrace("provide.register.done", "provider", traceFnName, "declared_output_type", outType.String())
 	return nil
 }
 
@@ -1012,6 +1050,9 @@ func parseInputType(typ reflect.Type) []*providerInputType {
 // provide registers a constructor function
 // NOTE: This method is NOT thread-safe by itself. Use Provide() or TryProvide() which handle locking.
 func (dix *Dix) provide(param any) {
+	component := describeComponent(param)
+	logDITrace("provide.start", "component", component)
+
 	defer func() {
 		if r := recover(); r != nil {
 			maybePrintStack()
@@ -1019,39 +1060,76 @@ func (dix *Dix) provide(param any) {
 			if !ok {
 				err = fmt.Errorf("panic: %v", r)
 			}
+			logDITrace("provide.panic", "component", component, "error", err)
 			panic(fmt.Errorf("failed to provide param (%v): %w", param, err))
 		}
 	}()
 
 	if param == nil {
+		logDITrace("provide.invalid", "component", component, "reason", "nil_param")
 		panic("param cannot be nil")
 	}
 
 	fnVal := reflect.ValueOf(param)
 	if !fnVal.IsValid() || fnVal.IsZero() {
+		logDITrace("provide.invalid", "component", component, "reason", "invalid_param")
 		panic("param must be valid")
 	}
 	if fnVal.Kind() != reflect.Func {
+		logDITrace("provide.invalid", "component", component, "reason", "not_function", "kind", fnVal.Kind().String())
 		panic("param must be a function")
 	}
 
 	typ := fnVal.Type()
+	traceFnName := GetFnTraceName(fnVal)
+	logDITrace("provide.signature",
+		"component", component,
+		"provider", traceFnName,
+		"input_count", typ.NumIn(),
+		"output_count", typ.NumOut(),
+		"variadic", typ.IsVariadic(),
+	)
 	if typ.IsVariadic() {
+		logDITrace("provide.invalid", "component", component, "provider", traceFnName, "reason", "variadic_not_supported")
 		panic("variadic functions are not supported")
 	}
 	if typ.NumOut() == 0 {
+		logDITrace("provide.invalid", "component", component, "provider", traceFnName, "reason", "no_output")
 		panic("provider function must return at least one value")
 	}
 	if typ.NumOut() > 2 {
+		logDITrace("provide.invalid", "component", component, "provider", traceFnName, "reason", "too_many_outputs", "output_count", typ.NumOut())
 		panic("provider function cannot return more than two values")
 	}
 
 	var inputs []*providerInputType
 	for i := 0; i < typ.NumIn(); i++ {
-		inputs = append(inputs, dix.getProvideInput(typ.In(i))...)
+		inType := typ.In(i)
+		logDITrace("provide.input.analyze.start", "provider", traceFnName, "index", i, "input_type", inType.String())
+		parsedInputs := dix.getProvideInput(inType)
+		if len(parsedInputs) == 0 {
+			logDITrace("provide.input.analyze.unsupported", "provider", traceFnName, "index", i, "input_type", inType.String())
+		}
+		for _, input := range parsedInputs {
+			if input == nil || input.typ == nil {
+				continue
+			}
+			logDITrace("provide.input.analyze.done",
+				"provider", traceFnName,
+				"index", i,
+				"input_type", inType.String(),
+				"resolved_type", input.typ.String(),
+				"query_kind", dependencyQueryKind(input.isMap, input.isList),
+				"is_struct", input.isStruct,
+			)
+		}
+		inputs = append(inputs, parsedInputs...)
 	}
 
 	if err := dix.handleProvide(fnVal, typ.Out(0), inputs); err != nil {
+		logDITrace("provide.register.failed", "provider", traceFnName, "declared_output_type", typ.Out(0).String(), "error", err)
 		panic(err)
 	}
+
+	logDITrace("provide.done", "component", component, "provider", traceFnName)
 }
