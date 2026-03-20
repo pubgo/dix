@@ -1835,6 +1835,26 @@ func TestTryInject(t *testing.T) {
 	if err == nil {
 		t.Fatal("TryInject should return error when inject function returns error")
 	}
+
+	recent := d.GetRecentErrors(5)
+	if len(recent) == 0 {
+		t.Fatal("expected recent errors to contain try_inject callback error")
+	}
+
+	foundCallbackErr := false
+	for _, item := range recent {
+		if item.Operation == "try_inject" && item.ErrorType == "inject_callback_error" {
+			foundCallbackErr = true
+			if item.Hint == "" {
+				t.Fatal("expected hint for inject_callback_error")
+			}
+			break
+		}
+	}
+
+	if !foundCallbackErr {
+		t.Fatalf("expected inject_callback_error in recent errors, got: %+v", recent)
+	}
 }
 
 // TestTryInjectCycleDetection tests that TryInject correctly detects cycles
@@ -1995,6 +2015,25 @@ func TestProviderTimeout(t *testing.T) {
 	if !strings.Contains(strings.ToLower(err.Error()), "timeout") {
 		t.Fatalf("expected timeout error, got: %v", err)
 	}
+
+	recent := d.GetRecentErrors(10)
+	foundTimeout := false
+	for _, item := range recent {
+		if item.Operation == "provider_execute" && item.TimedOut {
+			foundTimeout = true
+			if item.ErrorType != "provider_timeout" {
+				t.Fatalf("expected provider_timeout error_type, got %s", item.ErrorType)
+			}
+			if item.Hint == "" {
+				t.Fatal("expected timeout record to include hint")
+			}
+			break
+		}
+	}
+
+	if !foundTimeout {
+		t.Fatal("expected provider timeout event in recent errors")
+	}
 }
 
 func TestDefaultProviderTimeout(t *testing.T) {
@@ -2043,6 +2082,14 @@ func TestTryInjectRecordsRecentErrors(t *testing.T) {
 		t.Fatalf("expected operation try_inject, got %s", recent[0].Operation)
 	}
 
+	if recent[0].ErrorType == "" {
+		t.Fatal("expected error_type in recent error")
+	}
+
+	if recent[0].Hint == "" {
+		t.Fatal("expected hint in recent error")
+	}
+
 	if !strings.Contains(recent[0].Message, "missingDep") {
 		t.Fatalf("expected recent error message to mention missingDep, got: %s", recent[0].Message)
 	}
@@ -2085,6 +2132,14 @@ func TestTryProvideRecordsRecentErrors(t *testing.T) {
 	if recent[0].Stage != "registration" {
 		t.Fatalf("expected stage registration, got %s", recent[0].Stage)
 	}
+
+	if recent[0].ErrorType != "provider_registration_invalid" {
+		t.Fatalf("expected error_type provider_registration_invalid, got %s", recent[0].ErrorType)
+	}
+
+	if recent[0].Hint == "" {
+		t.Fatal("expected hint in recent error")
+	}
 }
 
 func TestProviderExecutionErrorRecordedWithDetails(t *testing.T) {
@@ -2117,6 +2172,12 @@ func TestProviderExecutionErrorRecordedWithDetails(t *testing.T) {
 			}
 			if item.Stage == "" {
 				t.Fatal("expected stage in provider_execute error")
+			}
+			if item.ErrorType != "provider_return_error" {
+				t.Fatalf("expected provider_return_error, got %s", item.ErrorType)
+			}
+			if item.Hint == "" {
+				t.Fatal("expected hint in provider_execute error")
 			}
 			break
 		}

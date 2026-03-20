@@ -106,4 +106,12 @@ func TestHandleErrors(t *testing.T) {
 	if events[0].Operation == "" || events[0].Message == "" {
 		t.Fatalf("expected operation and message in error event, got %+v", events[0])
 	}
+
+	if events[0].ErrorType == "" {
+		t.Fatalf("expected error_type in error event, got %+v", events[0])
+	}
+
+	if events[0].Hint == "" {
+		t.Fatalf("expected hint in error event, got %+v", events[0])
+	}
 }

@@ -60,6 +60,7 @@ func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error
 
 			logger.Error("failed to invoke provider",
 				"error", err,
+				"error_type", buildErrorType("provider_execute", "call", false, err.Error()),
 				"fn_name", GetFnName(n.fn),
 				"fn_type", n.fn.Type().String(),
 				"input_data", reflectValueToString(in),

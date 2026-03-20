@@ -624,6 +624,9 @@
                                             <span
                                                 class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold"
                                                 x-text="item.operation || 'inject'"></span>
+                                            <span x-show="item.error_type"
+                                                class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-medium break-all"
+                                                x-text="item.error_type"></span>
                                             <span x-show="item.stage"
                                                 class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-medium"
                                                 x-text="item.stage"></span>
@@ -641,6 +644,47 @@
                                         x-text="`根因: ${item.root_cause}`"></div>
                                     <div class="text-[11px] text-blue-700 break-all mt-1" x-show="item.hint"
                                         x-text="`Hint: ${item.hint}`"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Type Guide -->
+                <div class="p-4 border-t border-gray-200 bg-white">
+                    <div class="flex items-center justify-between mb-2">
+                        <button @click="errorTypeGuideCollapsed = !errorTypeGuideCollapsed"
+                            class="flex-1 flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-gray-300 bg-gray-50 hover:bg-gray-100 transition">
+                            <span class="text-xs font-semibold text-gray-700 uppercase">🧭 错误类型说明</span>
+                            <span class="inline-flex items-center gap-2">
+                                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                                    :class="errorTypeGuideCollapsed ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'"
+                                    x-text="errorTypeGuideCollapsed ? '点击展开' : '点击收起'"></span>
+                                <svg class="w-4 h-4 text-gray-600 transition-transform duration-200"
+                                    :class="errorTypeGuideCollapsed ? '' : 'rotate-180'" fill="none"
+                                    stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M19 9l-7 7-7-7" />
+                                </svg>
+                            </span>
+                        </button>
+                        <div class="flex items-center gap-2 ml-2">
+                            <button @click="openDiagnosticModal('error-guide')"
+                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                                大窗
+                            </button>
+                        </div>
+                    </div>
+
+                    <div x-show="!errorTypeGuideCollapsed" x-cloak>
+                        <div class="max-h-56 overflow-y-auto border border-gray-200 rounded-lg">
+                            <template x-for="item in errorTypeGuide" :key="item.code">
+                                <div class="px-3 py-2 border-b border-gray-100 last:border-b-0">
+                                    <div class="inline-flex px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-semibold break-all"
+                                        x-text="item.code"></div>
+                                    <div class="text-xs text-gray-700 mt-1" x-text="item.summary"></div>
+                                    <div class="text-[11px] text-blue-700 mt-1 break-all"
+                                        x-text="`定位建议: ${item.action}`"></div>
                                 </div>
                             </template>
                         </div>
@@ -681,8 +725,9 @@
             @keydown.escape.window="diagnosticModalOpen = false">
             <div class="bg-white w-[94vw] h-[88vh] rounded-xl shadow-xl flex flex-col">
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                    <div class="font-semibold text-gray-700"
-                        x-text="diagnosticModalType === 'runtime' ? '⏱ Provider 启动耗时（大视图）' : '🚨 最近注入错误（大视图）'"></div>
+                    <div class="font-semibold text-gray-700" x-text="diagnosticModalType === 'runtime'
+                            ? '⏱ Provider 启动耗时（大视图）'
+                            : (diagnosticModalType === 'errors' ? '🚨 最近注入错误（大视图）' : '🧭 错误类型说明（大视图）')"></div>
                     <button @click="diagnosticModalOpen = false"
                         class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                         关闭
@@ -690,7 +735,9 @@
                 </div>
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                     <input type="text" x-model="diagnosticSearch"
-                        :placeholder="diagnosticModalType === 'runtime' ? '搜索函数名/输出类型/错误信息' : '搜索操作/阶段/组件/函数/类型/根因/Hint/错误信息'"
+                        :placeholder="diagnosticModalType === 'runtime'
+                            ? '搜索函数名/输出类型/错误信息'
+                            : (diagnosticModalType === 'errors' ? '搜索操作/错误类型/阶段/组件/函数/类型/根因/Hint/错误信息' : '搜索错误类型/说明/定位建议')"
                         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
                     <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -701,6 +748,10 @@
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
                         :disabled="recentErrorsLoading">
                         <span x-text="recentErrorsLoading ? '刷新中...' : '刷新错误'"></span>
+                    </button>
+                    <button x-show="diagnosticModalType === 'error-guide'" @click="diagnosticSearch = ''"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                        清空搜索
                     </button>
                 </div>
                 <div class="flex-1 overflow-auto p-4">
@@ -744,6 +795,17 @@
 
                     <template x-if="diagnosticModalType === 'errors'">
                         <div class="space-y-2">
+                            <div class="border border-purple-200 bg-purple-50/40 rounded-lg p-3">
+                                <div class="text-xs font-semibold text-purple-700">🧭 错误类型速查（大窗）</div>
+                                <div class="text-[11px] text-gray-500 mt-1">点击类型可直接作为搜索关键词</div>
+                                <div class="mt-2 flex flex-wrap gap-1.5">
+                                    <template x-for="item in errorTypeGuide" :key="`modal-guide-${item.code}`">
+                                        <button @click="diagnosticSearch = item.code"
+                                            class="px-2 py-0.5 rounded bg-white border border-purple-200 text-purple-700 text-[11px] hover:bg-purple-100 transition"
+                                            x-text="item.code"></button>
+                                    </template>
+                                </div>
+                            </div>
                             <div class="text-xs text-gray-500" x-text="`共 ${filteredModalRecentErrors.length} 条`"></div>
                             <template x-if="filteredModalRecentErrors.length === 0">
                                 <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的错误记录</div>
@@ -756,6 +818,9 @@
                                             <span
                                                 class="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-semibold"
                                                 x-text="item.operation || 'inject'"></span>
+                                            <span x-show="item.error_type"
+                                                class="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-medium break-all"
+                                                x-text="item.error_type"></span>
                                             <span x-show="item.stage"
                                                 class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium"
                                                 x-text="item.stage"></span>
@@ -768,6 +833,8 @@
                                     <div class="text-xs text-gray-600 break-all mb-1"
                                         x-text="item.provider_function || item.component || ''">
                                     </div>
+                                    <div class="text-xs text-purple-700 break-all mb-1" x-show="item.error_type"
+                                        x-text="`错误类型: ${item.error_type}`"></div>
                                     <div class="text-xs text-gray-600 break-all mb-1" x-show="item.output_type"
                                         x-text="`输出类型: ${item.output_type}`"></div>
                                     <div class="text-xs text-gray-600 break-all mb-1" x-show="item.input_type"
@@ -784,6 +851,26 @@
                                         x-text="`根因: ${item.root_cause}`"></div>
                                     <div class="text-xs text-blue-700 break-all mt-1" x-show="item.hint"
                                         x-text="`Hint: ${item.hint}`"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="diagnosticModalType === 'error-guide'">
+                        <div class="space-y-2">
+                            <div class="text-xs text-gray-500" x-text="`共 ${filteredModalErrorTypeGuide.length} 条`">
+                            </div>
+                            <template x-if="filteredModalErrorTypeGuide.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的错误类型说明
+                                </div>
+                            </template>
+                            <template x-for="item in filteredModalErrorTypeGuide" :key="`modal-guide-${item.code}`">
+                                <div class="border border-purple-200 bg-purple-50/30 rounded-lg p-3">
+                                    <div class="inline-flex px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-semibold"
+                                        x-text="item.code"></div>
+                                    <div class="text-sm text-gray-700 mt-2" x-text="item.summary"></div>
+                                    <div class="text-xs text-blue-700 mt-2 break-all" x-text="`定位建议: ${item.action}`">
+                                    </div>
                                 </div>
                             </template>
                         </div>
@@ -880,6 +967,54 @@
                 recentErrorsError: '',
                 recentErrorsUpdatedAt: '',
                 recentErrorsCollapsed: true,
+                errorTypeGuideCollapsed: true,
+                errorTypeGuide: [
+                    {
+                        code: 'provider_registration_invalid',
+                        summary: 'Provider 注册参数非法（如 nil、非函数、返回值不合法）。',
+                        action: '检查 Provide/TryProvide 的入参签名与返回值数量。',
+                    },
+                    {
+                        code: 'inject_dependency_missing',
+                        summary: '注入阶段缺失依赖，当前类型没有可用 provider。',
+                        action: '确认依赖已注册、类型精确匹配，并检查导入顺序。',
+                    },
+                    {
+                        code: 'provider_input_unresolved',
+                        summary: 'Provider 的输入参数无法解析（上游依赖缺失或不匹配）。',
+                        action: '根据 input_type/input_types 逐级回溯缺失节点。',
+                    },
+                    {
+                        code: 'provider_return_error',
+                        summary: 'Provider 正常执行但返回了业务错误。',
+                        action: '优先排查外部资源（DB/缓存/HTTP）与配置有效性。',
+                    },
+                    {
+                        code: 'provider_panic',
+                        summary: 'Provider 执行中发生 panic。',
+                        action: '建议 provider 内捕获并返回 error，必要时开启 debug 栈。',
+                    },
+                    {
+                        code: 'provider_timeout',
+                        summary: 'Provider 执行超时。',
+                        action: '优化初始化路径，或临时调大 WithProviderTimeout。',
+                    },
+                    {
+                        code: 'inject_callback_error',
+                        summary: 'Inject/TryInject 的回调函数主动返回了 error。',
+                        action: '检查回调里的参数校验和业务逻辑分支。',
+                    },
+                    {
+                        code: 'dependency_cycle',
+                        summary: '检测到循环依赖。',
+                        action: '拆分互相引用组件，改为接口或延迟注入解环。',
+                    },
+                    {
+                        code: 'inject_failed',
+                        summary: '注入失败兜底分类（需要结合 stage/message 细看）。',
+                        action: '结合 root_cause + hint + provider_function 做链路定位。',
+                    },
+                ],
                 diagnosticModalOpen: false,
                 diagnosticModalType: 'runtime',
                 diagnosticSearch: '',
@@ -938,6 +1073,7 @@
                             return true;
                         }
                         const op = String(e.operation || '').toLowerCase();
+                        const errType = String(e.error_type || '').toLowerCase();
                         const stage = String(e.stage || '').toLowerCase();
                         const comp = String(e.component || '').toLowerCase();
                         const providerFn = String(e.provider_function || '').toLowerCase();
@@ -946,7 +1082,20 @@
                         const root = String(e.root_cause || '').toLowerCase();
                         const hint = String(e.hint || '').toLowerCase();
                         const msg = String(e.message || '').toLowerCase();
-                        return op.includes(q) || stage.includes(q) || comp.includes(q) || providerFn.includes(q) || outType.includes(q) || inputType.includes(q) || root.includes(q) || hint.includes(q) || msg.includes(q);
+                        return op.includes(q) || errType.includes(q) || stage.includes(q) || comp.includes(q) || providerFn.includes(q) || outType.includes(q) || inputType.includes(q) || root.includes(q) || hint.includes(q) || msg.includes(q);
+                    });
+                },
+
+                get filteredModalErrorTypeGuide() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.errorTypeGuide || []).filter(item => {
+                        if (!q) {
+                            return true;
+                        }
+                        const code = String(item.code || '').toLowerCase();
+                        const summary = String(item.summary || '').toLowerCase();
+                        const action = String(item.action || '').toLowerCase();
+                        return code.includes(q) || summary.includes(q) || action.includes(q);
                     });
                 },
 
@@ -1044,7 +1193,13 @@
                 },
 
                 openDiagnosticModal(type) {
-                    this.diagnosticModalType = type === 'errors' ? 'errors' : 'runtime';
+                    if (type === 'errors') {
+                        this.diagnosticModalType = 'errors';
+                    } else if (type === 'error-guide') {
+                        this.diagnosticModalType = 'error-guide';
+                    } else {
+                        this.diagnosticModalType = 'runtime';
+                    }
                     this.diagnosticSearch = '';
                     this.diagnosticModalOpen = true;
                 },

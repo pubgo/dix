@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net"
 	"net/http"
@@ -210,6 +211,21 @@ type TimeoutProbe struct {
 	Client *SlowRemoteClient
 }
 
+// StartupMissingDependency 用于模拟“注入缺失依赖”
+type StartupMissingDependency struct{}
+
+// StartupResolveInputMissing 用于模拟“provider 输入依赖缺失”
+type StartupResolveInputMissing struct{}
+
+// StartupResolveInputProbe 用于触发 StartupResolveInputMissing 的解析
+type StartupResolveInputProbe struct{}
+
+// StartupBrokenComponent 用于模拟“provider 返回 error”
+type StartupBrokenComponent struct{}
+
+// StartupPanicComponent 用于模拟“provider panic”
+type StartupPanicComponent struct{}
+
 // ==================== 业务逻辑层 ====================
 
 // UserController 用户控制器
@@ -286,6 +302,113 @@ func startVisualizationServer(server *dixhttp.Server) error {
 
 	httpServer := &http.Server{Handler: server}
 	return httpServer.Serve(ln)
+}
+
+func logStartupScenarioResult(di *dix.Dix, scenario string, err error, previousCount int) {
+	if err == nil {
+		return
+	}
+
+	recent := di.GetRecentErrors(0)
+	if len(recent) == 0 {
+		log.Printf("⚠️ [startup-diagnostic][%s] err=%v (no recent error records)", scenario, err)
+		return
+	}
+
+	newCount := len(recent) - previousCount
+	if newCount <= 0 {
+		newCount = 1
+	}
+	if newCount > len(recent) {
+		newCount = len(recent)
+	}
+
+	log.Printf("⚠️ [startup-diagnostic][%s] captured %d record(s)", scenario, newCount)
+	for i := newCount - 1; i >= 0; i-- {
+		item := recent[i]
+		log.Printf("   - type=%s op=%s stage=%s", item.ErrorType, item.Operation, item.Stage)
+		log.Printf("     message=%s", item.Message)
+		if item.ProviderFunction != "" {
+			log.Printf("     provider=%s", item.ProviderFunction)
+		}
+		if item.OutputType != "" {
+			log.Printf("     output=%s", item.OutputType)
+		}
+		if item.InputType != "" {
+			log.Printf("     input=%s", item.InputType)
+		}
+		if item.Hint != "" {
+			log.Printf("     hint=%s", item.Hint)
+		}
+	}
+}
+
+func runStartupErrorScenarios(di *dix.Dix) {
+	log.Println("🧪 Running startup error diagnostics...")
+
+	before := len(di.GetRecentErrors(0))
+	if err := di.TryProvide(nil); err != nil {
+		logStartupScenarioResult(di, "invalid_provider_registration", err, before)
+	}
+
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupMissingDependency) {}); err != nil {
+		logStartupScenarioResult(di, "inject_missing_dependency", err, before)
+	}
+
+	dix.Provide(di, func(*StartupResolveInputMissing) *StartupResolveInputProbe {
+		return &StartupResolveInputProbe{}
+	})
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupResolveInputProbe) {}); err != nil {
+		logStartupScenarioResult(di, "provider_input_unresolved", err, before)
+	}
+
+	dix.Provide(di, func(logger Logger) (*StartupBrokenComponent, error) {
+		logger.Info("[demo] StartupBrokenComponent returns intentional error")
+		return nil, errors.New("demo startup: provider return error")
+	})
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupBrokenComponent) {}); err != nil {
+		logStartupScenarioResult(di, "provider_return_error", err, before)
+	}
+
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(logger Logger) error {
+		logger.Info("[demo] inject callback returns intentional error")
+		return errors.New("demo startup: inject callback error")
+	}); err != nil {
+		logStartupScenarioResult(di, "inject_callback_error", err, before)
+	}
+
+	dix.Provide(di, func(logger Logger) *StartupPanicComponent {
+		logger.Info("[demo] StartupPanicComponent panics intentionally")
+		panic("demo startup: provider panic")
+	})
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupPanicComponent) {}); err != nil {
+		logStartupScenarioResult(di, "provider_panic", err, before)
+	}
+
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*TimeoutProbe) {}); err != nil {
+		logStartupScenarioResult(di, "provider_timeout", err, before)
+	}
+
+	// 循环依赖演示使用临时容器，避免污染主容器导致后续所有注入失败。
+	cycleDI := dix.New()
+	type cycleA struct{}
+	type cycleB struct{}
+	type cycleC struct{}
+	dix.Provide(cycleDI, func(*cycleC) *cycleA { return &cycleA{} })
+	dix.Provide(cycleDI, func(*cycleA) *cycleB { return &cycleB{} })
+	dix.Provide(cycleDI, func(*cycleB) *cycleC { return &cycleC{} })
+	beforeCycle := len(cycleDI.GetRecentErrors(0))
+	if err := cycleDI.TryInject(func(*cycleA) {}); err != nil {
+		logStartupScenarioResult(cycleDI, "dependency_cycle(temp_container)", err, beforeCycle)
+	}
+
+	log.Println("🧪 Startup diagnostics done. Visit /api/errors to verify error_type/hint recognition.")
 }
 
 func main() {
@@ -535,10 +658,8 @@ func main() {
 		log.Printf("⚠️ pre-create injection failed, web will still start for diagnostics: %v", err)
 	}
 
-	// 模拟一次超时 provider 执行，用于在可视化中展示“超时标红”
-	if err := di.TryInject(func(*TimeoutProbe) {}); err != nil {
-		log.Printf("⚠️ [demo] expected timeout case captured: %v", err)
-	}
+	// 在启动阶段统一触发多类可识别错误，便于验证 error_type/hint 的识别与定位
+	runStartupErrorScenarios(di)
 
 	log.Println("")
 

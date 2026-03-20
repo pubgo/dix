@@ -22,7 +22,7 @@ func (dix *Dix) Provide(param any) {
 	defer func() {
 		if r := recover(); r != nil {
 			err := normalizeRecoveredError(r)
-			logger.Error("provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("provide", "registration", false))
+			logger.Error("provide failed", "component", component, "error", err, "error_type", buildErrorType("provide", "registration", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("provide", "registration", false))
 			dix.recordRecentErrorWithContext("provide", component, err, recentErrorContext{
 				Stage:     "registration",
 				RootCause: rootCauseMessage(err),
@@ -40,7 +40,7 @@ func (dix *Dix) TryProvide(param any) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = normalizeRecoveredError(r)
-			logger.Warn("try provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_provide", "registration", false))
+			logger.Warn("try provide failed", "component", component, "error", err, "error_type", buildErrorType("try_provide", "registration", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_provide", "registration", false))
 			dix.recordRecentErrorWithContext("try_provide", component, err, recentErrorContext{
 				Stage:     "registration",
 				RootCause: rootCauseMessage(err),
@@ -57,7 +57,7 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
-		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component, "hint", buildErrorHint("inject", "cycle_check", false))
+		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component, "error_type", buildErrorType("inject", "cycle_check", false, err.Error()), "hint", buildErrorHint("inject", "cycle_check", false))
 		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
 			Stage:     "cycle_check",
 			RootCause: rootCauseMessage(err),
@@ -66,7 +66,7 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	}
 
 	if err := dix.inject(param, opts...); err != nil {
-		logger.Error("inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("inject", "inject", false))
+		logger.Error("inject failed", "component", component, "error", err, "error_type", buildErrorType("inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("inject", "inject", false))
 		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
 			Stage:     "inject",
 			RootCause: rootCauseMessage(err),
@@ -82,7 +82,7 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
-		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component, "hint", buildErrorHint("try_inject", "cycle_check", false))
+		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component, "error_type", buildErrorType("try_inject", "cycle_check", false, err.Error()), "hint", buildErrorHint("try_inject", "cycle_check", false))
 		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
 			Stage:     "cycle_check",
 			RootCause: rootCauseMessage(err),
@@ -92,7 +92,7 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 
 	err := dix.inject(param, opts...)
 	if err != nil {
-		logger.Warn("try inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_inject", "inject", false))
+		logger.Warn("try inject failed", "component", component, "error", err, "error_type", buildErrorType("try_inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_inject", "inject", false))
 		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
 			Stage:     "inject",
 			RootCause: rootCauseMessage(err),
@@ -163,6 +163,7 @@ type ProviderRuntimeStats struct {
 // RecentError contains a recently captured Inject/TryInject failure event.
 type RecentError struct {
 	Operation          string        `json:"operation"`
+	ErrorType          string        `json:"error_type,omitempty"`
 	Component          string        `json:"component"`
 	Stage              string        `json:"stage,omitempty"`
 	ProviderFunction   string        `json:"provider_function,omitempty"`
@@ -296,6 +297,7 @@ func (dix *Dix) GetRecentErrors(limit int) []RecentError {
 		r := dix.recentErrors[i]
 		result = append(result, RecentError{
 			Operation:          r.Operation,
+			ErrorType:          r.ErrorType,
 			Component:          r.Component,
 			Stage:              r.Stage,
 			ProviderFunction:   r.ProviderFunction,

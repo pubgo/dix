@@ -72,6 +72,7 @@ type providerRuntimeStat struct {
 
 type recentErrorRecord struct {
 	Operation        string
+	ErrorType        string
 	Component        string
 	Stage            string
 	ProviderFunction string
@@ -89,6 +90,7 @@ type recentErrorRecord struct {
 
 type recentErrorContext struct {
 	Stage            string
+	ErrorType        string
 	ProviderFunction string
 	OutputType       string
 	InputType        string
@@ -159,6 +161,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 			})
 			logger.Error("failed to get input value",
 				"error", err,
+				"error_type", buildErrorType("provider_execute", "resolve_input", false, wrappedErr.Error()),
 				"provider", fnName,
 				"output_type", outTyp.String(),
 				"type", in.typ.String(),
@@ -195,6 +198,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 		})
 		if timedOut {
 			logger.Error("provider execution timeout",
+				"error_type", buildErrorType("provider_execute", "call", true, wrappedErr.Error()),
 				"provider", fnName,
 				"output_type", outTyp.String(),
 				"input_types", strings.Join(inputTypes, ", "),
@@ -221,6 +225,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 				Timeout:          opt.ProviderTimeout,
 			})
 			logger.Error("provider returned error",
+				"error_type", buildErrorType("provider_execute", "return_error", false, wrappedErr.Error()),
 				"provider", fnName,
 				"output_type", outTyp.String(),
 				"input_types", strings.Join(inputTypes, ", "),
@@ -328,8 +333,14 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 		hint = buildErrorHint(operation, ctx.Stage, ctx.TimedOut)
 	}
 
+	errorType := strings.TrimSpace(ctx.ErrorType)
+	if errorType == "" {
+		errorType = buildErrorType(operation, ctx.Stage, ctx.TimedOut, err.Error())
+	}
+
 	dix.recentErrors = append(dix.recentErrors, recentErrorRecord{
 		Operation:        operation,
+		ErrorType:        errorType,
 		Component:        component,
 		Stage:            ctx.Stage,
 		ProviderFunction: ctx.ProviderFunction,
@@ -405,6 +416,50 @@ func buildErrorHint(operation, stage string, timedOut bool) string {
 		}
 	default:
 		return "可先查看 /api/errors 获取最近错误详情，并结合 /api/runtime-stats 定位慢/失败 provider"
+	}
+}
+
+func buildErrorType(operation, stage string, timedOut bool, message string) string {
+	msg := strings.ToLower(strings.TrimSpace(message))
+
+	if timedOut {
+		return "provider_timeout"
+	}
+
+	switch operation {
+	case "provide", "try_provide":
+		return "provider_registration_invalid"
+	case "inject", "try_inject":
+		switch stage {
+		case "cycle_check":
+			return "dependency_cycle"
+		case "inject":
+			if strings.Contains(msg, "injected function returned error") {
+				return "inject_callback_error"
+			}
+			if strings.Contains(msg, "value not found") || strings.Contains(msg, "failed to get value") {
+				return "inject_dependency_missing"
+			}
+			return "inject_failed"
+		default:
+			return "inject_failed"
+		}
+	case "provider_execute":
+		switch stage {
+		case "resolve_input":
+			return "provider_input_unresolved"
+		case "return_error":
+			return "provider_return_error"
+		case "call":
+			if strings.Contains(msg, "panic") {
+				return "provider_panic"
+			}
+			return "provider_call_failed"
+		default:
+			return "provider_call_failed"
+		}
+	default:
+		return "unknown_error"
 	}
 }
 
