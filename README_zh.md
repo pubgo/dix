@@ -135,6 +135,45 @@ di := dix.New(
 )
 ```
 
+### DI 追踪日志（可选）
+
+可开启“依赖查询 / 注入 / Provider 执行”的全过程日志：
+
+- 环境变量：`DIX_TRACE_DI`
+- 默认：关闭
+- 开启取值：`1`、`true`、`on`、`yes`、`enable`、`trace`、`debug`
+
+```bash
+export DIX_TRACE_DI=true
+```
+
+开启后会输出 `di_trace ...` 事件，包含结构化键值（如 provider、输入输出类型、查询类型、父链路、超时等）。
+
+> 注意：若设置 `DIX_LLM_DIAG_MODE=machine`，会按设计抑制人类文本日志，`di_trace` 也会被抑制。
+
+事件速查：
+
+| 事件 | 含义 |
+| --- | --- |
+| `di_trace inject.start` | 开始一次注入请求（`component`、`param_type`） |
+| `di_trace inject.route` | 注入路径已确定（`function` 或 `struct`） |
+| `di_trace resolve.value.search_provider.start` | 开始为某个依赖类型查找 provider |
+| `di_trace resolve.value.found` | 依赖值查找成功 |
+| `di_trace resolve.value.not_found` | 依赖值查找失败（含 `reason`） |
+| `di_trace provider.execute.dispatch` | 选择并派发 provider 执行（含 `provider`、`output_type`、`input_types`） |
+| `di_trace provider.input.resolve.start` | 开始解析 provider 的某个输入 |
+| `di_trace provider.input.resolve.found` | provider 输入解析成功 |
+| `di_trace provider.input.resolve.failed` | provider 输入解析失败 |
+| `di_trace provider.call.start` | 开始执行 provider（含 `timeout`） |
+| `di_trace provider.call.done` | provider 执行完成 |
+| `di_trace provider.call.failed` | provider 执行失败（含 `timed_out`、`error`） |
+| `di_trace provider.call.return_error` | provider 返回了非 nil `error` |
+| `di_trace inject.func.resolve_input.start` | 开始解析函数注入参数 |
+| `di_trace inject.func.resolve_input.failed` | 函数注入参数解析失败 |
+| `di_trace inject.struct.field.resolve.start` | 开始解析结构体字段注入 |
+| `di_trace inject.struct.field.resolve.done` | 结构体字段注入成功 |
+| `di_trace inject.struct.field.resolve.failed` | 结构体字段注入失败 |
+
 ## 🎯 注入模式
 
 ### 结构体注入

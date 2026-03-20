@@ -135,6 +135,45 @@ di := dix.New(
 )
 ```
 
+### DI Trace Logging (Optional)
+
+Enable step-by-step dependency resolution/injection/provider execution logs:
+
+- Env var: `DIX_TRACE_DI`
+- Default: disabled
+- Enable values: `1`, `true`, `on`, `yes`, `enable`, `trace`, `debug`
+
+```bash
+export DIX_TRACE_DI=true
+```
+
+When enabled, dix prints `di_trace ...` events with structured key-values (provider, input/output types, query kind, parent chain, timeout, etc.).
+
+> Note: if `DIX_LLM_DIAG_MODE=machine`, human-readable text logs are suppressed by design, including `di_trace` lines.
+
+Quick event dictionary:
+
+| Event | Meaning |
+| --- | --- |
+| `di_trace inject.start` | Begin an injection request (`component`, `param_type`) |
+| `di_trace inject.route` | Injection route selected (`function` or `struct`) |
+| `di_trace resolve.value.search_provider.start` | Start searching providers for a dependency type |
+| `di_trace resolve.value.found` | Dependency value resolved successfully |
+| `di_trace resolve.value.not_found` | Dependency resolution failed (`reason` included) |
+| `di_trace provider.execute.dispatch` | Provider selected for execution (`provider`, `output_type`, `input_types`) |
+| `di_trace provider.input.resolve.start` | Resolve one provider input type |
+| `di_trace provider.input.resolve.found` | Provider input resolved |
+| `di_trace provider.input.resolve.failed` | Provider input resolution failed |
+| `di_trace provider.call.start` | Start executing provider (`timeout`) |
+| `di_trace provider.call.done` | Provider execution completed |
+| `di_trace provider.call.failed` | Provider execution failed (`timed_out`, `error`) |
+| `di_trace provider.call.return_error` | Provider returned non-nil `error` |
+| `di_trace inject.func.resolve_input.start` | Resolve function injection argument |
+| `di_trace inject.func.resolve_input.failed` | Function argument resolution failed |
+| `di_trace inject.struct.field.resolve.start` | Resolve one struct field injection |
+| `di_trace inject.struct.field.resolve.done` | Struct field injected successfully |
+| `di_trace inject.struct.field.resolve.failed` | Struct field injection failed |
+
 ## 🎯 Injection Patterns
 
 ### Struct Injection

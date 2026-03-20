@@ -1,6 +1,8 @@
 package dixinternal
 
 import (
+	"bytes"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -48,5 +50,59 @@ func TestLLMDiagOnlyModeSuppressesHumanLogs(t *testing.T) {
 
 	if strings.Contains(strings.ToLower(output), "try inject failed") {
 		t.Fatalf("expected human warn logs to be suppressed in only mode, got: %s", output)
+	}
+}
+
+func TestShouldTraceDependencyFlow(t *testing.T) {
+	t.Setenv(diTraceEnv, "")
+	if shouldTraceDependencyFlow() {
+		t.Fatal("expected empty DIX_TRACE_DI to be disabled")
+	}
+
+	t.Setenv(diTraceEnv, "true")
+	if !shouldTraceDependencyFlow() {
+		t.Fatal("expected DIX_TRACE_DI=true to enable trace")
+	}
+
+	t.Setenv(diTraceEnv, "1")
+	if !shouldTraceDependencyFlow() {
+		t.Fatal("expected DIX_TRACE_DI=1 to enable trace")
+	}
+
+	t.Setenv(diTraceEnv, "off")
+	if shouldTraceDependencyFlow() {
+		t.Fatal("expected DIX_TRACE_DI=off to disable trace")
+	}
+}
+
+func TestDITraceLogsInInjectFlow(t *testing.T) {
+	t.Setenv(diTraceEnv, "true")
+	t.Setenv(llmDiagModeEnv, llmDiagModeHuman)
+
+	originalLogger := logger
+	var buf bytes.Buffer
+	logger = slog.New(slog.NewTextHandler(&buf, nil)).WithGroup(getLogPackage())
+	defer func() {
+		logger = originalLogger
+	}()
+
+	type traceDep struct{}
+	d := New()
+	d.Provide(func() *traceDep { return &traceDep{} })
+
+	d.Inject(func(*traceDep) {})
+
+	output := buf.String()
+
+	if !strings.Contains(output, "di_trace inject.start") {
+		t.Fatalf("expected inject.start trace log, got: %s", output)
+	}
+
+	if !strings.Contains(output, "di_trace resolve.value.search_provider.start") {
+		t.Fatalf("expected provider search trace log, got: %s", output)
+	}
+
+	if !strings.Contains(output, "di_trace provider.call.start") {
+		t.Fatalf("expected provider.call.start trace log, got: %s", output)
 	}
 }

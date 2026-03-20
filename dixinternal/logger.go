@@ -18,6 +18,7 @@ const (
 	llmDiagModeHuman   = "human"
 	llmDiagModeMachine = "machine"
 	llmDiagModeDual    = "dual"
+	diTraceEnv         = "DIX_TRACE_DI"
 )
 
 func getLogPackage() string { return "dix" }
@@ -52,6 +53,22 @@ func isLLMDiagMachineOnlyMode() bool {
 func shouldEmitLLMDiagnosticLine() bool {
 	mode := currentLLMDiagMode()
 	return mode == llmDiagModeMachine || mode == llmDiagModeDual
+}
+
+func shouldTraceDependencyFlow() bool {
+	switch strings.TrimSpace(strings.ToLower(os.Getenv(diTraceEnv))) {
+	case "1", "true", "on", "yes", "y", "enable", "enabled", "trace", "debug":
+		return true
+	default:
+		return false
+	}
+}
+
+func logDITrace(event string, args ...any) {
+	if !shouldTraceDependencyFlow() || logger == nil {
+		return
+	}
+	logger.Info("di_trace "+event, args...)
 }
 
 func SetLog(handler slog.Handler) {
