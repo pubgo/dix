@@ -531,7 +531,8 @@
                             仅显示已执行 provider（call_count &gt; 0）
                         </label>
 
-                        <div x-show="runtimeStatsError" class="text-xs text-red-500 mb-2" x-text="runtimeStatsError"></div>
+                        <div x-show="runtimeStatsError" class="text-xs text-red-500 mb-2" x-text="runtimeStatsError">
+                        </div>
 
                         <div class="max-h-72 overflow-y-auto border border-gray-200 rounded-lg">
                             <template x-if="filteredRuntimeStats.length === 0">
@@ -553,14 +554,16 @@
                                                 <span x-show="isTimeoutRuntimeStat(item)"
                                                     class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold">超时</span>
                                             </div>
-                                            <div class="text-[11px] text-gray-400 truncate" x-text="item.output_type || ''">
+                                            <div class="text-[11px] text-gray-400 truncate"
+                                                x-text="item.output_type || ''">
                                             </div>
                                         </div>
                                         <div class="text-right shrink-0">
                                             <div class="text-xs font-semibold"
                                                 :class="isTimeoutRuntimeStat(item) ? 'text-red-700' : 'text-gray-700'"
                                                 x-text="formatDurationNs(item.total_duration)"></div>
-                                            <div class="text-[11px] text-gray-400" x-text="`${item.call_count} 次`"></div>
+                                            <div class="text-[11px] text-gray-400" x-text="`${item.call_count} 次`">
+                                            </div>
                                         </div>
                                     </div>
                                 </button>
@@ -606,21 +609,25 @@
                     </div>
 
                     <div x-show="!recentErrorsCollapsed" x-cloak>
-                        <div x-show="recentErrorsError" class="text-xs text-red-500 mb-2" x-text="recentErrorsError"></div>
+                        <div x-show="recentErrorsError" class="text-xs text-red-500 mb-2" x-text="recentErrorsError">
+                        </div>
 
                         <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
                             <template x-if="recentErrors.length === 0">
                                 <div class="p-3 text-xs text-gray-400">暂无注入错误记录</div>
                             </template>
-                            <template x-for="(item, idx) in recentErrors" :key="`${item.occurred_at_unix_nano || idx}|${idx}`">
+                            <template x-for="(item, idx) in recentErrors"
+                                :key="`${item.occurred_at_unix_nano || idx}|${idx}`">
                                 <div class="px-3 py-2 border-b border-gray-100 last:border-b-0">
                                     <div class="flex items-center justify-between gap-2 mb-1">
-                                        <span class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold"
+                                        <span
+                                            class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold"
                                             x-text="item.operation || 'inject'"></span>
                                         <span class="text-[10px] text-gray-400"
                                             x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
                                     </div>
-                                    <div class="text-[11px] text-gray-500 break-all mb-1" x-text="item.component || ''"></div>
+                                    <div class="text-[11px] text-gray-500 break-all mb-1" x-text="item.component || ''">
+                                    </div>
                                     <div class="text-xs text-red-600 break-all" x-text="item.message || ''"></div>
                                 </div>
                             </template>
@@ -657,11 +664,13 @@
             </aside>
         </div>
         <!-- Diagnostics Modal -->
-        <div x-show="diagnosticModalOpen" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+        <div x-show="diagnosticModalOpen" x-cloak
+            class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
             @keydown.escape.window="diagnosticModalOpen = false">
             <div class="bg-white w-[94vw] h-[88vh] rounded-xl shadow-xl flex flex-col">
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-                    <div class="font-semibold text-gray-700" x-text="diagnosticModalType === 'runtime' ? '⏱ Provider 启动耗时（大视图）' : '🚨 最近注入错误（大视图）'"></div>
+                    <div class="font-semibold text-gray-700"
+                        x-text="diagnosticModalType === 'runtime' ? '⏱ Provider 启动耗时（大视图）' : '🚨 最近注入错误（大视图）'"></div>
                     <button @click="diagnosticModalOpen = false"
                         class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                         关闭
@@ -687,24 +696,31 @@
                         <div class="space-y-2">
                             <div class="text-xs text-gray-500" x-text="`共 ${filteredModalRuntimeStats.length} 条`"></div>
                             <template x-if="filteredModalRuntimeStats.length === 0">
-                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的启动耗时数据</div>
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的启动耗时数据
+                                </div>
                             </template>
-                            <template x-for="(item, idx) in filteredModalRuntimeStats" :key="`modal-runtime-${runtimeStatKey(item, idx)}`">
+                            <template x-for="(item, idx) in filteredModalRuntimeStats"
+                                :key="`modal-runtime-${runtimeStatKey(item, idx)}`">
                                 <div class="border border-gray-200 rounded-lg p-3">
                                     <div class="flex items-start justify-between gap-3">
                                         <div class="min-w-0">
-                                            <div class="text-sm font-medium text-gray-800 break-all" x-text="item.function_name || '(unknown)'"></div>
-                                            <div class="text-xs text-gray-500 break-all mt-1" x-text="item.output_type || ''"></div>
+                                            <div class="text-sm font-medium text-gray-800 break-all"
+                                                x-text="item.function_name || '(unknown)'"></div>
+                                            <div class="text-xs text-gray-500 break-all mt-1"
+                                                x-text="item.output_type || ''"></div>
                                         </div>
                                         <div class="text-right shrink-0">
-                                            <div class="text-sm font-semibold" :class="isTimeoutRuntimeStat(item) ? 'text-red-700' : 'text-gray-700'"
+                                            <div class="text-sm font-semibold"
+                                                :class="isTimeoutRuntimeStat(item) ? 'text-red-700' : 'text-gray-700'"
                                                 x-text="formatDurationNs(item.total_duration)"></div>
                                             <div class="text-xs text-gray-400" x-text="`${item.call_count} 次`"></div>
                                         </div>
                                     </div>
                                     <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
-                                        <div>平均耗时：<span class="font-medium" x-text="formatDurationNs(item.average_duration)"></span></div>
-                                        <div>最后一次：<span class="font-medium" x-text="formatDurationNs(item.last_duration)"></span></div>
+                                        <div>平均耗时：<span class="font-medium"
+                                                x-text="formatDurationNs(item.average_duration)"></span></div>
+                                        <div>最后一次：<span class="font-medium"
+                                                x-text="formatDurationNs(item.last_duration)"></span></div>
                                         <div class="col-span-2" x-show="item.last_error">
                                             最近错误：<span class="text-red-600 break-all" x-text="item.last_error"></span>
                                         </div>
@@ -720,14 +736,17 @@
                             <template x-if="filteredModalRecentErrors.length === 0">
                                 <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的错误记录</div>
                             </template>
-                            <template x-for="(item, idx) in filteredModalRecentErrors" :key="`modal-error-${item.occurred_at_unix_nano || idx}`">
+                            <template x-for="(item, idx) in filteredModalRecentErrors"
+                                :key="`modal-error-${item.occurred_at_unix_nano || idx}`">
                                 <div class="border border-red-100 bg-red-50/30 rounded-lg p-3">
                                     <div class="flex items-center justify-between gap-3 mb-2">
                                         <span class="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-semibold"
                                             x-text="item.operation || 'inject'"></span>
-                                        <span class="text-xs text-gray-500" x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                        <span class="text-xs text-gray-500"
+                                            x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
                                     </div>
-                                    <div class="text-xs text-gray-600 break-all mb-1" x-text="item.component || ''"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1" x-text="item.component || ''">
+                                    </div>
                                     <div class="text-sm text-red-700 break-all" x-text="item.message || ''"></div>
                                 </div>
                             </template>
