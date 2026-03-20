@@ -153,26 +153,26 @@ export DIX_TRACE_DI=true
 
 事件速查：
 
-| 事件 | 含义 |
-| --- | --- |
-| `di_trace inject.start` | 开始一次注入请求（`component`、`param_type`） |
-| `di_trace inject.route` | 注入路径已确定（`function` 或 `struct`） |
-| `di_trace resolve.value.search_provider.start` | 开始为某个依赖类型查找 provider |
-| `di_trace resolve.value.found` | 依赖值查找成功 |
-| `di_trace resolve.value.not_found` | 依赖值查找失败（含 `reason`） |
-| `di_trace provider.execute.dispatch` | 选择并派发 provider 执行（含 `provider`、`output_type`、`input_types`） |
-| `di_trace provider.input.resolve.start` | 开始解析 provider 的某个输入 |
-| `di_trace provider.input.resolve.found` | provider 输入解析成功 |
-| `di_trace provider.input.resolve.failed` | provider 输入解析失败 |
-| `di_trace provider.call.start` | 开始执行 provider（含 `timeout`） |
-| `di_trace provider.call.done` | provider 执行完成 |
-| `di_trace provider.call.failed` | provider 执行失败（含 `timed_out`、`error`） |
-| `di_trace provider.call.return_error` | provider 返回了非 nil `error` |
-| `di_trace inject.func.resolve_input.start` | 开始解析函数注入参数 |
-| `di_trace inject.func.resolve_input.failed` | 函数注入参数解析失败 |
-| `di_trace inject.struct.field.resolve.start` | 开始解析结构体字段注入 |
-| `di_trace inject.struct.field.resolve.done` | 结构体字段注入成功 |
-| `di_trace inject.struct.field.resolve.failed` | 结构体字段注入失败 |
+| 事件                                           | 含义                                                                    |
+| ---------------------------------------------- | ----------------------------------------------------------------------- |
+| `di_trace inject.start`                        | 开始一次注入请求（`component`、`param_type`）                           |
+| `di_trace inject.route`                        | 注入路径已确定（`function` 或 `struct`）                                |
+| `di_trace resolve.value.search_provider.start` | 开始为某个依赖类型查找 provider                                         |
+| `di_trace resolve.value.found`                 | 依赖值查找成功                                                          |
+| `di_trace resolve.value.not_found`             | 依赖值查找失败（含 `reason`）                                           |
+| `di_trace provider.execute.dispatch`           | 选择并派发 provider 执行（含 `provider`、`output_type`、`input_types`） |
+| `di_trace provider.input.resolve.start`        | 开始解析 provider 的某个输入                                            |
+| `di_trace provider.input.resolve.found`        | provider 输入解析成功                                                   |
+| `di_trace provider.input.resolve.failed`       | provider 输入解析失败                                                   |
+| `di_trace provider.call.start`                 | 开始执行 provider（含 `timeout`）                                       |
+| `di_trace provider.call.done`                  | provider 执行完成                                                       |
+| `di_trace provider.call.failed`                | provider 执行失败（含 `timed_out`、`error`）                            |
+| `di_trace provider.call.return_error`          | provider 返回了非 nil `error`                                           |
+| `di_trace inject.func.resolve_input.start`     | 开始解析函数注入参数                                                    |
+| `di_trace inject.func.resolve_input.failed`    | 函数注入参数解析失败                                                    |
+| `di_trace inject.struct.field.resolve.start`   | 开始解析结构体字段注入                                                  |
+| `di_trace inject.struct.field.resolve.done`    | 结构体字段注入成功                                                      |
+| `di_trace inject.struct.field.resolve.failed`  | 结构体字段注入失败                                                      |
 
 ## 🎯 注入模式
 
