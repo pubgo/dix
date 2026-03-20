@@ -2,10 +2,12 @@ package main
 
 import (
 	"errors"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/pubgo/dix/v2"
@@ -256,6 +258,22 @@ type Application struct {
 
 const defaultHTTPAddr = ":8080"
 
+func isMachineDiagMode() bool {
+	mode := strings.TrimSpace(strings.ToLower(os.Getenv("DIX_LLM_DIAG_MODE")))
+	switch mode {
+	case "only", "machine", "machine-only", "machine_only", "json":
+		return true
+	default:
+		return false
+	}
+}
+
+func configureExampleLogOutput() {
+	if isMachineDiagMode() {
+		log.SetOutput(io.Discard)
+	}
+}
+
 func startVisualizationServer(server *dixhttp.Server) error {
 	addr := os.Getenv("DIX_HTTP_ADDR")
 	if addr == "" {
@@ -326,7 +344,13 @@ func logStartupScenarioResult(di *dix.Dix, scenario string, err error, previousC
 	log.Printf("⚠️ [startup-diagnostic][%s] captured %d record(s)", scenario, newCount)
 	for i := newCount - 1; i >= 0; i-- {
 		item := recent[i]
-		log.Printf("   - type=%s op=%s stage=%s", item.ErrorType, item.Operation, item.Stage)
+		recordIndex := newCount - i
+		log.Printf("   - record=%d", recordIndex)
+		log.Printf("     type=%s", item.ErrorType)
+		log.Printf("     op=%s", item.Operation)
+		if item.Stage != "" {
+			log.Printf("     stage=%s", item.Stage)
+		}
 		log.Printf("     message=%s", item.Message)
 		if item.ProviderFunction != "" {
 			log.Printf("     provider=%s", item.ProviderFunction)
@@ -412,6 +436,8 @@ func runStartupErrorScenarios(di *dix.Dix) {
 }
 
 func main() {
+	configureExampleLogOutput()
+
 	// Create a Dix container
 	di := dix.New(
 		dix.WithProviderTimeout(200*time.Millisecond),

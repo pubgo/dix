@@ -2095,6 +2095,24 @@ func TestTryInjectRecordsRecentErrors(t *testing.T) {
 	}
 }
 
+func TestTerminalLLMDiagnosticLine(t *testing.T) {
+	type missingDep struct{}
+	t.Setenv(llmDiagModeEnv, llmDiagModeDual)
+
+	d := New()
+	output := captureStderr(t, func() {
+		_ = d.TryInject(func(*missingDep) {})
+	})
+
+	if !strings.Contains(output, "DIX_LLM_DIAG ") {
+		t.Fatalf("expected terminal output to contain DIX_LLM_DIAG line, got: %s", output)
+	}
+
+	if !strings.Contains(output, `"error_type":"inject_dependency_missing"`) {
+		t.Fatalf("expected llm diag line to contain inject_dependency_missing, got: %s", output)
+	}
+}
+
 func TestGetRecentErrorsLimitLatestFirst(t *testing.T) {
 	type missingA struct{}
 	type missingB struct{}

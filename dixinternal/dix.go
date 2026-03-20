@@ -1,8 +1,10 @@
 package dixinternal
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"time"
@@ -338,7 +340,7 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 		errorType = buildErrorType(operation, ctx.Stage, ctx.TimedOut, err.Error())
 	}
 
-	dix.recentErrors = append(dix.recentErrors, recentErrorRecord{
+	record := recentErrorRecord{
 		Operation:        operation,
 		ErrorType:        errorType,
 		Component:        component,
@@ -354,11 +356,59 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 		Duration:         ctx.Duration,
 		Timeout:          ctx.Timeout,
 		Occurred:         time.Now(),
-	})
+	}
+
+	dix.recentErrors = append(dix.recentErrors, record)
+	emitLLMDiagnosticLine(record)
 
 	if len(dix.recentErrors) > maxRecentErrorRecords {
 		dix.recentErrors = dix.recentErrors[len(dix.recentErrors)-maxRecentErrorRecords:]
 	}
+}
+
+func emitLLMDiagnosticLine(record recentErrorRecord) {
+	if !shouldEmitLLMDiagnosticLine() {
+		return
+	}
+
+	payload, err := json.Marshal(struct {
+		Operation          string   `json:"operation"`
+		ErrorType          string   `json:"error_type"`
+		Stage              string   `json:"stage,omitempty"`
+		Component          string   `json:"component,omitempty"`
+		ProviderFunction   string   `json:"provider_function,omitempty"`
+		OutputType         string   `json:"output_type,omitempty"`
+		InputType          string   `json:"input_type,omitempty"`
+		InputTypes         []string `json:"input_types,omitempty"`
+		Message            string   `json:"message"`
+		RootCause          string   `json:"root_cause,omitempty"`
+		Hint               string   `json:"hint,omitempty"`
+		TimedOut           bool     `json:"timed_out,omitempty"`
+		DurationNs         int64    `json:"duration_ns,omitempty"`
+		TimeoutNs          int64    `json:"timeout_ns,omitempty"`
+		OccurredAtUnixNano int64    `json:"occurred_at_unix_nano"`
+	}{
+		Operation:          record.Operation,
+		ErrorType:          record.ErrorType,
+		Stage:              record.Stage,
+		Component:          record.Component,
+		ProviderFunction:   record.ProviderFunction,
+		OutputType:         record.OutputType,
+		InputType:          record.InputType,
+		InputTypes:         append([]string{}, record.InputTypes...),
+		Message:            record.Message,
+		RootCause:          record.RootCause,
+		Hint:               record.Hint,
+		TimedOut:           record.TimedOut,
+		DurationNs:         int64(record.Duration),
+		TimeoutNs:          int64(record.Timeout),
+		OccurredAtUnixNano: record.Occurred.UnixNano(),
+	})
+	if err != nil {
+		return
+	}
+
+	_, _ = fmt.Fprintf(os.Stderr, "DIX_LLM_DIAG %s\n", payload)
 }
 
 func providerInputTypeNames(inputs []*providerInputType) []string {
