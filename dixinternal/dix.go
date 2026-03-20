@@ -40,6 +40,7 @@ func newDix(opts ...Option) (d *Dix) {
 		objects:       make(map[outputType]map[group][]value),
 		initializer:   make(map[reflect.Value]bool),
 		providerStats: make(map[reflect.Value]*providerRuntimeStat),
+		recentErrors:  make([]recentErrorRecord, 0, 16),
 	}
 
 	// Register the container itself
@@ -54,7 +55,10 @@ type Dix struct {
 	objects       map[outputType]map[group][]value
 	initializer   map[reflect.Value]bool
 	providerStats map[reflect.Value]*providerRuntimeStat
+	recentErrors  []recentErrorRecord
 }
+
+const maxRecentErrorRecords = 200
 
 type providerRuntimeStat struct {
 	FunctionName  string
@@ -64,6 +68,13 @@ type providerRuntimeStat struct {
 	LastDuration  time.Duration
 	LastError     string
 	LastRunAt     time.Time
+}
+
+type recentErrorRecord struct {
+	Operation string
+	Component string
+	Message   string
+	Occurred  time.Time
 }
 
 func (dix *Dix) Option() Options {
@@ -220,6 +231,34 @@ func (dix *Dix) recordProviderStat(p *providerFn, duration time.Duration, err er
 	} else {
 		stat.LastError = ""
 	}
+}
+
+func (dix *Dix) recordRecentError(operation string, param any, err error) {
+	if err == nil {
+		return
+	}
+
+	dix.recentErrors = append(dix.recentErrors, recentErrorRecord{
+		Operation: operation,
+		Component: describeComponent(param),
+		Message:   err.Error(),
+		Occurred:  time.Now(),
+	})
+
+	if len(dix.recentErrors) > maxRecentErrorRecords {
+		dix.recentErrors = dix.recentErrors[len(dix.recentErrors)-maxRecentErrorRecords:]
+	}
+}
+
+func describeComponent(param any) string {
+	if param == nil {
+		return "<nil>"
+	}
+	typ := reflect.TypeOf(param)
+	if typ == nil {
+		return "<nil>"
+	}
+	return typ.String()
 }
 
 func (dix *Dix) getProviderStack(typ reflect.Type) []string {

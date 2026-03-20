@@ -267,6 +267,20 @@ Returns provider runtime metrics sorted by total duration (desc), useful for fin
 ]
 ```
 
+### GET `/api/errors?limit=50`
+Returns recent `Inject` / `TryInject` errors (latest first), useful when startup injection fails before full initialization.
+
+```json
+[
+  {
+    "operation": "try_inject",
+    "component": "func(*main.MissingDep)",
+    "message": "value not found: type=*main.MissingDep ...",
+    "occurred_at_unix_nano": 1700000000000000000
+  }
+]
+```
+
 ### GET `/api/packages`
 Returns package list
 

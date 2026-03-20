@@ -2025,6 +2025,47 @@ func TestDisableDefaultSlowProviderThreshold(t *testing.T) {
 	}
 }
 
+func TestTryInjectRecordsRecentErrors(t *testing.T) {
+	type missingDep struct{}
+
+	d := New()
+	err := d.TryInject(func(*missingDep) {})
+	if err == nil {
+		t.Fatal("expected TryInject error for missing dependency")
+	}
+
+	recent := d.GetRecentErrors(10)
+	if len(recent) == 0 {
+		t.Fatal("expected recent errors to contain at least one record")
+	}
+
+	if recent[0].Operation != "try_inject" {
+		t.Fatalf("expected operation try_inject, got %s", recent[0].Operation)
+	}
+
+	if !strings.Contains(recent[0].Message, "missingDep") {
+		t.Fatalf("expected recent error message to mention missingDep, got: %s", recent[0].Message)
+	}
+}
+
+func TestGetRecentErrorsLimitLatestFirst(t *testing.T) {
+	type missingA struct{}
+	type missingB struct{}
+
+	d := New()
+	_ = d.TryInject(func(*missingA) {})
+	_ = d.TryInject(func(*missingB) {})
+
+	recent := d.GetRecentErrors(1)
+	if len(recent) != 1 {
+		t.Fatalf("expected exactly one recent error with limit=1, got %d", len(recent))
+	}
+
+	if !strings.Contains(recent[0].Message, "missingB") {
+		t.Fatalf("expected latest error to mention missingB, got: %s", recent[0].Message)
+	}
+}
+
 func TestTimeoutOptionValidate(t *testing.T) {
 	opts := Options{ProviderTimeout: -1 * time.Second}
 	err := opts.Validate()

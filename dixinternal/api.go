@@ -39,12 +39,16 @@ func (dix *Dix) TryProvide(param any) (err error) {
 // Inject injects dependencies into the given parameter. Panics on error.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Inject(param any, opts ...Option) any {
+	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
-		logger.Error("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
-		panic(errors.New("circular dependency: " + dep))
+		err := errors.New("circular dependency: " + dep)
+		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component)
+		dix.recordRecentError("inject", param, err)
+		panic(err)
 	}
 
 	if err := dix.inject(param, opts...); err != nil {
+		dix.recordRecentError("inject", param, err)
 		panic(err)
 	}
 	return param
@@ -53,12 +57,19 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 // TryInject injects dependencies into the given parameter. Returns error instead of panicking.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryInject(param any, opts ...Option) error {
+	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
-		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
-		return errors.New("circular dependency: " + dep)
+		err := errors.New("circular dependency: " + dep)
+		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component)
+		dix.recordRecentError("try_inject", param, err)
+		return err
 	}
 
-	return dix.inject(param, opts...)
+	err := dix.inject(param, opts...)
+	if err != nil {
+		dix.recordRecentError("try_inject", param, err)
+	}
+	return err
 }
 
 // GetProvideAllInputTypes returns all input types for a given type, including struct fields
@@ -118,6 +129,14 @@ type ProviderRuntimeStats struct {
 	LastDuration      time.Duration `json:"last_duration"`
 	LastError         string        `json:"last_error,omitempty"`
 	LastRunAtUnixNano int64         `json:"last_run_at_unix_nano"`
+}
+
+// RecentError contains a recently captured Inject/TryInject failure event.
+type RecentError struct {
+	Operation          string `json:"operation"`
+	Component          string `json:"component"`
+	Message            string `json:"message"`
+	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano"`
 }
 
 // GetProviderDetails returns detailed information about all providers
@@ -219,6 +238,32 @@ func (dix *Dix) GetProviderRuntimeStats() []ProviderRuntimeStats {
 	})
 
 	return stats
+}
+
+// GetRecentErrors returns recent Inject/TryInject errors in reverse-chronological order.
+// limit <= 0 means return all currently retained errors.
+func (dix *Dix) GetRecentErrors(limit int) []RecentError {
+	total := len(dix.recentErrors)
+	if total == 0 {
+		return []RecentError{}
+	}
+
+	if limit <= 0 || limit > total {
+		limit = total
+	}
+
+	result := make([]RecentError, 0, limit)
+	for i := total - 1; i >= 0 && len(result) < limit; i-- {
+		r := dix.recentErrors[i]
+		result = append(result, RecentError{
+			Operation:          r.Operation,
+			Component:          r.Component,
+			Message:            r.Message,
+			OccurredAtUnixNano: r.Occurred.UnixNano(),
+		})
+	}
+
+	return result
 }
 
 func resolveTypePkgPath(typ reflect.Type) string {

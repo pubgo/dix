@@ -267,6 +267,8 @@ func startVisualizationServer(server *dixhttp.Server) error {
 	log.Printf("📊 Open http://%s in your browser to view dependency relationships", displayAddr)
 	log.Println("📡 API endpoints:")
 	log.Println("   - GET /api/dependencies - JSON data of dependencies")
+	log.Println("   - GET /api/runtime-stats - Provider startup runtime stats")
+	log.Println("   - GET /api/errors - Recent Inject/TryInject errors")
 	log.Println("   - GET /api/graph?type=providers - DOT graph format")
 	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
 	log.Println("   - GET /api/graph?type=objects - Objects graph")
@@ -494,7 +496,7 @@ func main() {
 	log.Println("📦 Pre-creating objects for visualization...")
 
 	// 使用函数注入来创建对象（这种方式可以处理指针类型）
-	dix.Inject(di, func(
+	if err := di.TryInject(func(
 		app *Application,
 		userService *UserService,
 		orderService *OrderService,
@@ -529,7 +531,9 @@ func main() {
 		if allServices != nil {
 			log.Printf("✅ Services list created with %d services", len(allServices))
 		}
-	})
+	}); err != nil {
+		log.Printf("⚠️ pre-create injection failed, web will still start for diagnostics: %v", err)
+	}
 
 	// 模拟一次超时 provider 执行，用于在可视化中展示“超时标红”
 	if err := di.TryInject(func(*TimeoutProbe) {}); err != nil {

@@ -282,6 +282,20 @@ dixhttp.RegisterGroupRules(
 }
 ```
 
+### GET `/api/errors?limit=50`
+返回最近的 `Inject` / `TryInject` 错误（按时间倒序），用于在启动阶段注入失败后继续排查。
+
+```json
+[
+  {
+    "operation": "try_inject",
+    "component": "func(*main.MissingDep)",
+    "message": "value not found: type=*main.MissingDep ...",
+    "occurred_at_unix_nano": 1700000000000000000
+  }
+]
+```
+
 ### GET `/api/package/{packageName}`
 返回指定包内的 Provider 详情
 

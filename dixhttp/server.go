@@ -130,10 +130,26 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/dependencies", s.HandleDependencies)
 	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
 	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
+	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
 	s.mux.HandleFunc(base+"/api/group-rules", s.HandleGroupRules)
+}
+
+// HandleErrors returns recent Inject/TryInject error events.
+// Query params:
+// - limit: optional positive integer to limit returned rows.
+func (s *Server) HandleErrors(w http.ResponseWriter, r *http.Request) {
+	limit := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	errors := s.dix.GetRecentErrors(limit)
+	writeJSON(w, errors)
 }
 
 // ServeHTTP implements http.Handler interface
