@@ -2066,6 +2066,67 @@ func TestGetRecentErrorsLimitLatestFirst(t *testing.T) {
 	}
 }
 
+func TestTryProvideRecordsRecentErrors(t *testing.T) {
+	d := New()
+	err := d.TryProvide(nil)
+	if err == nil {
+		t.Fatal("expected TryProvide to return error for nil provider")
+	}
+
+	recent := d.GetRecentErrors(1)
+	if len(recent) != 1 {
+		t.Fatalf("expected one recent error, got %d", len(recent))
+	}
+
+	if recent[0].Operation != "try_provide" {
+		t.Fatalf("expected operation try_provide, got %s", recent[0].Operation)
+	}
+
+	if recent[0].Stage != "registration" {
+		t.Fatalf("expected stage registration, got %s", recent[0].Stage)
+	}
+}
+
+func TestProviderExecutionErrorRecordedWithDetails(t *testing.T) {
+	type brokenDep struct{}
+
+	d := New()
+	d.Provide(func() (*brokenDep, error) {
+		return nil, errors.New("provider boom")
+	})
+
+	err := d.TryInject(func(*brokenDep) {})
+	if err == nil {
+		t.Fatal("expected TryInject to fail when provider returns error")
+	}
+
+	recent := d.GetRecentErrors(10)
+	if len(recent) == 0 {
+		t.Fatal("expected recent errors to contain provider execution records")
+	}
+
+	var found bool
+	for _, item := range recent {
+		if item.Operation == "provider_execute" {
+			found = true
+			if item.ProviderFunction == "" {
+				t.Fatal("expected provider function in provider_execute error")
+			}
+			if item.OutputType == "" {
+				t.Fatal("expected output type in provider_execute error")
+			}
+			if item.Stage == "" {
+				t.Fatal("expected stage in provider_execute error")
+			}
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("expected at least one provider_execute record")
+	}
+}
+
 func TestTimeoutOptionValidate(t *testing.T) {
 	opts := Options{ProviderTimeout: -1 * time.Second}
 	err := opts.Validate()

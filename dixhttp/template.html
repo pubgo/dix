@@ -620,15 +620,25 @@
                                 :key="`${item.occurred_at_unix_nano || idx}|${idx}`">
                                 <div class="px-3 py-2 border-b border-gray-100 last:border-b-0">
                                     <div class="flex items-center justify-between gap-2 mb-1">
-                                        <span
-                                            class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold"
-                                            x-text="item.operation || 'inject'"></span>
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span
+                                                class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold"
+                                                x-text="item.operation || 'inject'"></span>
+                                            <span x-show="item.stage"
+                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-medium"
+                                                x-text="item.stage"></span>
+                                        </div>
                                         <span class="text-[10px] text-gray-400"
                                             x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
                                     </div>
-                                    <div class="text-[11px] text-gray-500 break-all mb-1" x-text="item.component || ''">
+                                    <div class="text-[11px] text-gray-500 break-all mb-1"
+                                        x-text="item.provider_function || item.component || ''">
                                     </div>
+                                    <div class="text-[11px] text-gray-500 break-all mb-1" x-show="item.output_type"
+                                        x-text="`输出: ${item.output_type}`"></div>
                                     <div class="text-xs text-red-600 break-all" x-text="item.message || ''"></div>
+                                    <div class="text-[11px] text-gray-500 break-all mt-1" x-show="item.root_cause"
+                                        x-text="`根因: ${item.root_cause}`"></div>
                                 </div>
                             </template>
                         </div>
@@ -678,7 +688,7 @@
                 </div>
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                     <input type="text" x-model="diagnosticSearch"
-                        :placeholder="diagnosticModalType === 'runtime' ? '搜索函数名/输出类型/错误信息' : '搜索操作/组件/错误信息'"
+                        :placeholder="diagnosticModalType === 'runtime' ? '搜索函数名/输出类型/错误信息' : '搜索操作/阶段/组件/函数/类型/根因/错误信息'"
                         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
                     <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -740,14 +750,36 @@
                                 :key="`modal-error-${item.occurred_at_unix_nano || idx}`">
                                 <div class="border border-red-100 bg-red-50/30 rounded-lg p-3">
                                     <div class="flex items-center justify-between gap-3 mb-2">
-                                        <span class="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-semibold"
-                                            x-text="item.operation || 'inject'"></span>
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <span
+                                                class="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-semibold"
+                                                x-text="item.operation || 'inject'"></span>
+                                            <span x-show="item.stage"
+                                                class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium"
+                                                x-text="item.stage"></span>
+                                            <span x-show="item.timed_out"
+                                                class="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-xs font-medium">timeout</span>
+                                        </div>
                                         <span class="text-xs text-gray-500"
                                             x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
                                     </div>
-                                    <div class="text-xs text-gray-600 break-all mb-1" x-text="item.component || ''">
+                                    <div class="text-xs text-gray-600 break-all mb-1"
+                                        x-text="item.provider_function || item.component || ''">
+                                    </div>
+                                    <div class="text-xs text-gray-600 break-all mb-1" x-show="item.output_type"
+                                        x-text="`输出类型: ${item.output_type}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1" x-show="item.input_type"
+                                        x-text="`失败输入: ${item.input_type}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1"
+                                        x-show="item.input_types && item.input_types.length"
+                                        x-text="`输入列表: ${item.input_types.join(', ')}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1"
+                                        x-show="item.duration || item.timeout"
+                                        x-text="`耗时/超时: ${formatDurationNs(item.duration || 0)} / ${formatDurationNs(item.timeout || 0)}`">
                                     </div>
                                     <div class="text-sm text-red-700 break-all" x-text="item.message || ''"></div>
+                                    <div class="text-xs text-gray-700 break-all mt-2" x-show="item.root_cause"
+                                        x-text="`根因: ${item.root_cause}`"></div>
                                 </div>
                             </template>
                         </div>
@@ -902,9 +934,14 @@
                             return true;
                         }
                         const op = String(e.operation || '').toLowerCase();
+                        const stage = String(e.stage || '').toLowerCase();
                         const comp = String(e.component || '').toLowerCase();
+                        const providerFn = String(e.provider_function || '').toLowerCase();
+                        const outType = String(e.output_type || '').toLowerCase();
+                        const inputType = String(e.input_type || '').toLowerCase();
+                        const root = String(e.root_cause || '').toLowerCase();
                         const msg = String(e.message || '').toLowerCase();
-                        return op.includes(q) || comp.includes(q) || msg.includes(q);
+                        return op.includes(q) || stage.includes(q) || comp.includes(q) || providerFn.includes(q) || outType.includes(q) || inputType.includes(q) || root.includes(q) || msg.includes(q);
                     });
                 },
 

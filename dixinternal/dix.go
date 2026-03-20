@@ -71,10 +71,31 @@ type providerRuntimeStat struct {
 }
 
 type recentErrorRecord struct {
-	Operation string
-	Component string
-	Message   string
-	Occurred  time.Time
+	Operation        string
+	Component        string
+	Stage            string
+	ProviderFunction string
+	OutputType       string
+	InputType        string
+	InputTypes       []string
+	Message          string
+	RootCause        string
+	TimedOut         bool
+	Duration         time.Duration
+	Timeout          time.Duration
+	Occurred         time.Time
+}
+
+type recentErrorContext struct {
+	Stage            string
+	ProviderFunction string
+	OutputType       string
+	InputType        string
+	InputTypes       []string
+	RootCause        string
+	TimedOut         bool
+	Duration         time.Duration
+	Timeout          time.Duration
 }
 
 func (dix *Dix) Option() Options {
@@ -117,48 +138,93 @@ func (dix *Dix) getOutputTypeValues(outTyp outputType, opt Options) (map[group][
 
 // executeProvider handles the execution of a single provider function
 func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) error {
+	fnName := GetFnName(p.fn)
+	inputTypes := providerInputTypeNames(p.inputList)
+
 	// 1. Prepare inputs
 	var inputs []reflect.Value
 	for _, in := range p.inputList {
 		val, err := dix.getValue(in.typ, opt, in.isMap, in.isList, outTyp)
 		if err != nil {
+			wrappedErr := fmt.Errorf("failed to get input value for provider: %w", err)
+			dix.recordRecentErrorWithContext("provider_execute", fnName, wrappedErr, recentErrorContext{
+				Stage:            "resolve_input",
+				ProviderFunction: fnName,
+				OutputType:       outTyp.String(),
+				InputType:        in.typ.String(),
+				InputTypes:       inputTypes,
+				RootCause:        rootCauseMessage(err),
+			})
 			logger.Error("failed to get input value",
 				"error", err,
+				"provider", fnName,
+				"output_type", outTyp.String(),
 				"type", in.typ.String(),
 				"kind", in.typ.Kind().String(),
 				"map", in.isMap,
 				"list", in.isList,
+				"root_cause", rootCauseMessage(err),
 			)
-			return fmt.Errorf("failed to get input value for provider: %w", err)
+			return wrappedErr
 		}
 		inputs = append(inputs, val)
 	}
 
 	// 2. Call provider function
 	start := time.Now()
-	fnName := GetFnName(p.fn)
 
 	logger.Debug("evaluating provider", "provider", fnName)
 
 	outputs, err, timedOut := p.callWithTimeout(inputs, opt.ProviderTimeout)
 	duration := time.Since(start)
 	if err != nil {
+		wrappedErr := fmt.Errorf("provider call failed for %s: %w", fnName, err)
 		dix.recordProviderStat(p, duration, err)
+		dix.recordRecentErrorWithContext("provider_execute", fnName, wrappedErr, recentErrorContext{
+			Stage:            "call",
+			ProviderFunction: fnName,
+			OutputType:       outTyp.String(),
+			InputTypes:       inputTypes,
+			RootCause:        rootCauseMessage(err),
+			TimedOut:         timedOut,
+			Duration:         duration,
+			Timeout:          opt.ProviderTimeout,
+		})
 		if timedOut {
 			logger.Error("provider execution timeout",
 				"provider", fnName,
+				"output_type", outTyp.String(),
+				"input_types", strings.Join(inputTypes, ", "),
 				"timeout", opt.ProviderTimeout.String(),
 				"duration", duration.String(),
 			)
 		}
-		return fmt.Errorf("provider call failed for %s: %w", fnName, err)
+		return wrappedErr
 	}
 
 	// 3. Check for error return
 	if p.hasError && len(outputs) > 1 && !outputs[1].IsNil() {
 		if err, ok := outputs[1].Interface().(error); ok && err != nil {
+			wrappedErr := fmt.Errorf("provider execution failed: %s: %w", fnName, err)
 			dix.recordProviderStat(p, duration, err)
-			return fmt.Errorf("provider execution failed: %s: %w", fnName, err)
+			dix.recordRecentErrorWithContext("provider_execute", fnName, wrappedErr, recentErrorContext{
+				Stage:            "return_error",
+				ProviderFunction: fnName,
+				OutputType:       outTyp.String(),
+				InputTypes:       inputTypes,
+				RootCause:        rootCauseMessage(err),
+				Duration:         duration,
+				Timeout:          opt.ProviderTimeout,
+			})
+			logger.Error("provider returned error",
+				"provider", fnName,
+				"output_type", outTyp.String(),
+				"input_types", strings.Join(inputTypes, ", "),
+				"duration", duration.String(),
+				"error", err,
+				"root_cause", rootCauseMessage(err),
+			)
+			return wrappedErr
 		}
 	}
 
@@ -237,17 +303,69 @@ func (dix *Dix) recordRecentError(operation string, param any, err error) {
 	if err == nil {
 		return
 	}
+	dix.recordRecentErrorWithContext(operation, describeComponent(param), err, recentErrorContext{
+		RootCause: rootCauseMessage(err),
+	})
+}
+
+func (dix *Dix) recordRecentErrorWithContext(operation, component string, err error, ctx recentErrorContext) {
+	if err == nil {
+		return
+	}
+
+	root := ctx.RootCause
+	if root == "" {
+		root = rootCauseMessage(err)
+	}
 
 	dix.recentErrors = append(dix.recentErrors, recentErrorRecord{
-		Operation: operation,
-		Component: describeComponent(param),
-		Message:   err.Error(),
-		Occurred:  time.Now(),
+		Operation:        operation,
+		Component:        component,
+		Stage:            ctx.Stage,
+		ProviderFunction: ctx.ProviderFunction,
+		OutputType:       ctx.OutputType,
+		InputType:        ctx.InputType,
+		InputTypes:       append([]string{}, ctx.InputTypes...),
+		Message:          err.Error(),
+		RootCause:        root,
+		TimedOut:         ctx.TimedOut,
+		Duration:         ctx.Duration,
+		Timeout:          ctx.Timeout,
+		Occurred:         time.Now(),
 	})
 
 	if len(dix.recentErrors) > maxRecentErrorRecords {
 		dix.recentErrors = dix.recentErrors[len(dix.recentErrors)-maxRecentErrorRecords:]
 	}
+}
+
+func providerInputTypeNames(inputs []*providerInputType) []string {
+	names := make([]string, 0, len(inputs))
+	for _, in := range inputs {
+		if in == nil || in.typ == nil {
+			continue
+		}
+		names = append(names, in.typ.String())
+	}
+	return names
+}
+
+func rootCauseMessage(err error) string {
+	if err == nil {
+		return ""
+	}
+	root := err
+	for {
+		next := errors.Unwrap(root)
+		if next == nil {
+			break
+		}
+		root = next
+	}
+	if root == err {
+		return ""
+	}
+	return root.Error()
 }
 
 func describeComponent(param any) string {

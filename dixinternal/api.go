@@ -2,6 +2,7 @@ package dixinternal
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"runtime"
 	"sort"
@@ -17,19 +18,33 @@ func New(opts ...Option) *Dix {
 // Provide registers a provider function. Panics on error.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Provide(param any) {
+	component := describeComponent(param)
+	defer func() {
+		if r := recover(); r != nil {
+			err := normalizeRecoveredError(r)
+			logger.Error("provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+			dix.recordRecentErrorWithContext("provide", component, err, recentErrorContext{
+				Stage:     "registration",
+				RootCause: rootCauseMessage(err),
+			})
+			panic(err)
+		}
+	}()
 	dix.provide(param)
 }
 
 // TryProvide registers a provider function. Returns error instead of panicking.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryProvide(param any) (err error) {
+	component := describeComponent(param)
 	defer func() {
 		if r := recover(); r != nil {
-			if e, ok := r.(error); ok {
-				err = e
-			} else {
-				err = errors.New(r.(string))
-			}
+			err = normalizeRecoveredError(r)
+			logger.Warn("try provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+			dix.recordRecentErrorWithContext("try_provide", component, err, recentErrorContext{
+				Stage:     "registration",
+				RootCause: rootCauseMessage(err),
+			})
 		}
 	}()
 	dix.provide(param)
@@ -43,12 +58,19 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
 		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component)
-		dix.recordRecentError("inject", param, err)
+		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
+			Stage:     "cycle_check",
+			RootCause: rootCauseMessage(err),
+		})
 		panic(err)
 	}
 
 	if err := dix.inject(param, opts...); err != nil {
-		dix.recordRecentError("inject", param, err)
+		logger.Error("inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
+			Stage:     "inject",
+			RootCause: rootCauseMessage(err),
+		})
 		panic(err)
 	}
 	return param
@@ -61,13 +83,20 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
 		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component)
-		dix.recordRecentError("try_inject", param, err)
+		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
+			Stage:     "cycle_check",
+			RootCause: rootCauseMessage(err),
+		})
 		return err
 	}
 
 	err := dix.inject(param, opts...)
 	if err != nil {
-		dix.recordRecentError("try_inject", param, err)
+		logger.Warn("try inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
+			Stage:     "inject",
+			RootCause: rootCauseMessage(err),
+		})
 	}
 	return err
 }
@@ -133,10 +162,19 @@ type ProviderRuntimeStats struct {
 
 // RecentError contains a recently captured Inject/TryInject failure event.
 type RecentError struct {
-	Operation          string `json:"operation"`
-	Component          string `json:"component"`
-	Message            string `json:"message"`
-	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano"`
+	Operation          string        `json:"operation"`
+	Component          string        `json:"component"`
+	Stage              string        `json:"stage,omitempty"`
+	ProviderFunction   string        `json:"provider_function,omitempty"`
+	OutputType         string        `json:"output_type,omitempty"`
+	InputType          string        `json:"input_type,omitempty"`
+	InputTypes         []string      `json:"input_types,omitempty"`
+	Message            string        `json:"message"`
+	RootCause          string        `json:"root_cause,omitempty"`
+	TimedOut           bool          `json:"timed_out,omitempty"`
+	Duration           time.Duration `json:"duration,omitempty"`
+	Timeout            time.Duration `json:"timeout,omitempty"`
+	OccurredAtUnixNano int64         `json:"occurred_at_unix_nano"`
 }
 
 // GetProviderDetails returns detailed information about all providers
@@ -258,12 +296,34 @@ func (dix *Dix) GetRecentErrors(limit int) []RecentError {
 		result = append(result, RecentError{
 			Operation:          r.Operation,
 			Component:          r.Component,
+			Stage:              r.Stage,
+			ProviderFunction:   r.ProviderFunction,
+			OutputType:         r.OutputType,
+			InputType:          r.InputType,
+			InputTypes:         append([]string{}, r.InputTypes...),
 			Message:            r.Message,
+			RootCause:          r.RootCause,
+			TimedOut:           r.TimedOut,
+			Duration:           r.Duration,
+			Timeout:            r.Timeout,
 			OccurredAtUnixNano: r.Occurred.UnixNano(),
 		})
 	}
 
 	return result
+}
+
+func normalizeRecoveredError(r any) error {
+	if r == nil {
+		return errors.New("unknown panic")
+	}
+	if e, ok := r.(error); ok {
+		return e
+	}
+	if s, ok := r.(string); ok {
+		return errors.New(s)
+	}
+	return fmt.Errorf("panic: %v", r)
 }
 
 func resolveTypePkgPath(typ reflect.Type) string {

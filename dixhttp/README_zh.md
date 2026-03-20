@@ -288,9 +288,14 @@ dixhttp.RegisterGroupRules(
 ```json
 [
   {
-    "operation": "try_inject",
-    "component": "func(*main.MissingDep)",
-    "message": "value not found: type=*main.MissingDep ...",
+    "operation": "provider_execute",
+    "component": "main.main.func12",
+    "stage": "resolve_input",
+    "provider_function": "main.main.func12",
+    "output_type": "*main.UserService",
+    "input_type": "*main.Database",
+    "root_cause": "value not found: type=*main.Database ...",
+    "message": "failed to get input value for provider: value not found: type=*main.Database ...",
     "occurred_at_unix_nano": 1700000000000000000
   }
 ]
