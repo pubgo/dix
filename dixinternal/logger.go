@@ -65,6 +65,8 @@ func shouldTraceDependencyFlow() bool {
 }
 
 func logDITrace(event string, args ...any) {
+	emitDiagFileTraceEvent(event, args...)
+
 	if !shouldTraceDependencyFlow() || logger == nil {
 		return
 	}

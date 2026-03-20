@@ -3,6 +3,8 @@ package dixinternal
 import (
 	"bytes"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -136,5 +138,70 @@ func TestDITraceLogsInProvideFlow(t *testing.T) {
 
 	if !strings.Contains(output, "di_trace provide.register.output.done") {
 		t.Fatalf("expected provide.register.output.done trace log, got: %s", output)
+	}
+}
+
+func TestDiagFileNotConfiguredKeepsOriginalScheme(t *testing.T) {
+	t.Setenv(diTraceEnv, "false")
+	t.Setenv(diagFileEnv, "")
+	t.Setenv(llmDiagModeEnv, llmDiagModeHuman)
+
+	originalLogger := logger
+	var buf bytes.Buffer
+	logger = slog.New(slog.NewTextHandler(&buf, nil)).WithGroup(getLogPackage())
+	defer func() {
+		logger = originalLogger
+		resetDiagFileWriterForTest()
+	}()
+
+	type dep struct{}
+	d := New()
+	d.Provide(func() *dep { return &dep{} })
+	d.Inject(func(*dep) {})
+
+	output := buf.String()
+	if strings.Contains(output, "di_trace ") {
+		t.Fatalf("expected no trace logs on console when DIX_TRACE_DI is disabled, got: %s", output)
+	}
+}
+
+func TestDiagFileConfiguredCollectsTraceErrorAndLLM(t *testing.T) {
+	diagPath := filepath.Join(t.TempDir(), "dix-diag.jsonl")
+	t.Setenv(diagFileEnv, diagPath)
+	t.Setenv(diTraceEnv, "false")
+	t.Setenv(llmDiagModeEnv, llmDiagModeHuman)
+
+	originalLogger := logger
+	var buf bytes.Buffer
+	logger = slog.New(slog.NewTextHandler(&buf, nil)).WithGroup(getLogPackage())
+	defer func() {
+		logger = originalLogger
+		resetDiagFileWriterForTest()
+	}()
+
+	type missingDep struct{}
+	d := New()
+	_ = d.TryInject(func(*missingDep) {})
+
+	if strings.Contains(buf.String(), "di_trace ") {
+		t.Fatalf("expected no console trace when DIX_TRACE_DI is disabled, got: %s", buf.String())
+	}
+
+	contentBytes, err := os.ReadFile(diagPath)
+	if err != nil {
+		t.Fatalf("expected diagnostic file to be created, got error: %v", err)
+	}
+	content := string(contentBytes)
+
+	if !strings.Contains(content, `"kind":"trace"`) {
+		t.Fatalf("expected diagnostic file to include trace records, got: %s", content)
+	}
+
+	if !strings.Contains(content, `"kind":"error"`) {
+		t.Fatalf("expected diagnostic file to include error records, got: %s", content)
+	}
+
+	if !strings.Contains(content, `"kind":"llm"`) {
+		t.Fatalf("expected diagnostic file to include llm records, got: %s", content)
 	}
 }

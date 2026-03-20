@@ -366,15 +366,6 @@ func (dix *Dix) recordProviderStat(p *providerFn, duration time.Duration, err er
 	}
 }
 
-func (dix *Dix) recordRecentError(operation string, param any, err error) {
-	if err == nil {
-		return
-	}
-	dix.recordRecentErrorWithContext(operation, describeComponent(param), err, recentErrorContext{
-		RootCause: rootCauseMessage(err),
-	})
-}
-
 func (dix *Dix) recordRecentErrorWithContext(operation, component string, err error, ctx recentErrorContext) {
 	if err == nil {
 		return
@@ -414,6 +405,7 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 	}
 
 	dix.recentErrors = append(dix.recentErrors, record)
+	emitDiagFileErrorRecord(record)
 	emitLLMDiagnosticLine(record)
 
 	if len(dix.recentErrors) > maxRecentErrorRecords {
@@ -422,11 +414,7 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 }
 
 func emitLLMDiagnosticLine(record recentErrorRecord) {
-	if !shouldEmitLLMDiagnosticLine() {
-		return
-	}
-
-	payload, err := json.Marshal(struct {
+	payloadBody := struct {
 		Operation          string   `json:"operation"`
 		ErrorType          string   `json:"error_type"`
 		Stage              string   `json:"stage,omitempty"`
@@ -458,12 +446,27 @@ func emitLLMDiagnosticLine(record recentErrorRecord) {
 		DurationNs:         int64(record.Duration),
 		TimeoutNs:          int64(record.Timeout),
 		OccurredAtUnixNano: record.Occurred.UnixNano(),
-	})
-	if err != nil {
+	}
+
+	emitDiagFileLLMRecord(payloadBody)
+
+	if !shouldEmitLLMDiagnosticLine() {
 		return
 	}
 
-	_, _ = fmt.Fprintf(os.Stderr, "DIX_LLM_DIAG %s\n", payload)
+	payload, err := json.Marshal(payloadBody)
+	if err != nil {
+		if logger != nil {
+			logger.Warn("failed to marshal llm diagnostic payload", "error", err)
+		}
+		return
+	}
+
+	if _, err := fmt.Fprintf(os.Stderr, "DIX_LLM_DIAG %s\n", payload); err != nil {
+		if logger != nil {
+			logger.Warn("failed to write llm diagnostic line", "error", err)
+		}
+	}
 }
 
 func providerInputTypeNames(inputs []*providerInputType) []string {
