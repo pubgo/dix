@@ -80,6 +80,7 @@ type recentErrorRecord struct {
 	InputTypes       []string
 	Message          string
 	RootCause        string
+	Hint             string
 	TimedOut         bool
 	Duration         time.Duration
 	Timeout          time.Duration
@@ -93,6 +94,7 @@ type recentErrorContext struct {
 	InputType        string
 	InputTypes       []string
 	RootCause        string
+	Hint             string
 	TimedOut         bool
 	Duration         time.Duration
 	Timeout          time.Duration
@@ -164,6 +166,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 				"map", in.isMap,
 				"list", in.isList,
 				"root_cause", rootCauseMessage(err),
+				"hint", buildErrorHint("provider_execute", "resolve_input", false),
 			)
 			return wrappedErr
 		}
@@ -197,6 +200,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 				"input_types", strings.Join(inputTypes, ", "),
 				"timeout", opt.ProviderTimeout.String(),
 				"duration", duration.String(),
+				"hint", buildErrorHint("provider_execute", "call", true),
 			)
 		}
 		return wrappedErr
@@ -223,6 +227,7 @@ func (dix *Dix) executeProvider(p *providerFn, outTyp outputType, opt Options) e
 				"duration", duration.String(),
 				"error", err,
 				"root_cause", rootCauseMessage(err),
+				"hint", buildErrorHint("provider_execute", "return_error", false),
 			)
 			return wrappedErr
 		}
@@ -318,6 +323,11 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 		root = rootCauseMessage(err)
 	}
 
+	hint := strings.TrimSpace(ctx.Hint)
+	if hint == "" {
+		hint = buildErrorHint(operation, ctx.Stage, ctx.TimedOut)
+	}
+
 	dix.recentErrors = append(dix.recentErrors, recentErrorRecord{
 		Operation:        operation,
 		Component:        component,
@@ -328,6 +338,7 @@ func (dix *Dix) recordRecentErrorWithContext(operation, component string, err er
 		InputTypes:       append([]string{}, ctx.InputTypes...),
 		Message:          err.Error(),
 		RootCause:        root,
+		Hint:             hint,
 		TimedOut:         ctx.TimedOut,
 		Duration:         ctx.Duration,
 		Timeout:          ctx.Timeout,
@@ -366,6 +377,35 @@ func rootCauseMessage(err error) string {
 		return ""
 	}
 	return root.Error()
+}
+
+func buildErrorHint(operation, stage string, timedOut bool) string {
+	if timedOut {
+		return "provider 初始化超时：可先优化初始化逻辑，或临时调大 WithProviderTimeout；排查时可用 /api/errors 与 /api/runtime-stats 联动定位"
+	}
+
+	switch operation {
+	case "provide", "try_provide":
+		return "检查 provider 签名（必须是函数且返回值数量合法）；若不希望中断启动，请优先用 TryProvide 并继续启动 Web 诊断页"
+	case "inject", "try_inject":
+		switch stage {
+		case "cycle_check":
+			return "检测到循环依赖：请拆分相互引用的组件，或改为接口/延迟注入；可用 /api/dependencies 观察依赖环"
+		default:
+			return "注入失败：先确认依赖是否已注册、类型是否一致；生产路径建议改用 TryInject 避免进程直接退出"
+		}
+	case "provider_execute":
+		switch stage {
+		case "resolve_input":
+			return "provider 输入依赖未解析：检查对应输入类型是否有 provider、命名空间(map/list)是否匹配、是否遗漏导入"
+		case "return_error":
+			return "provider 主动返回 error：优先检查外部资源可用性（DB/Redis/HTTP）与配置参数；必要时在 provider 内增加上下文日志"
+		default:
+			return "provider 执行失败：查看 provider_function、output_type 与 input_types 定位具体构造链路"
+		}
+	default:
+		return "可先查看 /api/errors 获取最近错误详情，并结合 /api/runtime-stats 定位慢/失败 provider"
+	}
 }
 
 func describeComponent(param any) string {

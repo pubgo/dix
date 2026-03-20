@@ -64,7 +64,8 @@ func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error
 				"fn_type", n.fn.Type().String(),
 				"input_data", reflectValueToString(in),
 				"input_types", reflectTypesToString(n.inputList),
-				"output_type", n.output.typ.String())
+				"output_type", n.output.typ.String(),
+				"hint", "provider 内部发生 panic：建议在 provider 内捕获异常并返回 error；可临时开启 debug 日志查看堆栈")
 		}
 	}()
 

@@ -22,7 +22,7 @@ func (dix *Dix) Provide(param any) {
 	defer func() {
 		if r := recover(); r != nil {
 			err := normalizeRecoveredError(r)
-			logger.Error("provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+			logger.Error("provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("provide", "registration", false))
 			dix.recordRecentErrorWithContext("provide", component, err, recentErrorContext{
 				Stage:     "registration",
 				RootCause: rootCauseMessage(err),
@@ -40,7 +40,7 @@ func (dix *Dix) TryProvide(param any) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = normalizeRecoveredError(r)
-			logger.Warn("try provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+			logger.Warn("try provide failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_provide", "registration", false))
 			dix.recordRecentErrorWithContext("try_provide", component, err, recentErrorContext{
 				Stage:     "registration",
 				RootCause: rootCauseMessage(err),
@@ -57,7 +57,7 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
-		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component)
+		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component, "hint", buildErrorHint("inject", "cycle_check", false))
 		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
 			Stage:     "cycle_check",
 			RootCause: rootCauseMessage(err),
@@ -66,7 +66,7 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 	}
 
 	if err := dix.inject(param, opts...); err != nil {
-		logger.Error("inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+		logger.Error("inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("inject", "inject", false))
 		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
 			Stage:     "inject",
 			RootCause: rootCauseMessage(err),
@@ -82,7 +82,7 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
-		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component)
+		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component, "hint", buildErrorHint("try_inject", "cycle_check", false))
 		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
 			Stage:     "cycle_check",
 			RootCause: rootCauseMessage(err),
@@ -92,7 +92,7 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 
 	err := dix.inject(param, opts...)
 	if err != nil {
-		logger.Warn("try inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err))
+		logger.Warn("try inject failed", "component", component, "error", err, "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_inject", "inject", false))
 		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
 			Stage:     "inject",
 			RootCause: rootCauseMessage(err),
@@ -171,6 +171,7 @@ type RecentError struct {
 	InputTypes         []string      `json:"input_types,omitempty"`
 	Message            string        `json:"message"`
 	RootCause          string        `json:"root_cause,omitempty"`
+	Hint               string        `json:"hint,omitempty"`
 	TimedOut           bool          `json:"timed_out,omitempty"`
 	Duration           time.Duration `json:"duration,omitempty"`
 	Timeout            time.Duration `json:"timeout,omitempty"`
@@ -303,6 +304,7 @@ func (dix *Dix) GetRecentErrors(limit int) []RecentError {
 			InputTypes:         append([]string{}, r.InputTypes...),
 			Message:            r.Message,
 			RootCause:          r.RootCause,
+			Hint:               r.Hint,
 			TimedOut:           r.TimedOut,
 			Duration:           r.Duration,
 			Timeout:            r.Timeout,

@@ -639,6 +639,8 @@
                                     <div class="text-xs text-red-600 break-all" x-text="item.message || ''"></div>
                                     <div class="text-[11px] text-gray-500 break-all mt-1" x-show="item.root_cause"
                                         x-text="`根因: ${item.root_cause}`"></div>
+                                    <div class="text-[11px] text-blue-700 break-all mt-1" x-show="item.hint"
+                                        x-text="`Hint: ${item.hint}`"></div>
                                 </div>
                             </template>
                         </div>
@@ -688,7 +690,7 @@
                 </div>
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                     <input type="text" x-model="diagnosticSearch"
-                        :placeholder="diagnosticModalType === 'runtime' ? '搜索函数名/输出类型/错误信息' : '搜索操作/阶段/组件/函数/类型/根因/错误信息'"
+                        :placeholder="diagnosticModalType === 'runtime' ? '搜索函数名/输出类型/错误信息' : '搜索操作/阶段/组件/函数/类型/根因/Hint/错误信息'"
                         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
                     <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -780,6 +782,8 @@
                                     <div class="text-sm text-red-700 break-all" x-text="item.message || ''"></div>
                                     <div class="text-xs text-gray-700 break-all mt-2" x-show="item.root_cause"
                                         x-text="`根因: ${item.root_cause}`"></div>
+                                    <div class="text-xs text-blue-700 break-all mt-1" x-show="item.hint"
+                                        x-text="`Hint: ${item.hint}`"></div>
                                 </div>
                             </template>
                         </div>
@@ -940,8 +944,9 @@
                         const outType = String(e.output_type || '').toLowerCase();
                         const inputType = String(e.input_type || '').toLowerCase();
                         const root = String(e.root_cause || '').toLowerCase();
+                        const hint = String(e.hint || '').toLowerCase();
                         const msg = String(e.message || '').toLowerCase();
-                        return op.includes(q) || stage.includes(q) || comp.includes(q) || providerFn.includes(q) || outType.includes(q) || inputType.includes(q) || root.includes(q) || msg.includes(q);
+                        return op.includes(q) || stage.includes(q) || comp.includes(q) || providerFn.includes(q) || outType.includes(q) || inputType.includes(q) || root.includes(q) || hint.includes(q) || msg.includes(q);
                     });
                 },
 
