@@ -949,6 +949,11 @@
                                     <input type="checkbox" x-model="traceTreeMode" class="rounded border-gray-300">
                                     树形
                                 </label>
+                                <select x-show="traceTreeMode" x-model="traceIndentMode"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="log">缩进：对数（大项目推荐）</option>
+                                    <option value="linear">缩进：线性（传统）</option>
+                                </select>
                                 <label class="flex items-center gap-1.5 text-xs text-gray-600 shrink-0">
                                     <input type="checkbox" x-model="traceOnlyErrorSpan" class="rounded border-gray-300">
                                     仅错误 span
@@ -1013,7 +1018,7 @@
                                                     :key="`trace-span-${group.traceId}-${item.span_id || idx}-${idx}`">
                                                     <div class="text-xs border rounded p-2"
                                                         :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
-                                                        :style="traceTreeMode ? `margin-left:${Math.min(item._depth || 0, 12) * 16}px` : ''">
+                                                        :style="traceTreeMode ? traceIndentStyle(item) : ''">
                                                         <div class="flex items-center gap-2 flex-wrap mb-1">
                                                             <button x-show="traceTreeMode && item._canToggle"
                                                                 @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
@@ -1042,16 +1047,33 @@
                                                             <span x-text="item.parent_span_id || '-' "></span>
                                                         </div>
                                                         <div class="text-[11px] text-gray-700 break-all"
-                                                            x-show="item.provider_function || item.component">
-                                                            <span
-                                                                x-text="item.provider_function || item.component"></span>
+                                                            x-show="traceProviderLabel(item)">
+                                                            <span x-text="traceProviderLabel(item)"></span>
                                                         </div>
+                                                        <details class="mt-1"
+                                                            x-show="traceProviderFunctions(item).length > 1">
+                                                            <summary
+                                                                class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                                                查看全部 provider 签名
+                                                            </summary>
+                                                            <ul class="mt-1 space-y-0.5">
+                                                                <template
+                                                                    x-for="(fn, fidx) in traceProviderFunctions(item)"
+                                                                    :key="`trace-span-provider-${item.span_id || 'x'}-${fidx}`">
+                                                                    <li class="text-[10px] text-gray-600 break-all"
+                                                                        x-text="fn"></li>
+                                                                </template>
+                                                            </ul>
+                                                        </details>
                                                         <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.output_type"
-                                                            x-text="`output: ${item.output_type}`"></div>
+                                                            x-show="traceOutputType(item)"
+                                                            x-text="`output: ${traceOutputType(item)}`"></div>
                                                         <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.input_type"
-                                                            x-text="`input: ${item.input_type}`"></div>
+                                                            x-show="traceInputType(item)"
+                                                            x-text="`input: ${traceInputType(item)}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="traceTypeMeta(item)" x-text="traceTypeMeta(item)">
+                                                        </div>
                                                         <div class="text-[11px] text-gray-600 break-all"
                                                             x-show="item.duration_ns"
                                                             x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
@@ -1070,7 +1092,7 @@
                                                     :key="`trace-item-${group.traceId}-${item.id || idx}-${idx}`">
                                                     <div class="text-xs border rounded p-2"
                                                         :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
-                                                        :style="traceTreeMode ? `margin-left:${Math.min(item._depth || 0, 12) * 16}px` : ''">
+                                                        :style="traceTreeMode ? traceIndentStyle(item) : ''">
                                                         <div class="flex items-center gap-2 flex-wrap mb-1">
                                                             <button x-show="traceTreeMode && item._canToggle"
                                                                 @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
@@ -1100,16 +1122,33 @@
                                                             <span x-text="item.parent_span_id || '-' "></span>
                                                         </div>
                                                         <div class="text-[11px] text-gray-700 break-all"
-                                                            x-show="item.provider_function || item.component">
-                                                            <span
-                                                                x-text="item.provider_function || item.component"></span>
+                                                            x-show="traceProviderLabel(item)">
+                                                            <span x-text="traceProviderLabel(item)"></span>
                                                         </div>
+                                                        <details class="mt-1"
+                                                            x-show="traceProviderFunctions(item).length > 1">
+                                                            <summary
+                                                                class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                                                查看全部 provider 签名
+                                                            </summary>
+                                                            <ul class="mt-1 space-y-0.5">
+                                                                <template
+                                                                    x-for="(fn, fidx) in traceProviderFunctions(item)"
+                                                                    :key="`trace-event-provider-${item.span_id || 'x'}-${fidx}`">
+                                                                    <li class="text-[10px] text-gray-600 break-all"
+                                                                        x-text="fn"></li>
+                                                                </template>
+                                                            </ul>
+                                                        </details>
                                                         <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.output_type"
-                                                            x-text="`output: ${item.output_type}`"></div>
+                                                            x-show="traceOutputType(item)"
+                                                            x-text="`output: ${traceOutputType(item)}`"></div>
                                                         <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.input_type"
-                                                            x-text="`input: ${item.input_type}`"></div>
+                                                            x-show="traceInputType(item)"
+                                                            x-text="`input: ${traceInputType(item)}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="traceTypeMeta(item)" x-text="traceTypeMeta(item)">
+                                                        </div>
                                                         <div class="text-[11px] text-gray-600 break-all"
                                                             x-show="item.error" x-text="`error: ${item.error}`"></div>
                                                         <div class="text-[11px] text-gray-600 break-all"
@@ -1239,6 +1278,7 @@
                 traceStatus: '',
                 traceEvent: '',
                 traceTreeMode: true,
+                traceIndentMode: 'log',
                 traceViewMode: 'span',
                 traceOnlyErrorSpan: false,
                 traceCollapsedSpanKeys: {},
@@ -1418,12 +1458,6 @@
                 get traceGroups() {
                     const map = new Map();
                     (this.filteredModalTraceRecords || []).forEach(item => {
-                        const op = String(item.operation || '').trim();
-                        const isAggregateInput = !!(item.attrs && item.attrs.aggregate_input === true);
-                        if (isAggregateInput && (op === 'inject.param' || op === 'provider.input')) {
-                            return;
-                        }
-
                         const traceId = item.trace_id || '';
                         if (!map.has(traceId)) {
                             map.set(traceId, {
@@ -1573,7 +1607,7 @@
                                 parent_span_id: parentSid,
                                 operation: startRec.operation || '',
                                 component: startRec.component || '',
-                                provider_function: startRec.provider_function || '',
+                                provider_function: startRec.provider_function || (startRec.attrs && (startRec.attrs.provider_function || startRec.attrs.provider_candidates || startRec.attrs.provider)) || '',
                                 output_type: startRec.output_type || '',
                                 input_type: startRec.input_type || '',
                                 status: String(status || '').toLowerCase() || 'ok',
@@ -1590,6 +1624,7 @@
                             g.spanRows = g.spanRows.filter((row) => row.status === 'error');
                         }
 
+                        // 保持链路内部按发生时间，避免打散树形阅读顺序
                         g.spanRows.sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
 
                         const isCollapsed = (traceId, sid) => !!this.traceCollapsedSpanKeys[this.traceSpanKey(traceId, sid)];
@@ -1634,7 +1669,13 @@
                             return true;
                         });
                     });
+                    // 按每条 trace 的 span 数量倒序；数量相同再按最近时间倒序
                     groups.sort((a, b) => {
+                        const as = Array.isArray(a.spanRows) ? a.spanRows.length : 0;
+                        const bs = Array.isArray(b.spanRows) ? b.spanRows.length : 0;
+                        if (as !== bs) {
+                            return bs - as;
+                        }
                         const at = a.records.length ? Number(a.records[a.records.length - 1].occurred_at_unix_nano || 0) : 0;
                         const bt = b.records.length ? Number(b.records[b.records.length - 1].occurred_at_unix_nano || 0) : 0;
                         return bt - at;
@@ -1830,6 +1871,120 @@
 
                 refreshTraceFromModal() {
                     this.loadTraceRecords();
+                },
+
+                traceProviderLabel(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+
+                    const direct = String(item.provider_function || '').trim();
+                    if (direct) {
+                        return direct;
+                    }
+
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const providerList = Array.isArray(attrs.provider_functions)
+                        ? attrs.provider_functions.map((v) => String(v || '').trim()).filter((v) => v.length > 0)
+                        : [];
+                    if (providerList.length > 1) {
+                        return `${providerList[0]} (+${providerList.length - 1} more)`;
+                    }
+                    if (providerList.length === 1) {
+                        return providerList[0];
+                    }
+
+                    const fromAttrs = [attrs.provider_function, attrs.provider_candidates, attrs.provider]
+                        .map((v) => String(v || '').trim())
+                        .find((v) => v.length > 0);
+                    if (fromAttrs) {
+                        return fromAttrs;
+                    }
+
+                    return String(item.component || '').trim();
+                },
+
+                traceProviderFunctions(item) {
+                    if (!item || typeof item !== 'object') {
+                        return [];
+                    }
+
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const list = Array.isArray(attrs.provider_functions)
+                        ? attrs.provider_functions.map((v) => String(v || '').trim()).filter((v) => v.length > 0)
+                        : [];
+                    if (list.length > 0) {
+                        return list;
+                    }
+
+                    const fromCandidates = String(attrs.provider_candidates || '').trim();
+                    if (fromCandidates) {
+                        return fromCandidates.split(',').map((v) => v.trim()).filter((v) => v.length > 0);
+                    }
+
+                    const single = this.traceProviderLabel(item);
+                    return single ? [single] : [];
+                },
+
+                traceInputType(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    if (String(item.input_type || '').trim()) {
+                        return String(item.input_type || '').trim();
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const declared = String(attrs.input_type || '').trim();
+                    const resolved = String(attrs.resolved_input_type || '').trim();
+                    if (declared) {
+                        return resolved && resolved !== declared ? `${declared} (resolved: ${resolved})` : declared;
+                    }
+                    return '';
+                },
+
+                traceOutputType(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    if (String(item.output_type || '').trim()) {
+                        return String(item.output_type || '').trim();
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    return String(attrs.output_type || '').trim();
+                },
+
+                traceTypeMeta(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const parts = [];
+                    const queryKind = String(attrs.query_kind || '').trim();
+                    if (queryKind) {
+                        parts.push(`query_kind: ${queryKind}`);
+                    }
+                    if (attrs.index !== undefined && attrs.index !== null && String(attrs.index) !== '') {
+                        parts.push(`index: ${attrs.index}`);
+                    }
+                    if (attrs.aggregate_input === true) {
+                        parts.push('aggregate_input: true');
+                    }
+                    return parts.join(' · ');
+                },
+
+                traceIndentStyle(item) {
+                    const depth = Math.max(0, Number((item && item._depth) || 0));
+                    const mode = String(this.traceIndentMode || 'log');
+
+                    // 线性模式：保留传统层级感
+                    if (mode === 'linear') {
+                        const px = Math.min(depth, 64) * 16;
+                        return `margin-left:${px}px`;
+                    }
+
+                    // 对数模式：深链路不会横向爆炸，适合大型项目
+                    const px = Math.round(Math.log2(depth + 1) * 42);
+                    return `margin-left:${px}px`;
                 },
 
                 traceSpanKey(traceId, spanId) {

@@ -751,14 +751,33 @@ func (dix *Dix) getValue(ctx context.Context, typ reflect.Type, opt Options, isM
 	// Otherwise, resolve from providers
 	logDITrace("resolve.value.search_provider.start", "type", typ.String(), "query_kind", dependencyQueryKind(isMap, isList))
 	resultPath = "provider_lookup"
+	providerFunctions := dix.getProviderStack(typ)
+	providerCandidates := strings.Join(providerFunctions, ", ")
+	providerPreview := ""
+	switch len(providerFunctions) {
+	case 0:
+		providerPreview = ""
+	case 1:
+		providerPreview = providerFunctions[0]
+	default:
+		providerPreview = fmt.Sprintf("%s (+%d more)", providerFunctions[0], len(providerFunctions)-1)
+	}
 	providerCtx, providerSpan := dixtrace.BeginSpanCtx(ctx, "resolve.provider", typ.String(),
 		"type", typ.String(),
 		"query_kind", dependencyQueryKind(isMap, isList),
+		"provider_function", providerPreview,
+		"provider_functions", providerFunctions,
+		"provider_candidates", providerCandidates,
+		"provider_count", len(dix.providers[typ]),
 	)
 	valMap, err := dix.getOutputTypeValues(providerCtx, typ, opt)
 	providerSpan.End(err,
 		"type", typ.String(),
 		"query_kind", dependencyQueryKind(isMap, isList),
+		"provider_function", providerPreview,
+		"provider_functions", providerFunctions,
+		"provider_candidates", providerCandidates,
+		"provider_count", len(dix.providers[typ]),
 	)
 	if err != nil {
 		logDITrace("resolve.value.search_provider.failed", "type", typ.String(), "error", err)
@@ -876,11 +895,14 @@ func (dix *Dix) injectFunc(ctx context.Context, fnVal reflect.Value, opt Options
 	for i := 0; i < fnType.NumIn(); i++ {
 		inType := fnType.In(i)
 		inputTypeInfo := dix.analyzeInputType(inType)
+		declaredInputType := inType.String()
+		resolvedInputType := inputTypeInfo.typ.String()
 		var val reflect.Value
-		paramCtx, paramSpan := dixtrace.BeginSpanCtx(ctx, "inject.param", inputTypeInfo.typ.String(),
+		paramCtx, paramSpan := dixtrace.BeginSpanCtx(ctx, "inject.param", declaredInputType,
 			"function", traceFnName,
 			"index", i,
-			"input_type", inputTypeInfo.typ.String(),
+			"input_type", declaredInputType,
+			"resolved_input_type", resolvedInputType,
 			"aggregate_input", inputTypeInfo.isStruct,
 			"query_kind", dependencyQueryKind(inputTypeInfo.isMap, inputTypeInfo.isList),
 		)
@@ -888,23 +910,25 @@ func (dix *Dix) injectFunc(ctx context.Context, fnVal reflect.Value, opt Options
 			logDITrace("inject.func.resolve_input.start",
 				"function", traceFnName,
 				"index", i,
-				"input_type", inputTypeInfo.typ.String(),
+				"input_type", declaredInputType,
+				"resolved_input_type", resolvedInputType,
 				"query_kind", dependencyQueryKind(inputTypeInfo.isMap, inputTypeInfo.isList),
 			)
 
 			var innerErr error
 			val, innerErr = dix.getValue(paramCtx, inputTypeInfo.typ, opt, inputTypeInfo.isMap, inputTypeInfo.isList, fnType)
 			if innerErr != nil {
-				logDITrace("inject.func.resolve_input.failed", "function", traceFnName, "index", i, "input_type", inputTypeInfo.typ.String(), "error", innerErr)
+				logDITrace("inject.func.resolve_input.failed", "function", traceFnName, "index", i, "input_type", declaredInputType, "resolved_input_type", resolvedInputType, "error", innerErr)
 				return innerErr
 			}
-			logDITrace("inject.func.resolve_input.done", "function", traceFnName, "index", i, "input_type", inputTypeInfo.typ.String())
+			logDITrace("inject.func.resolve_input.done", "function", traceFnName, "index", i, "input_type", declaredInputType, "resolved_input_type", resolvedInputType)
 			return nil
 		}()
 		paramSpan.End(err,
 			"function", traceFnName,
 			"index", i,
-			"input_type", inputTypeInfo.typ.String(),
+			"input_type", declaredInputType,
+			"resolved_input_type", resolvedInputType,
 			"aggregate_input", inputTypeInfo.isStruct,
 			"query_kind", dependencyQueryKind(inputTypeInfo.isMap, inputTypeInfo.isList),
 		)

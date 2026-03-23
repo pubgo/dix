@@ -23,54 +23,6 @@ func TestMemorySinkQuery(t *testing.T) {
 	}
 }
 
-func TestDetachedSpanDoesNotBecomeParentOfNestedSpan(t *testing.T) {
-	ResetForTest()
-
-	ctx, root := BeginSpanCtx(context.Background(), "inject", "comp")
-	err := RunDetachedSpanCtx(ctx, "inject.param", "arg0", func() error {
-		_, inner := BeginSpanCtx(ctx, "resolve.value", "dep")
-		inner.End(nil)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	root.End(nil)
-
-	result := QueryEvents(Query{Limit: 2000})
-	if result.Total == 0 {
-		t.Fatal("expected trace events")
-	}
-
-	var injectStart, paramStart, resolveStart Event
-	for _, rec := range result.Records {
-		if rec.Event != "span.start" {
-			continue
-		}
-		switch rec.Operation {
-		case "inject":
-			injectStart = rec
-		case "inject.param":
-			paramStart = rec
-		case "resolve.value":
-			resolveStart = rec
-		}
-	}
-
-	if injectStart.SpanID == "" || paramStart.SpanID == "" || resolveStart.SpanID == "" {
-		t.Fatalf("missing expected span starts: inject=%q param=%q resolve=%q", injectStart.SpanID, paramStart.SpanID, resolveStart.SpanID)
-	}
-	if paramStart.ParentSpanID != injectStart.SpanID {
-		t.Fatalf("expected inject.param parent=%s, got %s", injectStart.SpanID, paramStart.ParentSpanID)
-	}
-	if resolveStart.ParentSpanID != injectStart.SpanID {
-		t.Fatalf("expected resolve.value parent=%s, got %s", injectStart.SpanID, resolveStart.ParentSpanID)
-	}
-	if resolveStart.ParentSpanID == paramStart.SpanID {
-		t.Fatalf("resolve.value must not be nested under inject.param")
-	}
-}
-
 func TestBeginSpanCtxPropagatesAcrossGoroutine(t *testing.T) {
 	ResetForTest()
 
@@ -112,5 +64,50 @@ func TestBeginSpanCtxPropagatesAcrossGoroutine(t *testing.T) {
 	}
 	if resolveStart.TraceID != injectStart.TraceID {
 		t.Fatalf("expected same trace id, inject=%s resolve=%s", injectStart.TraceID, resolveStart.TraceID)
+	}
+}
+
+func TestTraceIDSequenceOnlyIncrementsOnRootSpan(t *testing.T) {
+	ResetForTest()
+
+	ctx, root := BeginSpanCtx(context.Background(), "root", "comp")
+	_, child := BeginSpanCtx(ctx, "child", "comp")
+	child.End(nil)
+	root.End(nil)
+
+	_, anotherRoot := BeginSpanCtx(context.Background(), "another.root", "comp")
+	anotherRoot.End(nil)
+
+	result := QueryEvents(Query{Event: "span.start", Limit: 2000})
+	if result.Total == 0 {
+		t.Fatal("expected span.start events")
+	}
+
+	var rootStart, childStart, anotherRootStart Event
+	for _, rec := range result.Records {
+		if rec.Event != "span.start" {
+			continue
+		}
+		switch rec.Operation {
+		case "root":
+			rootStart = rec
+		case "child":
+			childStart = rec
+		case "another.root":
+			anotherRootStart = rec
+		}
+	}
+
+	if rootStart.TraceID == "" || childStart.TraceID == "" || anotherRootStart.TraceID == "" {
+		t.Fatalf("missing spans: root=%q child=%q another=%q", rootStart.TraceID, childStart.TraceID, anotherRootStart.TraceID)
+	}
+	if rootStart.TraceID != "t-1" {
+		t.Fatalf("expected root trace id t-1, got %s", rootStart.TraceID)
+	}
+	if childStart.TraceID != rootStart.TraceID {
+		t.Fatalf("child should keep parent trace id, child=%s root=%s", childStart.TraceID, rootStart.TraceID)
+	}
+	if anotherRootStart.TraceID != "t-2" {
+		t.Fatalf("expected next root trace id t-2, got %s", anotherRootStart.TraceID)
 	}
 }

@@ -110,66 +110,6 @@ func resolveCurrentParentFrame(ctx context.Context) (spanFrame, bool) {
 	return spanFrame{}, false
 }
 
-// RunDetachedSpan records a child span under current span, but does NOT push it into span stack.
-// Nested operations executed in fn keep using the current parent span, suitable for sibling metrics.
-func RunDetachedSpan(operation, component string, fn func() error, args ...any) error {
-	return RunDetachedSpanCtx(context.Background(), operation, component, fn, args...)
-}
-
-// RunDetachedSpanCtx records a child span using context as primary parent source.
-// It does NOT push this span into stack, so nested spans in fn still use current parent span.
-func RunDetachedSpanCtx(ctx context.Context, operation, component string, fn func() error, args ...any) error {
-	startedAt := time.Now().UnixNano()
-	cur, ok := resolveCurrentParentFrame(ctx)
-
-	traceID := nextTraceID()
-	parentSpanID := ""
-	if ok {
-		traceID = cur.TraceID
-		parentSpanID = cur.SpanID
-	}
-
-	spanID := nextSpanID()
-	attrs := TraceToAttrs(args...)
-	Emit(Event{
-		TraceID:      traceID,
-		SpanID:       spanID,
-		ParentSpanID: parentSpanID,
-		Operation:    strings.TrimSpace(operation),
-		Phase:        "start",
-		Event:        "span.start",
-		Status:       "start",
-		Component:    strings.TrimSpace(component),
-		OccurredAt:   startedAt,
-		Attrs:        attrs,
-	})
-
-	err := fn()
-	status := "ok"
-	errMsg := ""
-	if err != nil {
-		status = "error"
-		errMsg = err.Error()
-	}
-
-	Emit(Event{
-		TraceID:      traceID,
-		SpanID:       spanID,
-		ParentSpanID: parentSpanID,
-		Operation:    strings.TrimSpace(operation),
-		Phase:        "end",
-		Event:        "span.end",
-		Status:       status,
-		Component:    strings.TrimSpace(component),
-		Error:        errMsg,
-		DurationNs:   time.Now().UnixNano() - startedAt,
-		OccurredAt:   time.Now().UnixNano(),
-		Attrs:        attrs,
-	})
-
-	return err
-}
-
 func (s *Span) IDs() (traceID, spanID, parentSpanID string) {
 	if s == nil {
 		return "", "", ""
@@ -234,11 +174,13 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 	}
 	parent, hasParent := resolveCurrentParentFrame(ctx)
 
-	traceID := nextTraceID()
+	traceID := ""
 	parentSpanID := ""
 	if hasParent {
 		traceID = parent.TraceID
 		parentSpanID = parent.SpanID
+	} else {
+		traceID = nextTraceID()
 	}
 
 	span := &Span{
@@ -391,7 +333,7 @@ func (f *FileSink) ensureFile() *os.File {
 	if dir != "." && dir != "" {
 		_ = os.MkdirAll(dir, 0o755)
 	}
-	fd, err := os.OpenFile(f.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	fd, err := os.OpenFile(f.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return nil
 	}
@@ -448,19 +390,6 @@ func parseInt64(v any) int64 {
 	}
 	n, _ := strconv.ParseInt(s, 10, 64)
 	return n
-}
-
-func parseBool(v any) bool {
-	if b, ok := v.(bool); ok {
-		return b
-	}
-	s := strings.ToLower(parseString(v))
-	switch s {
-	case "1", "true", "yes", "on", "y":
-		return true
-	default:
-		return false
-	}
 }
 
 func matches(rec Event, q Query) bool {
