@@ -56,6 +56,7 @@
         <header class="bg-gradient-to-r from-primary-500 to-purple-600 text-white px-6 py-4 shadow-lg flex-shrink-0">
             <div class="flex items-center justify-between">
                 <div>
+
                     <h1 class="text-xl font-semibold flex items-center gap-2">
                         <span>🔗</span> Dix 依赖关系可视化
                     </h1>
@@ -467,6 +468,10 @@
                                 class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🔍</span> 查看依赖关系图
                             </button>
+                            <button @click="openProviderDetailModal(selectedNode)"
+                                class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2">
+                                <span>🪟</span> 弹窗查看完整详情
+                            </button>
                         </div>
                     </template>
                     <!-- Type Detail -->
@@ -553,6 +558,114 @@
                 </div>
             </aside>
         </div>
+        <!-- Provider Detail Modal -->
+        <div x-show="providerDetailModalOpen" x-cloak
+            class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            @keydown.escape.window="providerDetailModalOpen = false">
+            <div
+                class="bg-white text-gray-900 w-[92vw] max-w-4xl h-[84vh] rounded-xl shadow-2xl flex flex-col border border-gray-300">
+                <div class="px-4 py-3 border-b border-gray-300 bg-gray-50 flex items-center justify-between">
+                    <div class="font-semibold text-gray-900">🪟 Provider 详细信息</div>
+                    <button @click="providerDetailModalOpen = false"
+                        class="px-2 py-1 text-xs text-gray-700 border border-gray-400 rounded-md hover:bg-white">
+                        关闭
+                    </button>
+                </div>
+
+                <div class="flex-1 overflow-auto p-4" x-show="providerModalNode && providerModalNode.data">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="border border-gray-300 rounded-lg p-3 bg-white">
+                            <div class="text-xs font-semibold text-gray-700 uppercase mb-2">节点信息</div>
+                            <div class="text-sm text-gray-900 break-all"
+                                x-text="providerModalNode.data.function_name || ''"></div>
+                            <div class="text-xs text-gray-700 mt-1 break-all"
+                                x-text="providerModalNode.data.output_type || ''"></div>
+                            <div class="text-xs text-gray-700 mt-1 break-all"
+                                x-show="providerModalNode.data.function_pkg"
+                                x-text="`函数包: ${providerModalNode.data.function_pkg}`"></div>
+                            <div class="text-xs text-gray-700 mt-1 break-all"
+                                x-show="providerModalNode.data.function_file"
+                                x-text="`位置: ${providerModalNode.data.function_file}:${providerModalNode.data.function_line || 0}`">
+                            </div>
+                            <div class="mt-2" x-show="(providerModalNode.data.input_types || []).length">
+                                <div class="text-xs text-gray-700 mb-1">输入类型</div>
+                                <ul class="space-y-1 max-h-44 overflow-y-auto">
+                                    <template x-for="(it, idx) in (providerModalNode.data.input_types || [])"
+                                        :key="`modal-in-${idx}-${it}`">
+                                        <li class="px-2 py-1 text-xs bg-gray-100 text-gray-900 rounded break-all"
+                                            x-text="it"></li>
+                                    </template>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="border border-gray-300 rounded-lg p-3 bg-white">
+                            <div class="text-xs font-semibold text-gray-700 uppercase mb-2">运行时状态</div>
+                            <template x-if="getRuntimeStatForProvider(providerModalNode.data)">
+                                <div class="space-y-1 text-xs text-gray-800">
+                                    <div>总耗时：<span class="font-semibold"
+                                            x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).total_duration)"></span>
+                                    </div>
+                                    <div>平均耗时：<span class="font-semibold"
+                                            x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).average_duration)"></span>
+                                    </div>
+                                    <div>最后一次：<span class="font-semibold"
+                                            x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).last_duration)"></span>
+                                    </div>
+                                    <div>调用次数：<span class="font-semibold"
+                                            x-text="getRuntimeStatForProvider(providerModalNode.data).call_count"></span>
+                                    </div>
+                                    <div x-show="getRuntimeStatForProvider(providerModalNode.data).last_error"
+                                        class="text-red-700 break-all font-medium">
+                                        最近错误：<span
+                                            x-text="getRuntimeStatForProvider(providerModalNode.data).last_error"></span>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="!getRuntimeStatForProvider(providerModalNode.data)">
+                                <div class="text-xs text-gray-500">暂无运行时数据</div>
+                            </template>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 border rounded-lg p-3"
+                        :class="providerModalError() ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'">
+                        <div class="text-xs font-semibold text-gray-700 uppercase mb-2">错误信息</div>
+                        <template x-if="providerModalError()">
+                            <div>
+                                <div class="text-sm text-red-800 font-semibold break-all"
+                                    x-text="providerModalError().message || '未知错误'"></div>
+                                <div class="mt-2 space-y-1 text-xs text-gray-800">
+                                    <div x-show="providerModalError().error_type"
+                                        x-text="`类型: ${providerModalError().error_type}`"></div>
+                                    <div x-show="providerModalError().stage"
+                                        x-text="`阶段: ${providerModalError().stage}`"></div>
+                                    <div x-show="providerModalError().operation"
+                                        x-text="`操作: ${providerModalError().operation}`"></div>
+                                    <div x-show="providerModalError().root_cause"
+                                        x-text="`根因: ${providerModalError().root_cause}`"></div>
+                                    <div x-show="providerModalError().hint" class="text-blue-800"
+                                        x-text="`Hint: ${providerModalError().hint}`"></div>
+                                    <div x-show="providerModalError().occurred_at_unix_nano"
+                                        x-text="`时间: ${formatErrorTime(providerModalError().occurred_at_unix_nano)}`">
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="!providerModalError()">
+                            <div class="text-xs text-gray-500">该 Provider 暂无最近错误事件</div>
+                        </template>
+                    </div>
+
+                    <details class="mt-4">
+                        <summary class="text-xs text-gray-700 cursor-pointer">展开原始节点数据（JSON）</summary>
+                        <pre class="mt-2 p-2 text-[11px] leading-relaxed bg-gray-50 text-gray-900 border border-gray-300 rounded whitespace-pre-wrap break-all"
+                            x-text="providerPrettyJson(providerModalNode)"></pre>
+                    </details>
+                </div>
+            </div>
+        </div>
+
         <!-- Diagnostics Modal -->
         <div x-show="diagnosticModalOpen" x-cloak
             class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
@@ -944,6 +1057,8 @@
                 diagnosticModalOpen: false,
                 diagnosticModalType: 'runtime',
                 diagnosticSearch: '',
+                providerDetailModalOpen: false,
+                providerModalNode: null,
 
                 // Computed
                 get filteredPackages() {
@@ -1192,6 +1307,29 @@
                 refreshDiagFromModal() {
                     this.diagSearch = this.diagnosticSearch || '';
                     this.loadDiagFileRecords();
+                },
+
+                openProviderDetailModal(node) {
+                    if (!node || !node.data || node.data.type !== 'provider') {
+                        return;
+                    }
+                    this.providerModalNode = node;
+                    this.providerDetailModalOpen = true;
+                },
+
+                providerModalError() {
+                    if (!this.providerModalNode || !this.providerModalNode.data) {
+                        return null;
+                    }
+                    return this.getProviderErrorFor(this.providerModalNode.data);
+                },
+
+                providerPrettyJson(node) {
+                    try {
+                        return JSON.stringify(node || {}, null, 2);
+                    } catch (e) {
+                        return String(node || '');
+                    }
                 },
 
                 diagPayloadValue(item, key) {
@@ -1659,6 +1797,9 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
 
@@ -1817,6 +1958,9 @@
                             const nodeId = params.nodes[0];
                             const node = data.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
 
@@ -1954,6 +2098,9 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
 
@@ -2087,6 +2234,9 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
                 },
