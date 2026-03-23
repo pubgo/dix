@@ -17,6 +17,7 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
 - ⏱️ **Startup Runtime Stats** - Show all providers' startup durations (total/avg/last, call count), with executed-only filter (`call_count > 0`)
 - 🗂 **Diagnostic File Query** - When `DIX_DIAG_FILE` is set, UI can query and display `trace/error/llm` JSONL records for troubleshooting
+- 🧵 **Trace Timeline Query** - Query unified in-memory trace events from `dixtrace` via `/api/trace` (with rich filters)
 - 📡 **RESTful API** - Provide JSON format dependency data
 - 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
@@ -315,6 +316,36 @@ If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty record
       "fields": {
         "provider": "github.com/acme/app.main.NewDB"
       }
+    }
+  ]
+}
+```
+
+### GET `/api/trace?operation=provider&status=error&limit=200`
+Returns in-memory unified trace events from `dixtrace`.
+
+Supported filters:
+
+- `trace_id`, `operation`, `status`, `event`, `component`, `provider`, `output_type`, `q`
+- `limit`, `before_id`, `since_unix_nano`, `until_unix_nano`
+
+```json
+{
+  "enabled": true,
+  "total": 2,
+  "returned": 2,
+  "records": [
+    {
+      "id": 102,
+      "operation": "provider",
+      "phase": "call.failed",
+      "event": "provider.call.failed",
+      "status": "error",
+      "provider_function": "github.com/acme/app.main.NewDB",
+      "output_type": "*db.Client",
+      "error": "dial tcp timeout",
+      "timed_out": true,
+      "occurred_at_unix_nano": 1700000000000000000
     }
   ]
 }

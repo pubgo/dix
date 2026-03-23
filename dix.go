@@ -1,6 +1,7 @@
 package dix
 
 import (
+	"context"
 	_ "embed"
 	"log/slog"
 	"reflect"
@@ -45,6 +46,17 @@ func Inject[T any](di *Dix, data T, opts ...Option) T {
 	return data
 }
 
+func InjectContext[T any](ctx context.Context, di *Dix, data T, opts ...Option) T {
+	vp := reflect.ValueOf(data)
+	if vp.Kind() == reflect.Struct {
+		_ = di.InjectContext(ctx, &data, opts...)
+	} else {
+		_ = di.InjectContext(ctx, data, opts...)
+	}
+
+	return data
+}
+
 func InjectT[T any](di *Dix, opts ...Option) T {
 	var data T
 	if reflect.TypeOf(data).Kind() != reflect.Struct {
@@ -52,6 +64,16 @@ func InjectT[T any](di *Dix, opts ...Option) T {
 	}
 
 	_ = di.Inject(&data, opts...)
+	return data
+}
+
+func InjectTContext[T any](ctx context.Context, di *Dix, opts ...Option) T {
+	var data T
+	if reflect.TypeOf(data).Kind() != reflect.Struct {
+		panic("<T> type kind is not struct")
+	}
+
+	_ = di.InjectContext(ctx, &data, opts...)
 	return data
 }
 

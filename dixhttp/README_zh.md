@@ -16,6 +16,7 @@
 - 🔎 **前缀过滤** - 只显示匹配前缀的节点/Provider
 - 🧭 **组内子图** - 查看组内及上下游依赖
 - 🗂 **诊断文件查询** - 配置 `DIX_DIAG_FILE` 后，页面可查询并展示 `trace/error/llm` JSONL 记录
+- 🧵 **Trace 时间线查询** - 通过 `/api/trace` 查询 `dixtrace` 内存统一事件（支持多维过滤）
 - 📡 **RESTful API** - 提供 JSON 格式的依赖关系数据
 - 🧩 **Mermaid 预览/导出** - 将当前图生成 Mermaid 流程图（支持分组/过滤）
 
@@ -330,6 +331,36 @@ dixhttp.RegisterGroupRules(
       "fields": {
         "provider": "github.com/acme/app.main.NewDB"
       }
+    }
+  ]
+}
+```
+
+### GET `/api/trace?operation=provider&status=error&limit=200`
+返回来自 `dixtrace` 的内存统一 trace 事件。
+
+支持过滤参数：
+
+- `trace_id`, `operation`, `status`, `event`, `component`, `provider`, `output_type`, `q`
+- `limit`, `before_id`, `since_unix_nano`, `until_unix_nano`
+
+```json
+{
+  "enabled": true,
+  "total": 2,
+  "returned": 2,
+  "records": [
+    {
+      "id": 102,
+      "operation": "provider",
+      "phase": "call.failed",
+      "event": "provider.call.failed",
+      "status": "error",
+      "provider_function": "github.com/acme/app.main.NewDB",
+      "output_type": "*db.Client",
+      "error": "dial tcp timeout",
+      "timed_out": true,
+      "occurred_at_unix_nano": 1700000000000000000
     }
   ]
 }

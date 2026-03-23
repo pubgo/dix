@@ -90,6 +90,11 @@
                             <span class="text-xs" :class="diagEnabled ? 'text-green-600' : 'text-orange-500'"
                                 x-text="diagEnabled ? '已启用' : '未启用'"></span>
                         </button>
+                        <button @click="openDiagnosticModal('trace'); open=false"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                            <span>🧵 调用链 Trace</span>
+                            <span class="text-xs text-gray-400" x-text="traceRecords.length"></span>
+                        </button>
                         <button @click="openDiagnosticModal('error-guide'); open=false"
                             class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-100">
                             🧭 错误类型说明
@@ -676,7 +681,10 @@
                             ? '⏱ Provider 启动耗时（大视图）'
                             : (diagnosticModalType === 'errors'
                                 ? '🚨 最近注入错误（大视图）'
-                                : (diagnosticModalType === 'diag' ? '🗂 诊断文件记录（大视图）' : '🧭 错误类型说明（大视图）'))"></div>
+                                : (diagnosticModalType === 'diag'
+                                    ? '🗂 诊断文件记录（大视图）'
+                                    : (diagnosticModalType === 'trace' ? '🧵 调用链 Trace（大视图）' : '🧭 错误类型说明（大视图）'))) ">
+                    </div>
                     <button @click="diagnosticModalOpen = false"
                         class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                         关闭
@@ -688,7 +696,9 @@
                             ? '搜索函数名/输出类型/错误信息'
                             : (diagnosticModalType === 'errors'
                                 ? '搜索操作/错误类型/阶段/组件/函数/类型/根因/Hint/错误信息'
-                                : (diagnosticModalType === 'diag' ? '搜索 kind/event/fields/payload' : '搜索错误类型/说明/定位建议'))"
+                                : (diagnosticModalType === 'diag'
+                                    ? '搜索 kind/event/fields/payload'
+                                    : (diagnosticModalType === 'trace' ? '搜索 trace_id/span/event/operation/provider/component' : '搜索错误类型/说明/定位建议')))"
                         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
                     <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -704,6 +714,11 @@
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
                         :disabled="diagLoading || !diagEnabled">
                         <span x-text="diagLoading ? '刷新中...' : '刷新诊断'"></span>
+                    </button>
+                    <button x-show="diagnosticModalType === 'trace'" @click="refreshTraceFromModal()"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                        :disabled="traceLoading">
+                        <span x-text="traceLoading ? '刷新中...' : '刷新 Trace'"></span>
                     </button>
                     <button x-show="diagnosticModalType === 'error-guide'" @click="diagnosticSearch = ''"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
@@ -901,6 +916,213 @@
                             </template>
                         </div>
                     </template>
+
+                    <template x-if="diagnosticModalType === 'trace'">
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2">
+                                <select x-model="traceViewMode"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="span">按 Span 汇总</option>
+                                    <option value="event">原始事件</option>
+                                </select>
+                                <select x-model="traceOperation"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">全部 operation</option>
+                                    <option value="inject">inject</option>
+                                    <option value="inject.func">inject.func</option>
+                                    <option value="resolve.value">resolve.value</option>
+                                    <option value="resolve.type">resolve.type</option>
+                                    <option value="provider.execute">provider.execute</option>
+                                </select>
+                                <select x-model="traceStatus"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">全部状态</option>
+                                    <option value="start">start</option>
+                                    <option value="ok">ok</option>
+                                    <option value="error">error</option>
+                                </select>
+                                <input type="text" x-model="traceEvent" placeholder="事件过滤（event）"
+                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                <label class="flex items-center gap-1.5 text-xs text-gray-600 shrink-0">
+                                    <input type="checkbox" x-model="traceTreeMode" class="rounded border-gray-300">
+                                    树形
+                                </label>
+                                <label class="flex items-center gap-1.5 text-xs text-gray-600 shrink-0">
+                                    <input type="checkbox" x-model="traceOnlyErrorSpan" class="rounded border-gray-300">
+                                    仅错误 span
+                                </label>
+                                <button x-show="traceTreeMode" @click="expandAllTraceSpans()"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                                    全部展开
+                                </button>
+                                <button @click="collapseAllTraceGroups()"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                                    折叠全部 Trace
+                                </button>
+                                <button @click="expandAllTraceGroups()"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                                    展开全部 Trace
+                                </button>
+                                <button @click="refreshTraceFromModal()"
+                                    class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                                    :disabled="traceLoading">应用过滤</button>
+                            </div>
+
+                            <div class="text-xs text-gray-500"
+                                x-text="traceViewMode === 'span'
+                                    ? `共 ${traceRecords.length} 条事件，汇总 ${traceSpanTotal} 个 span，链路 ${traceGroups.length} 条`
+                                    : `共 ${traceRecords.length} 条，过滤后 ${filteredModalTraceRecords.length} 条，链路 ${traceGroups.length} 条`">
+                            </div>
+                            <div class="text-xs text-red-500" x-show="traceError" x-text="traceError"></div>
+
+                            <template x-if="filteredModalTraceRecords.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配 Trace 记录
+                                </div>
+                            </template>
+
+                            <template x-for="(group, gIdx) in traceGroups"
+                                :key="`trace-group-${group.traceId || gIdx}`">
+                                <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                                    <div class="flex items-center justify-between gap-2 mb-2">
+                                        <div class="min-w-0">
+                                            <div class="text-xs text-gray-500">trace_id</div>
+                                            <div class="text-sm font-semibold text-gray-800 break-all"
+                                                x-text="group.traceId || '(missing-trace-id)'"></div>
+                                            <div class="mt-1 text-[11px] text-gray-600 break-all"
+                                                x-show="group.injectFunction"
+                                                x-text="`inject: ${group.injectFunction}`"></div>
+                                        </div>
+                                        <div class="text-right text-xs text-gray-500 shrink-0">
+                                            <button @click="toggleTraceGroupCollapse(group.traceId)"
+                                                class="mb-1 px-1.5 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                :title="isTraceGroupCollapsed(group.traceId) ? '展开该 trace' : '折叠该 trace'"
+                                                x-text="isTraceGroupCollapsed(group.traceId) ? '▸ 展开' : '▾ 折叠'"></button>
+                                            <div x-text="`${group.total} events`"></div>
+                                            <div x-text="`errors: ${group.errorCount}`"></div>
+                                        </div>
+                                    </div>
+
+                                    <div x-show="!isTraceGroupCollapsed(group.traceId)"
+                                        class="space-y-1.5 max-h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50/50">
+                                        <template x-if="traceViewMode === 'span'">
+                                            <div class="space-y-1.5">
+                                                <template
+                                                    x-for="(item, idx) in (traceTreeMode ? group.visibleSpanRows : group.spanRows)"
+                                                    :key="`trace-span-${group.traceId}-${item.span_id || idx}-${idx}`">
+                                                    <div class="text-xs border rounded p-2"
+                                                        :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
+                                                        :style="traceTreeMode ? `margin-left:${Math.min(item._depth || 0, 12) * 16}px` : ''">
+                                                        <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                            <button x-show="traceTreeMode && item._canToggle"
+                                                                @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
+                                                                class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                                :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
+                                                                x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
+                                                            <span x-show="traceTreeMode"
+                                                                class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                                                                x-text="`L${item._depth || 0}`"></span>
+                                                            <span
+                                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
+                                                                x-text="item.operation || '-' "></span>
+                                                            <span
+                                                                class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                                :class="item.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
+                                                                x-text="item.status || 'ok'"></span>
+                                                            <span class="text-[10px] text-gray-500"
+                                                                x-text="`events:${item.event_count || 0}`"></span>
+                                                            <span class="text-[10px] text-gray-400"
+                                                                x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-700 break-all">
+                                                            <span class="text-gray-500">span:</span>
+                                                            <span x-text="item.span_id || '-' "></span>
+                                                            <span class="text-gray-500 ml-2">parent:</span>
+                                                            <span x-text="item.parent_span_id || '-' "></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-700 break-all"
+                                                            x-show="item.provider_function || item.component">
+                                                            <span
+                                                                x-text="item.provider_function || item.component"></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.output_type"
+                                                            x-text="`output: ${item.output_type}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.input_type"
+                                                            x-text="`input: ${item.input_type}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.duration_ns"
+                                                            x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.error" x-text="`error: ${item.error}`"></div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+
+                                        <template x-if="traceViewMode !== 'span'">
+                                            <div class="space-y-1.5">
+                                                <template
+                                                    x-for="(item, idx) in (traceTreeMode ? group.visibleTreeRows : group.records)"
+                                                    :key="`trace-item-${group.traceId}-${item.id || idx}-${idx}`">
+                                                    <div class="text-xs border rounded p-2"
+                                                        :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
+                                                        :style="traceTreeMode ? `margin-left:${Math.min(item._depth || 0, 12) * 16}px` : ''">
+                                                        <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                            <button x-show="traceTreeMode && item._canToggle"
+                                                                @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
+                                                                class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                                :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
+                                                                x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
+                                                            <span x-show="traceTreeMode"
+                                                                class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                                                                x-text="`L${item._depth || 0}`"></span>
+                                                            <span
+                                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
+                                                                x-text="item.operation || '-' "></span>
+                                                            <span
+                                                                class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                                :class="item.status === 'error' ? 'bg-red-100 text-red-700' : (item.status === 'start' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')"
+                                                                x-text="item.status || 'ok'"></span>
+                                                            <span
+                                                                class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px]"
+                                                                x-text="item.event || '-' "></span>
+                                                            <span class="text-[10px] text-gray-400"
+                                                                x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-700 break-all">
+                                                            <span class="text-gray-500">span:</span>
+                                                            <span x-text="item.span_id || '-' "></span>
+                                                            <span class="text-gray-500 ml-2">parent:</span>
+                                                            <span x-text="item.parent_span_id || '-' "></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-700 break-all"
+                                                            x-show="item.provider_function || item.component">
+                                                            <span
+                                                                x-text="item.provider_function || item.component"></span>
+                                                        </div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.output_type"
+                                                            x-text="`output: ${item.output_type}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.input_type"
+                                                            x-text="`input: ${item.input_type}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.error" x-text="`error: ${item.error}`"></div>
+                                                        <div class="text-[11px] text-gray-600 break-all"
+                                                            x-show="item.duration_ns"
+                                                            x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -1006,6 +1228,19 @@
                 diagEvent: '',
                 diagSearch: '',
                 diagLimit: 200,
+                traceRecords: [],
+                traceLoading: false,
+                traceError: '',
+                traceUpdatedAt: '',
+                traceLimit: 500,
+                traceOperation: '',
+                traceStatus: '',
+                traceEvent: '',
+                traceTreeMode: true,
+                traceViewMode: 'span',
+                traceOnlyErrorSpan: false,
+                traceCollapsedSpanKeys: {},
+                traceCollapsedGroupKeys: {},
                 errorTypeGuideCollapsed: true,
                 errorTypeGuide: [
                     {
@@ -1157,6 +1392,271 @@
                     });
                 },
 
+                get filteredModalTraceRecords() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.traceRecords || []).filter(item => {
+                        if (!q) {
+                            return true;
+                        }
+                        const traceId = String(item.trace_id || '').toLowerCase();
+                        const spanId = String(item.span_id || '').toLowerCase();
+                        const parent = String(item.parent_span_id || '').toLowerCase();
+                        const op = String(item.operation || '').toLowerCase();
+                        const ev = String(item.event || '').toLowerCase();
+                        const status = String(item.status || '').toLowerCase();
+                        const comp = String(item.component || '').toLowerCase();
+                        const provider = String(item.provider_function || '').toLowerCase();
+                        const output = String(item.output_type || '').toLowerCase();
+                        const input = String(item.input_type || '').toLowerCase();
+                        const err = String(item.error || '').toLowerCase();
+                        return traceId.includes(q) || spanId.includes(q) || parent.includes(q) || op.includes(q) || ev.includes(q) || status.includes(q) || comp.includes(q) || provider.includes(q) || output.includes(q) || input.includes(q) || err.includes(q);
+                    });
+                },
+
+                get traceGroups() {
+                    const map = new Map();
+                    (this.filteredModalTraceRecords || []).forEach(item => {
+                        const op = String(item.operation || '').trim();
+                        const isAggregateInput = !!(item.attrs && item.attrs.aggregate_input === true);
+                        if (isAggregateInput && (op === 'inject.param' || op === 'provider.input')) {
+                            return;
+                        }
+
+                        const traceId = item.trace_id || '';
+                        if (!map.has(traceId)) {
+                            map.set(traceId, {
+                                traceId,
+                                total: 0,
+                                errorCount: 0,
+                                records: [],
+                            });
+                        }
+                        const g = map.get(traceId);
+                        g.total++;
+                        if (String(item.status || '').toLowerCase() === 'error') {
+                            g.errorCount++;
+                        }
+                        g.records.push(item);
+                    });
+
+                    const groups = Array.from(map.values());
+                    groups.forEach(g => {
+                        g.records.sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
+
+                        const injectFuncStart = g.records.find((rec) => String(rec.operation || '') === 'inject.func' && String(rec.event || '') === 'span.start');
+                        const injectStart = g.records.find((rec) => String(rec.operation || '') === 'inject' && String(rec.event || '') === 'span.start');
+                        g.injectFunction = '';
+                        if (injectFuncStart) {
+                            g.injectFunction = String((injectFuncStart.attrs && injectFuncStart.attrs.function) || injectFuncStart.component || '').trim();
+                        }
+                        if (!g.injectFunction && injectStart) {
+                            g.injectFunction = String(injectStart.component || '').trim();
+                        }
+
+                        // 构建 span 代表记录（优先 span.start）用于深度计算
+                        const spanRep = new Map();
+                        g.records.forEach((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            if (!sid) return;
+
+                            const prev = spanRep.get(sid);
+                            if (!prev) {
+                                spanRep.set(sid, rec);
+                                return;
+                            }
+
+                            const curIsStart = String(rec.event || '') === 'span.start';
+                            const prevIsStart = String(prev.event || '') === 'span.start';
+                            if (curIsStart && !prevIsStart) {
+                                spanRep.set(sid, rec);
+                            }
+                        });
+
+                        const memo = new Map();
+                        const computing = new Set();
+                        const spanParent = new Map();
+                        const spanOp = new Map();
+                        const spanChildCount = new Map();
+                        const spanEventCount = new Map();
+                        const spanEnd = new Map();
+                        const spanError = new Map();
+
+                        spanRep.forEach((rec, sid) => {
+                            spanOp.set(sid, String(rec.operation || '').trim());
+                            const p = String(rec.parent_span_id || '').trim();
+                            if (p) {
+                                spanParent.set(sid, p);
+                                spanChildCount.set(p, (spanChildCount.get(p) || 0) + 1);
+                            }
+                        });
+
+                        const displayParentForSpan = (sid) => {
+                            const parentSid = spanParent.get(sid) || '';
+                            if (!parentSid) {
+                                return '';
+                            }
+                            const curOp = spanOp.get(sid) || '';
+                            const parentOp = spanOp.get(parentSid) || '';
+                            // inject.func 提升到 trace 层，不再额外下沉一层
+                            if (curOp === 'inject.func' && parentOp === 'inject') {
+                                return '';
+                            }
+                            return parentSid;
+                        };
+
+                        g.records.forEach((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            if (!sid) {
+                                return;
+                            }
+                            spanEventCount.set(sid, (spanEventCount.get(sid) || 0) + 1);
+                            if (String(rec.event || '') === 'span.end') {
+                                spanEnd.set(sid, rec);
+                            }
+                            if (String(rec.status || '').toLowerCase() === 'error' || String(rec.error || '').trim()) {
+                                if (!spanError.has(sid)) {
+                                    spanError.set(sid, rec);
+                                }
+                            }
+                        });
+
+                        const depthForSpan = (sid) => {
+                            sid = String(sid || '').trim();
+                            if (!sid) return 0;
+                            if (memo.has(sid)) return memo.get(sid);
+                            if (computing.has(sid)) return 0;
+
+                            const cur = spanRep.get(sid);
+                            if (!cur) {
+                                memo.set(sid, 0);
+                                return 0;
+                            }
+
+                            computing.add(sid);
+                            const parentSid = displayParentForSpan(sid);
+                            let d = 0;
+                            if (parentSid) {
+                                d = depthForSpan(parentSid) + 1;
+                            }
+                            computing.delete(sid);
+                            memo.set(sid, d);
+                            return d;
+                        };
+
+                        g.treeRows = g.records.map((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            const parentSid = String(rec.parent_span_id || '').trim();
+                            let depth = 0;
+                            if (sid) {
+                                depth = depthForSpan(sid);
+                            } else if (parentSid) {
+                                depth = depthForSpan(parentSid) + 1;
+                            }
+                            return {
+                                ...rec,
+                                _depth: depth,
+                                _canToggle: String(rec.event || '') === 'span.start' && !!sid && (spanChildCount.get(sid) || 0) > 0,
+                            };
+                        });
+
+                        // 汇总 span 视图（一个 span 一行，默认更易读）
+                        g.spanRows = Array.from(spanRep.entries()).map(([sid, startRec]) => {
+                            const endRec = spanEnd.get(sid);
+                            const errRec = spanError.get(sid);
+                            const status = (endRec && endRec.status) || (errRec ? 'error' : 'ok');
+                            const parentSid = displayParentForSpan(sid);
+                            const depth = depthForSpan(sid);
+
+                            let durationNs = 0;
+                            if (endRec && Number(endRec.duration_ns || 0) > 0) {
+                                durationNs = Number(endRec.duration_ns || 0);
+                            } else {
+                                const st = Number(startRec.occurred_at_unix_nano || 0);
+                                const et = endRec ? Number(endRec.occurred_at_unix_nano || 0) : 0;
+                                if (st > 0 && et > st) {
+                                    durationNs = et - st;
+                                }
+                            }
+
+                            return {
+                                trace_id: g.traceId,
+                                span_id: sid,
+                                parent_span_id: parentSid,
+                                operation: startRec.operation || '',
+                                component: startRec.component || '',
+                                provider_function: startRec.provider_function || '',
+                                output_type: startRec.output_type || '',
+                                input_type: startRec.input_type || '',
+                                status: String(status || '').toLowerCase() || 'ok',
+                                error: (errRec && (errRec.error || errRec.message)) || '',
+                                duration_ns: durationNs,
+                                occurred_at_unix_nano: Number(startRec.occurred_at_unix_nano || 0),
+                                event_count: spanEventCount.get(sid) || 0,
+                                _depth: depth,
+                                _canToggle: (spanChildCount.get(sid) || 0) > 0,
+                            };
+                        });
+
+                        if (this.traceOnlyErrorSpan) {
+                            g.spanRows = g.spanRows.filter((row) => row.status === 'error');
+                        }
+
+                        g.spanRows.sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
+
+                        const isCollapsed = (traceId, sid) => !!this.traceCollapsedSpanKeys[this.traceSpanKey(traceId, sid)];
+                        const hasCollapsedAncestor = (traceId, sid, includeSelf) => {
+                            let cur = String(sid || '').trim();
+                            if (!cur) return false;
+                            if (!includeSelf) {
+                                cur = displayParentForSpan(cur);
+                            }
+                            const guard = new Set();
+                            while (cur && !guard.has(cur)) {
+                                guard.add(cur);
+                                if (isCollapsed(traceId, cur)) {
+                                    return true;
+                                }
+                                cur = displayParentForSpan(cur);
+                            }
+                            return false;
+                        };
+
+                        g.visibleTreeRows = g.treeRows.filter((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            const parentSid = String(rec.parent_span_id || '').trim();
+                            if (sid) {
+                                return !hasCollapsedAncestor(g.traceId, sid, false);
+                            }
+                            if (parentSid) {
+                                return !hasCollapsedAncestor(g.traceId, parentSid, true);
+                            }
+                            return true;
+                        });
+
+                        g.visibleSpanRows = g.spanRows.filter((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            const parentSid = String(rec.parent_span_id || '').trim();
+                            if (sid) {
+                                return !hasCollapsedAncestor(g.traceId, sid, false);
+                            }
+                            if (parentSid) {
+                                return !hasCollapsedAncestor(g.traceId, parentSid, true);
+                            }
+                            return true;
+                        });
+                    });
+                    groups.sort((a, b) => {
+                        const at = a.records.length ? Number(a.records[a.records.length - 1].occurred_at_unix_nano || 0) : 0;
+                        const bt = b.records.length ? Number(b.records[b.records.length - 1].occurred_at_unix_nano || 0) : 0;
+                        return bt - at;
+                    });
+                    return groups;
+                },
+
+                get traceSpanTotal() {
+                    return (this.traceGroups || []).reduce((sum, g) => sum + (Array.isArray(g.spanRows) ? g.spanRows.length : 0), 0);
+                },
+
                 // Methods
                 async init() {
                     this.loadLocalState();
@@ -1167,6 +1667,7 @@
                     await this.loadRuntimeStats();
                     await this.loadRecentErrors();
                     await this.loadDiagFileRecords();
+                    await this.loadTraceRecords();
                     if (window.mermaid && window.mermaid.initialize) {
                         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
                     }
@@ -1283,6 +1784,31 @@
                     }
                 },
 
+                async loadTraceRecords() {
+                    this.traceLoading = true;
+                    this.traceError = '';
+                    try {
+                        const params = new URLSearchParams();
+                        if (this.traceOperation) params.set('operation', this.traceOperation);
+                        if (this.traceStatus) params.set('status', this.traceStatus);
+                        if (this.traceEvent) params.set('event', this.traceEvent);
+                        params.set('limit', String(this.traceLimit || 500));
+
+                        const res = await fetch(apiUrl('/api/trace?' + params.toString()));
+                        if (!res.ok) {
+                            throw new Error('HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.traceRecords = Array.isArray(data.records) ? data.records : [];
+                        this.traceUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                    } catch (e) {
+                        this.traceError = '加载调用链 Trace 失败';
+                        console.error('加载调用链 Trace 失败:', e);
+                    } finally {
+                        this.traceLoading = false;
+                    }
+                },
+
                 openDiagnosticModal(type) {
                     if (type === 'errors') {
                         this.diagnosticModalType = 'errors';
@@ -1293,12 +1819,16 @@
                         }
                         this.diagnosticSearch = this.diagSearch || '';
                         this.loadDiagFileRecords();
+                    } else if (type === 'trace') {
+                        this.diagnosticModalType = 'trace';
+                        this.diagnosticSearch = '';
+                        this.loadTraceRecords();
                     } else if (type === 'error-guide') {
                         this.diagnosticModalType = 'error-guide';
                     } else {
                         this.diagnosticModalType = 'runtime';
                     }
-                    if (type !== 'diag') {
+                    if (type !== 'diag' && type !== 'trace') {
                         this.diagnosticSearch = '';
                     }
                     this.diagnosticModalOpen = true;
@@ -1307,6 +1837,70 @@
                 refreshDiagFromModal() {
                     this.diagSearch = this.diagnosticSearch || '';
                     this.loadDiagFileRecords();
+                },
+
+                refreshTraceFromModal() {
+                    this.loadTraceRecords();
+                },
+
+                traceSpanKey(traceId, spanId) {
+                    return `${String(traceId || '')}::${String(spanId || '')}`;
+                },
+
+                traceGroupKey(traceId) {
+                    return String(traceId || '');
+                },
+
+                isTraceGroupCollapsed(traceId) {
+                    return !!this.traceCollapsedGroupKeys[this.traceGroupKey(traceId)];
+                },
+
+                toggleTraceGroupCollapse(traceId) {
+                    const key = this.traceGroupKey(traceId);
+                    const next = { ...(this.traceCollapsedGroupKeys || {}) };
+                    if (next[key]) {
+                        delete next[key];
+                    } else {
+                        next[key] = true;
+                    }
+                    this.traceCollapsedGroupKeys = next;
+                },
+
+                collapseAllTraceGroups() {
+                    const next = {};
+                    (this.traceGroups || []).forEach((g) => {
+                        next[this.traceGroupKey(g.traceId)] = true;
+                    });
+                    this.traceCollapsedGroupKeys = next;
+                },
+
+                expandAllTraceGroups() {
+                    this.traceCollapsedGroupKeys = {};
+                },
+
+                isTraceSpanCollapsed(traceId, spanId) {
+                    if (!traceId || !spanId) {
+                        return false;
+                    }
+                    return !!this.traceCollapsedSpanKeys[this.traceSpanKey(traceId, spanId)];
+                },
+
+                toggleTraceSpanCollapse(traceId, spanId) {
+                    if (!traceId || !spanId) {
+                        return;
+                    }
+                    const key = this.traceSpanKey(traceId, spanId);
+                    const next = { ...(this.traceCollapsedSpanKeys || {}) };
+                    if (next[key]) {
+                        delete next[key];
+                    } else {
+                        next[key] = true;
+                    }
+                    this.traceCollapsedSpanKeys = next;
+                },
+
+                expandAllTraceSpans() {
+                    this.traceCollapsedSpanKeys = {};
                 },
 
                 openProviderDetailModal(node) {

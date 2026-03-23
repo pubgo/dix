@@ -303,6 +303,7 @@ func startVisualizationServer(server *dixhttp.Server) error {
 	log.Println("   - GET /api/dependencies - JSON data of dependencies")
 	log.Println("   - GET /api/runtime-stats - Provider startup runtime stats")
 	log.Println("   - GET /api/errors - Recent Inject/TryInject errors")
+	log.Println("   - GET /api/trace - In-memory dixtrace timeline query")
 	log.Println("   - GET /api/graph?type=providers - DOT graph format")
 	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
 	log.Println("   - GET /api/graph?type=objects - Objects graph")

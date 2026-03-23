@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/pubgo/dix/v2/dixinternal"
+	"github.com/pubgo/dix/v2/dixtrace"
 )
 
 //go:embed template.html
@@ -132,6 +133,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
 	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
 	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
+	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
@@ -199,6 +201,30 @@ func (s *Server) HandleDiagnostics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	writeJSON(w, result)
+}
+
+// HandleTrace returns in-memory dixtrace events.
+// Query params:
+// - trace_id, operation, status, event, component, provider, output_type, q
+// - limit, before_id, since_unix_nano, until_unix_nano
+func (s *Server) HandleTrace(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{
+		"trace_id":        strings.TrimSpace(r.URL.Query().Get("trace_id")),
+		"operation":       strings.TrimSpace(r.URL.Query().Get("operation")),
+		"status":          strings.TrimSpace(r.URL.Query().Get("status")),
+		"event":           strings.TrimSpace(r.URL.Query().Get("event")),
+		"component":       strings.TrimSpace(r.URL.Query().Get("component")),
+		"provider":        strings.TrimSpace(r.URL.Query().Get("provider")),
+		"output_type":     strings.TrimSpace(r.URL.Query().Get("output_type")),
+		"q":               strings.TrimSpace(r.URL.Query().Get("q")),
+		"limit":           strings.TrimSpace(r.URL.Query().Get("limit")),
+		"before_id":       strings.TrimSpace(r.URL.Query().Get("before_id")),
+		"since_unix_nano": strings.TrimSpace(r.URL.Query().Get("since_unix_nano")),
+		"until_unix_nano": strings.TrimSpace(r.URL.Query().Get("until_unix_nano")),
+	}
+
+	result := dixtrace.QueryEvents(dixtrace.ParseQueryFromMap(params))
 	writeJSON(w, result)
 }
 

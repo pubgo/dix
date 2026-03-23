@@ -169,6 +169,17 @@ export DIX_TRACE_DI=true
 - 终端给用户看“少而准”。
 - 文件给排障/LLM看“全而细”。
 
+### 内存 Trace 查询（`dixtrace`，可选）
+
+从这个版本开始，dix 会把统一 trace 事件写入内存 trace 存储（`dixtrace`），可通过 HTTP API（`/api/trace`）在线查询。
+
+- 默认：开启（内存环形缓冲）
+- 可选文件落盘环境变量：`DIX_TRACE_FILE`
+- 示例：`export DIX_TRACE_FILE=.local/dix-trace.jsonl`
+
+`/api/trace` 适合在线排障（按 `operation/status/event/component/provider/output_type` 等过滤）。
+如需长期持久化，请同时配置 `DIX_TRACE_FILE`。
+
 事件速查：
 
 | 事件                                           | 含义                                                                    |

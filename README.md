@@ -169,6 +169,17 @@ Tip:
 - Keep console output concise for users.
 - Keep detailed records in file for search/LLM/offline troubleshooting.
 
+### In-Memory Trace Query (`dixtrace`, Optional)
+
+Starting from this version, dix also emits unified trace events into an in-memory trace store (`dixtrace`), which can be queried via HTTP API (`/api/trace`).
+
+- Default: enabled (in-memory ring buffer)
+- Optional file sink env var: `DIX_TRACE_FILE`
+- Example: `export DIX_TRACE_FILE=.local/dix-trace.jsonl`
+
+`/api/trace` is optimized for online troubleshooting (filter by `operation/status/event/component/provider/output_type`).
+If you need long-term persistence, combine it with `DIX_TRACE_FILE`.
+
 Quick event dictionary:
 
 | Event                                          | Meaning                                                                    |

@@ -1,6 +1,7 @@
 package dixinternal
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"reflect"
@@ -54,6 +55,12 @@ func (dix *Dix) TryProvide(param any) (err error) {
 // Inject injects dependencies into the given parameter. Panics on error.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Inject(param any, opts ...Option) any {
+	return dix.InjectContext(context.Background(), param, opts...)
+}
+
+// InjectContext injects dependencies using the provided context as trace propagation root. Panics on error.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
+func (dix *Dix) InjectContext(ctx context.Context, param any, opts ...Option) any {
 	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
@@ -65,7 +72,7 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 		panic(err)
 	}
 
-	if err := dix.inject(param, opts...); err != nil {
+	if err := dix.inject(ctx, param, opts...); err != nil {
 		logger.Error("inject failed", "component", component, "error", err, "error_type", buildErrorType("inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("inject", "inject", false))
 		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
 			Stage:     "inject",
@@ -79,6 +86,13 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 // TryInject injects dependencies into the given parameter. Returns error instead of panicking.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryInject(param any, opts ...Option) error {
+	return dix.TryInjectContext(context.Background(), param, opts...)
+}
+
+// TryInjectContext injects dependencies using the provided context as trace propagation root.
+// Returns error instead of panicking.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
+func (dix *Dix) TryInjectContext(ctx context.Context, param any, opts ...Option) error {
 	component := describeComponent(param)
 	if dep, ok := dix.isCycle(); ok {
 		err := errors.New("circular dependency: " + dep)
@@ -90,7 +104,7 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 		return err
 	}
 
-	err := dix.inject(param, opts...)
+	err := dix.inject(ctx, param, opts...)
 	if err != nil {
 		logger.Warn("try inject failed", "component", component, "error", err, "error_type", buildErrorType("try_inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_inject", "inject", false))
 		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
