@@ -84,12 +84,6 @@
                             <span>🚨 最近注入错误</span>
                             <span class="text-xs text-gray-400" x-text="recentErrors.length"></span>
                         </button>
-                        <button @click="openDiagnosticModal('diag'); open=false"
-                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
-                            <span>🗂 诊断文件记录</span>
-                            <span class="text-xs" :class="diagEnabled ? 'text-green-600' : 'text-orange-500'"
-                                x-text="diagEnabled ? '已启用' : '未启用'"></span>
-                        </button>
                         <button @click="openDiagnosticModal('trace'); open=false"
                             class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
                             <span>🧵 调用链 Trace</span>
@@ -685,21 +679,25 @@
         <!-- Diagnostics Modal -->
         <div x-show="diagnosticModalOpen" x-cloak
             class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-            @keydown.escape.window="diagnosticModalOpen = false">
-            <div class="bg-white w-[94vw] h-[88vh] rounded-xl shadow-xl flex flex-col">
+            @keydown.escape.window="closeDiagnosticModal()">
+            <div x-ref="diagnosticPanel" class="bg-white shadow-xl flex flex-col"
+                :class="diagnosticModalType === 'trace' ? 'w-[99vw] h-[97vh] max-w-none rounded-md' : 'w-[94vw] h-[88vh] rounded-xl'">
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div class="font-semibold text-gray-700" x-text="diagnosticModalType === 'runtime'
                             ? '⏱ Provider 启动耗时（大视图）'
                             : (diagnosticModalType === 'errors'
                                 ? '🚨 最近注入错误（大视图）'
-                                : (diagnosticModalType === 'diag'
-                                    ? '🗂 诊断文件记录（大视图）'
-                                    : (diagnosticModalType === 'trace' ? '🧵 调用链 Trace（大视图）' : '🧭 错误类型说明（大视图）'))) ">
+                                : (diagnosticModalType === 'trace' ? '🧵 调用链 Trace（全局大视图）' : '🧭 错误类型说明（大视图）')) ">
                     </div>
-                    <button @click="diagnosticModalOpen = false"
-                        class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                        关闭
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button x-show="diagnosticModalType === 'trace'" @click="toggleTraceFullscreen()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                            x-text="traceFullscreen ? '退出全屏' : '全屏'"></button>
+                        <button @click="closeDiagnosticModal()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                            关闭
+                        </button>
+                    </div>
                 </div>
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
                     <input type="text" x-model="diagnosticSearch"
@@ -707,9 +705,7 @@
                             ? '搜索函数名/输出类型/错误信息'
                             : (diagnosticModalType === 'errors'
                                 ? '搜索操作/错误类型/阶段/组件/函数/类型/根因/Hint/错误信息'
-                                : (diagnosticModalType === 'diag'
-                                    ? '搜索 kind/event/fields/payload'
-                                    : (diagnosticModalType === 'trace' ? '搜索 trace_id/span/event/operation/provider/component' : '搜索错误类型/说明/定位建议')))"
+                                : (diagnosticModalType === 'trace' ? '搜索 trace_id/span/event/operation/provider/component' : '搜索错误类型/说明/定位建议'))"
                         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
                     <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -720,11 +716,6 @@
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
                         :disabled="recentErrorsLoading">
                         <span x-text="recentErrorsLoading ? '刷新中...' : '刷新错误'"></span>
-                    </button>
-                    <button x-show="diagnosticModalType === 'diag'" @click="refreshDiagFromModal()"
-                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                        :disabled="diagLoading || !diagEnabled">
-                        <span x-text="diagLoading ? '刷新中...' : '刷新诊断'"></span>
                     </button>
                     <button x-show="diagnosticModalType === 'trace'" @click="refreshTraceFromModal()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -853,76 +844,6 @@
                                     <div class="text-sm text-gray-700 mt-2" x-text="item.summary"></div>
                                     <div class="text-xs text-blue-700 mt-2 break-all" x-text="`定位建议: ${item.action}`">
                                     </div>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <template x-if="diagnosticModalType === 'diag'">
-                        <div class="space-y-2">
-                            <div class="flex items-center gap-2" x-show="diagEnabled">
-                                <select x-model="diagKind"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
-                                    <option value="">全部类型</option>
-                                    <option value="trace">trace</option>
-                                    <option value="error">error</option>
-                                    <option value="llm">llm</option>
-                                </select>
-                                <input type="text" x-model="diagEvent" placeholder="事件过滤（event）"
-                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
-                                <button @click="refreshDiagFromModal()"
-                                    class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                    :disabled="diagLoading || !diagEnabled">应用过滤</button>
-                            </div>
-
-                            <div class="text-xs text-gray-500" x-show="diagEnabled"
-                                x-text="`文件: ${diagPath || '-'} · 共 ${diagTotal} 条，展示 ${filteredModalDiagRecords.length} 条`">
-                            </div>
-                            <div class="text-xs text-orange-600" x-show="!diagEnabled">未配置 DIX_DIAG_FILE</div>
-                            <div class="text-xs text-red-500" x-show="diagError" x-text="diagError"></div>
-
-                            <template x-if="diagEnabled && filteredModalDiagRecords.length === 0">
-                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配诊断记录</div>
-                            </template>
-
-                            <template x-for="(item, idx) in filteredModalDiagRecords"
-                                :key="`modal-diag-${item.record_id || idx}-${idx}`">
-                                <div class="border rounded-lg p-3"
-                                    :class="item.kind === 'error' ? 'border-red-200 bg-red-50/30' : 'border-gray-200 bg-white'">
-                                    <div class="flex items-center justify-between gap-2 mb-1">
-                                        <div class="flex items-center gap-1.5 min-w-0">
-                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                                                :class="item.kind === 'error' ? 'bg-red-100 text-red-700' : (item.kind === 'llm' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')"
-                                                x-text="item.kind || 'trace'"></span>
-                                            <span x-show="item.event"
-                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-medium break-all"
-                                                x-text="item.event"></span>
-                                            <span x-show="item.record_id"
-                                                class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-medium"
-                                                x-text="`#${item.record_id}`"></span>
-                                        </div>
-                                        <span class="text-[10px] text-gray-400"
-                                            x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
-                                    </div>
-                                    <div class="text-[11px] text-gray-500 break-all mb-1"
-                                        x-text="(item.source || 'dix') + (item.process ? ` · ${item.process}` : '') + (item.hostname ? ` · ${item.hostname}` : '')">
-                                    </div>
-                                    <div class="text-sm break-all"
-                                        :class="item.kind === 'error' ? 'text-red-700 font-semibold' : 'text-gray-700'"
-                                        x-text="diagSummaryText(item)"></div>
-                                    <ul class="mt-2 space-y-1" x-show="diagDetailLines(item).length">
-                                        <template x-for="(line, lineIdx) in diagDetailLines(item)"
-                                            :key="`diag-line-${lineIdx}`">
-                                            <li class="text-xs text-gray-600 break-all" x-text="line"></li>
-                                        </template>
-                                    </ul>
-                                    <details class="mt-2" x-show="item.kind === 'error'">
-                                        <summary class="text-[11px] text-gray-500 cursor-pointer hover:text-gray-700">
-                                            展开原始数据（JSON）
-                                        </summary>
-                                        <pre class="mt-1 p-2 text-[11px] leading-relaxed bg-gray-50 border border-gray-200 rounded whitespace-pre-wrap break-all"
-                                            x-text="diagPrettyJson(item)"></pre>
-                                    </details>
                                 </div>
                             </template>
                         </div>
@@ -1267,19 +1188,6 @@
                 recentErrorsError: '',
                 recentErrorsUpdatedAt: '',
                 recentErrorsCollapsed: true,
-                diagEnabled: false,
-                diagPath: '',
-                diagExists: false,
-                diagTotal: 0,
-                diagRecords: [],
-                diagLoading: false,
-                diagError: '',
-                diagUpdatedAt: '',
-                diagCollapsed: true,
-                diagKind: 'error',
-                diagEvent: '',
-                diagSearch: '',
-                diagLimit: 200,
                 traceRecords: [],
                 traceLoading: false,
                 traceError: '',
@@ -1294,6 +1202,7 @@
                 traceOnlyErrorSpan: false,
                 traceCollapsedSpanKeys: {},
                 traceCollapsedGroupKeys: {},
+                traceFullscreen: false,
                 errorTypeGuideCollapsed: true,
                 errorTypeGuide: [
                     {
@@ -1425,23 +1334,6 @@
                         const summary = String(item.summary || '').toLowerCase();
                         const action = String(item.action || '').toLowerCase();
                         return code.includes(q) || summary.includes(q) || action.includes(q);
-                    });
-                },
-
-                get filteredModalDiagRecords() {
-                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
-                    return (this.diagRecords || []).filter(item => {
-                        if (!q) {
-                            return true;
-                        }
-                        const kind = String(item.kind || '').toLowerCase();
-                        const event = String(item.event || '').toLowerCase();
-                        const src = String(item.source || '').toLowerCase();
-                        const process = String(item.process || '').toLowerCase();
-                        const host = String(item.hostname || '').toLowerCase();
-                        const fields = JSON.stringify(item.fields || {}).toLowerCase();
-                        const payload = JSON.stringify(item.payload || {}).toLowerCase();
-                        return kind.includes(q) || event.includes(q) || src.includes(q) || process.includes(q) || host.includes(q) || fields.includes(q) || payload.includes(q);
                     });
                 },
 
@@ -1707,11 +1599,11 @@
                     await this.loadDependencies();
                     await this.loadRuntimeStats();
                     await this.loadRecentErrors();
-                    await this.loadDiagFileRecords();
                     await this.loadTraceRecords();
                     if (window.mermaid && window.mermaid.initialize) {
                         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
                     }
+                    document.addEventListener('fullscreenchange', () => this.handleFullscreenChange());
                 },
 
                 async loadGroupRules() {
@@ -1796,35 +1688,6 @@
                     }
                 },
 
-                async loadDiagFileRecords() {
-                    this.diagLoading = true;
-                    this.diagError = '';
-                    try {
-                        const params = new URLSearchParams();
-                        if (this.diagKind) params.set('kind', this.diagKind);
-                        if (this.diagEvent) params.set('event', this.diagEvent);
-                        if (this.diagSearch) params.set('q', this.diagSearch);
-                        params.set('limit', String(this.diagLimit || 200));
-
-                        const res = await fetch(apiUrl('/api/diagnostics?' + params.toString()));
-                        if (!res.ok) {
-                            throw new Error('HTTP ' + res.status);
-                        }
-                        const data = await res.json();
-                        this.diagEnabled = !!data.enabled;
-                        this.diagPath = data.path || '';
-                        this.diagExists = !!data.exists;
-                        this.diagTotal = Number(data.total || 0);
-                        this.diagRecords = Array.isArray(data.records) ? data.records : [];
-                        this.diagUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
-                    } catch (e) {
-                        this.diagError = '加载诊断文件记录失败';
-                        console.error('加载诊断文件记录失败:', e);
-                    } finally {
-                        this.diagLoading = false;
-                    }
-                },
-
                 async loadTraceRecords() {
                     this.traceLoading = true;
                     this.traceError = '';
@@ -1853,13 +1716,6 @@
                 openDiagnosticModal(type) {
                     if (type === 'errors') {
                         this.diagnosticModalType = 'errors';
-                    } else if (type === 'diag') {
-                        this.diagnosticModalType = 'diag';
-                        if (!this.diagKind) {
-                            this.diagKind = 'error';
-                        }
-                        this.diagnosticSearch = this.diagSearch || '';
-                        this.loadDiagFileRecords();
                     } else if (type === 'trace') {
                         this.diagnosticModalType = 'trace';
                         this.diagnosticSearch = '';
@@ -1869,15 +1725,44 @@
                     } else {
                         this.diagnosticModalType = 'runtime';
                     }
-                    if (type !== 'diag' && type !== 'trace') {
+                    if (type !== 'trace') {
                         this.diagnosticSearch = '';
                     }
                     this.diagnosticModalOpen = true;
                 },
 
-                refreshDiagFromModal() {
-                    this.diagSearch = this.diagnosticSearch || '';
-                    this.loadDiagFileRecords();
+                closeDiagnosticModal() {
+                    this.diagnosticModalOpen = false;
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen().catch(() => { });
+                    }
+                    this.traceFullscreen = false;
+                },
+
+                handleFullscreenChange() {
+                    const panel = this.$refs && this.$refs.diagnosticPanel;
+                    this.traceFullscreen = !!(panel && document.fullscreenElement === panel);
+                },
+
+                async toggleTraceFullscreen() {
+                    if (this.diagnosticModalType !== 'trace') {
+                        return;
+                    }
+                    const panel = this.$refs && this.$refs.diagnosticPanel;
+                    if (!panel) {
+                        return;
+                    }
+                    try {
+                        if (document.fullscreenElement === panel) {
+                            await document.exitFullscreen();
+                            this.traceFullscreen = false;
+                        } else {
+                            await panel.requestFullscreen();
+                            this.traceFullscreen = true;
+                        }
+                    } catch (e) {
+                        console.warn('切换 Trace 全屏失败:', e);
+                    }
                 },
 
                 refreshTraceFromModal() {
@@ -2078,128 +1963,6 @@
                         return JSON.stringify(node || {}, null, 2);
                     } catch (e) {
                         return String(node || '');
-                    }
-                },
-
-                diagPayloadValue(item, key) {
-                    if (!item || !item.payload || typeof item.payload !== 'object') {
-                        return '';
-                    }
-
-                    const normalize = (s) => String(s || '')
-                        .toLowerCase()
-                        .replace(/[_\-\s]/g, '');
-
-                    const target = normalize(key);
-                    let val = item.payload[key];
-                    if (val === undefined) {
-                        for (const [k, v] of Object.entries(item.payload)) {
-                            if (normalize(k) === target) {
-                                val = v;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (val === undefined || val === null) {
-                        return '';
-                    }
-                    if (Array.isArray(val)) {
-                        return val.join(', ');
-                    }
-                    return String(val);
-                },
-
-                diagSummaryText(item) {
-                    if (!item) {
-                        return '';
-                    }
-                    if (item.kind === 'error') {
-                        const msg = this.diagPayloadValue(item, 'message') || this.diagPayloadValue(item, 'root_cause');
-                        if (msg) {
-                            return msg;
-                        }
-                        const et = this.diagPayloadValue(item, 'error_type');
-                        return et ? `错误事件（${et}）` : '错误事件（无 message）';
-                    }
-                    if (item.kind === 'trace') {
-                        const provider = (item.fields && item.fields.provider) ? ` · ${item.fields.provider}` : '';
-                        return `${item.event || 'trace'}${provider}`;
-                    }
-                    if (item.kind === 'llm') {
-                        const errType = this.diagPayloadValue(item, 'error_type');
-                        return errType ? `LLM 诊断: ${errType}` : 'LLM 诊断记录';
-                    }
-                    return item.event || '诊断记录';
-                },
-
-                diagDetailLines(item) {
-                    const lines = [];
-                    if (!item) {
-                        return lines;
-                    }
-
-                    if (item.kind === 'error') {
-                        const pairs = [
-                            ['类型', this.diagPayloadValue(item, 'error_type')],
-                            ['阶段', this.diagPayloadValue(item, 'stage')],
-                            ['操作', this.diagPayloadValue(item, 'operation')],
-                            ['Provider', this.diagPayloadValue(item, 'provider_function')],
-                            ['输出类型', this.diagPayloadValue(item, 'output_type')],
-                            ['输入类型', this.diagPayloadValue(item, 'input_type')],
-                            ['根因', this.diagPayloadValue(item, 'root_cause')],
-                            ['Hint', this.diagPayloadValue(item, 'hint')],
-                        ];
-                        pairs.forEach(([k, v]) => {
-                            if (v) {
-                                lines.push(`${k}: ${v}`);
-                            }
-                        });
-
-                        // 若关键字段为空，补充 payload 里其他可见字段，避免“看不到信息”
-                        if (lines.length <= 1 && item.payload && typeof item.payload === 'object') {
-                            const shown = new Set(['message', 'error_type', 'stage', 'operation', 'provider_function', 'output_type', 'input_type', 'root_cause', 'hint']);
-                            Object.entries(item.payload).forEach(([k, v]) => {
-                                const key = String(k || '').toLowerCase();
-                                if (shown.has(key)) {
-                                    return;
-                                }
-                                if (v !== undefined && v !== null && String(v) !== '') {
-                                    lines.push(`${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`);
-                                }
-                            });
-                        }
-
-                        return lines;
-                    }
-
-                    if (item.kind === 'trace' && item.fields && typeof item.fields === 'object') {
-                        for (const [k, v] of Object.entries(item.fields)) {
-                            if (v !== undefined && v !== null && String(v) !== '') {
-                                lines.push(`${k}: ${v}`);
-                            }
-                        }
-                        return lines;
-                    }
-
-                    if (item.kind === 'llm' && item.payload && typeof item.payload === 'object') {
-                        const keys = ['operation', 'error_type', 'stage', 'provider_function', 'output_type', 'message', 'root_cause', 'hint'];
-                        keys.forEach((k) => {
-                            const v = this.diagPayloadValue(item, k);
-                            if (v) {
-                                lines.push(`${k}: ${v}`);
-                            }
-                        });
-                    }
-
-                    return lines;
-                },
-
-                diagPrettyJson(item) {
-                    try {
-                        return JSON.stringify(item, null, 2);
-                    } catch (e) {
-                        return String(item || '');
                     }
                 },
 
