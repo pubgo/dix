@@ -929,10 +929,12 @@
                                     class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
                                     <option value="">全部 operation</option>
                                     <option value="inject">inject</option>
-                                    <option value="inject.func">inject.func</option>
+                                    <option value="inject.cycle_check">inject.cycle_check</option>
                                     <option value="resolve.value">resolve.value</option>
+                                    <option value="resolve.provider">resolve.provider</option>
                                     <option value="resolve.type">resolve.type</option>
                                     <option value="provider.execute">provider.execute</option>
+                                    <option value="provider.call">provider.call</option>
                                 </select>
                                 <select x-model="traceStatus"
                                     class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
@@ -1443,12 +1445,8 @@
                     groups.forEach(g => {
                         g.records.sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
 
-                        const injectFuncStart = g.records.find((rec) => String(rec.operation || '') === 'inject.func' && String(rec.event || '') === 'span.start');
                         const injectStart = g.records.find((rec) => String(rec.operation || '') === 'inject' && String(rec.event || '') === 'span.start');
                         g.injectFunction = '';
-                        if (injectFuncStart) {
-                            g.injectFunction = String((injectFuncStart.attrs && injectFuncStart.attrs.function) || injectFuncStart.component || '').trim();
-                        }
                         if (!g.injectFunction && injectStart) {
                             g.injectFunction = String(injectStart.component || '').trim();
                         }
@@ -1492,15 +1490,6 @@
 
                         const displayParentForSpan = (sid) => {
                             const parentSid = spanParent.get(sid) || '';
-                            if (!parentSid) {
-                                return '';
-                            }
-                            const curOp = spanOp.get(sid) || '';
-                            const parentOp = spanOp.get(parentSid) || '';
-                            // inject.func 提升到 trace 层，不再额外下沉一层
-                            if (curOp === 'inject.func' && parentOp === 'inject') {
-                                return '';
-                            }
                             return parentSid;
                         };
 

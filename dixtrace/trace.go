@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -79,63 +78,6 @@ type spanFrame struct {
 
 type spanContextKey struct{}
 
-type spanStackStore struct {
-	mu     sync.Mutex
-	stacks map[int64][]spanFrame
-}
-
-func newSpanStackStore() *spanStackStore {
-	return &spanStackStore{stacks: make(map[int64][]spanFrame)}
-}
-
-func (s *spanStackStore) push(gid int64, frame spanFrame) {
-	if gid <= 0 {
-		return
-	}
-	s.mu.Lock()
-	s.stacks[gid] = append(s.stacks[gid], frame)
-	s.mu.Unlock()
-}
-
-func (s *spanStackStore) pop(gid int64) (spanFrame, bool) {
-	if gid <= 0 {
-		return spanFrame{}, false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	stack := s.stacks[gid]
-	if len(stack) == 0 {
-		return spanFrame{}, false
-	}
-	last := stack[len(stack)-1]
-	stack = stack[:len(stack)-1]
-	if len(stack) == 0 {
-		delete(s.stacks, gid)
-	} else {
-		s.stacks[gid] = stack
-	}
-	return last, true
-}
-
-func (s *spanStackStore) current(gid int64) (spanFrame, bool) {
-	if gid <= 0 {
-		return spanFrame{}, false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	stack := s.stacks[gid]
-	if len(stack) == 0 {
-		return spanFrame{}, false
-	}
-	return stack[len(stack)-1], true
-}
-
-func (s *spanStackStore) reset() {
-	s.mu.Lock()
-	s.stacks = make(map[int64][]spanFrame)
-	s.mu.Unlock()
-}
-
 type Span struct {
 	traceID      string
 	spanID       string
@@ -143,8 +85,6 @@ type Span struct {
 	operation    string
 	component    string
 	startedAt    int64
-	gid          int64
-	stackPushed  bool
 	ended        atomic.Bool
 }
 
@@ -163,11 +103,11 @@ func spanFrameFromContext(ctx context.Context) (spanFrame, bool) {
 	return f, true
 }
 
-func resolveCurrentParentFrame(ctx context.Context, gid int64) (spanFrame, bool) {
+func resolveCurrentParentFrame(ctx context.Context) (spanFrame, bool) {
 	if f, ok := spanFrameFromContext(ctx); ok {
 		return f, true
 	}
-	return spanStacks.current(gid)
+	return spanFrame{}, false
 }
 
 // RunDetachedSpan records a child span under current span, but does NOT push it into span stack.
@@ -180,8 +120,7 @@ func RunDetachedSpan(operation, component string, fn func() error, args ...any) 
 // It does NOT push this span into stack, so nested spans in fn still use current parent span.
 func RunDetachedSpanCtx(ctx context.Context, operation, component string, fn func() error, args ...any) error {
 	startedAt := time.Now().UnixNano()
-	gid := currentGID()
-	cur, ok := resolveCurrentParentFrame(ctx, gid)
+	cur, ok := resolveCurrentParentFrame(ctx)
 
 	traceID := nextTraceID()
 	parentSpanID := ""
@@ -270,21 +209,6 @@ func (s *Span) End(err error, args ...any) {
 		Attrs:        attrs,
 	})
 
-	if s.stackPushed {
-		spanStacks.pop(s.gid)
-	}
-}
-
-func currentGID() int64 {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	line := string(buf[:n])
-	parts := strings.Fields(line)
-	if len(parts) < 2 {
-		return 0
-	}
-	id, _ := strconv.ParseInt(parts[1], 10, 64)
-	return id
 }
 
 func nextTraceID() string {
@@ -295,20 +219,20 @@ func nextSpanID() string {
 	return "s-" + strconv.FormatInt(spanSeq.Add(1), 10)
 }
 
-// BeginSpan 开始一个 span，并自动关联父 span。
+// BeginSpan 开始一个 span。
+// 无 context 传递时，该 span 不会自动继承父 span。
 func BeginSpan(operation, component string, args ...any) *Span {
 	_, span := BeginSpanCtx(context.Background(), operation, component, args...)
 	return span
 }
 
 // BeginSpanCtx starts a span and returns a context carrying this span as current parent.
-// Parent resolution prefers context; when absent, falls back to goroutine-local stack.
+// Parent resolution is context-only.
 func BeginSpanCtx(ctx context.Context, operation, component string, args ...any) (context.Context, *Span) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	gid := currentGID()
-	parent, hasParent := resolveCurrentParentFrame(ctx, gid)
+	parent, hasParent := resolveCurrentParentFrame(ctx)
 
 	traceID := nextTraceID()
 	parentSpanID := ""
@@ -324,8 +248,6 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 		operation:    strings.TrimSpace(operation),
 		component:    strings.TrimSpace(component),
 		startedAt:    time.Now().UnixNano(),
-		gid:          gid,
-		stackPushed:  gid > 0,
 	}
 
 	frame := spanFrame{
@@ -333,10 +255,6 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 		SpanID:    span.spanID,
 		Operation: span.operation,
 		Component: span.component,
-	}
-
-	if span.stackPushed {
-		spanStacks.push(gid, frame)
 	}
 
 	Emit(Event{
@@ -602,7 +520,6 @@ var (
 	defaultTracer     = NewTracer(defaultMemorySink)
 	traceSeq          atomic.Int64
 	spanSeq           atomic.Int64
-	spanStacks        = newSpanStackStore()
 )
 
 func init() {
@@ -674,7 +591,6 @@ func resetDefaultForTest() {
 	defaultTracer.seq.Store(0)
 	traceSeq.Store(0)
 	spanSeq.Store(0)
-	spanStacks.reset()
 }
 
 // ResetForTest clears in-memory trace state. Intended for tests only.

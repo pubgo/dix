@@ -27,7 +27,6 @@ func TestTraceSpanChainInjectResolveProvider(t *testing.T) {
 	}
 
 	var injectSpan dixtrace.Event
-	var injectFuncSpan dixtrace.Event
 	paramSpanIDs := map[string]bool{}
 	var resolveValueWithParamParent bool
 	var providerExecuteSpan dixtrace.Event
@@ -44,9 +43,6 @@ func TestTraceSpanChainInjectResolveProvider(t *testing.T) {
 		}
 		if e.Operation == "provider.execute" && providerExecuteSpan.SpanID == "" {
 			providerExecuteSpan = e
-		}
-		if e.Operation == "inject.func" && injectFuncSpan.SpanID == "" {
-			injectFuncSpan = e
 		}
 		if e.Operation == "inject.param" && e.SpanID != "" {
 			paramSpanIDs[e.SpanID] = true
@@ -67,12 +63,6 @@ func TestTraceSpanChainInjectResolveProvider(t *testing.T) {
 	}
 	if providerExecuteSpan.TraceID != injectSpan.TraceID {
 		t.Fatalf("expected same trace id for inject/provider span, got inject=%s provider=%s", injectSpan.TraceID, providerExecuteSpan.TraceID)
-	}
-	if injectFuncSpan.SpanID == "" {
-		t.Fatalf("expected inject.func span.start")
-	}
-	if injectFuncSpan.ParentSpanID != injectSpan.SpanID {
-		t.Fatalf("inject.func should be child of inject span, got parent=%q inject=%q", injectFuncSpan.ParentSpanID, injectSpan.SpanID)
 	}
 	if len(paramSpanIDs) == 0 {
 		t.Fatalf("expected inject.param span.start")
@@ -113,7 +103,6 @@ func TestTraceInjectParamsAreSiblings(t *testing.T) {
 	}
 
 	var injectSpan dixtrace.Event
-	var injectFuncSpan dixtrace.Event
 	var paramSpans []dixtrace.Event
 
 	for _, e := range res.Records {
@@ -126,9 +115,6 @@ func TestTraceInjectParamsAreSiblings(t *testing.T) {
 		if e.Operation == "inject.param" {
 			paramSpans = append(paramSpans, e)
 		}
-		if e.Operation == "inject.func" && injectFuncSpan.SpanID == "" {
-			injectFuncSpan = e
-		}
 	}
 
 	if injectSpan.SpanID == "" {
@@ -137,17 +123,13 @@ func TestTraceInjectParamsAreSiblings(t *testing.T) {
 	if len(paramSpans) < 2 {
 		t.Fatalf("expected at least 2 inject.param spans, got %d", len(paramSpans))
 	}
-	if injectFuncSpan.SpanID == "" {
-		t.Fatalf("expected inject.func span")
-	}
-
 	checked := 0
 	for _, p := range paramSpans {
 		if p.TraceID != injectSpan.TraceID {
 			continue
 		}
-		if p.ParentSpanID != injectFuncSpan.SpanID {
-			t.Fatalf("inject.param should be child of inject.func span, got parent=%q inject.func=%q", p.ParentSpanID, injectFuncSpan.SpanID)
+		if p.ParentSpanID != injectSpan.SpanID {
+			t.Fatalf("inject.param should be child of inject span, got parent=%q inject=%q", p.ParentSpanID, injectSpan.SpanID)
 		}
 		checked++
 		if checked >= 2 {
@@ -156,7 +138,7 @@ func TestTraceInjectParamsAreSiblings(t *testing.T) {
 	}
 
 	if checked < 2 {
-		t.Fatalf("expected to validate 2 inject.param sibling spans under inject.func")
+		t.Fatalf("expected to validate 2 inject.param sibling spans under inject")
 	}
 }
 
@@ -180,7 +162,6 @@ func TestTraceResolveNotNestedUnderInjectParam(t *testing.T) {
 	}
 
 	var injectSpan dixtrace.Event
-	var injectFuncSpan dixtrace.Event
 	paramSpanIDs := map[string]bool{}
 	resolveUnderParam := 0
 
@@ -194,18 +175,11 @@ func TestTraceResolveNotNestedUnderInjectParam(t *testing.T) {
 		if e.Operation == "inject.param" && e.SpanID != "" {
 			paramSpanIDs[e.SpanID] = true
 		}
-		if e.Operation == "inject.func" && injectFuncSpan.SpanID == "" {
-			injectFuncSpan = e
-		}
 	}
 
 	if injectSpan.SpanID == "" {
 		t.Fatalf("expected inject span")
 	}
-	if injectFuncSpan.SpanID == "" {
-		t.Fatalf("expected inject.func span")
-	}
-
 	for _, e := range res.Records {
 		if e.Event != "span.start" || e.Operation != "resolve.value" {
 			continue
@@ -213,8 +187,8 @@ func TestTraceResolveNotNestedUnderInjectParam(t *testing.T) {
 		if paramSpanIDs[e.ParentSpanID] {
 			resolveUnderParam++
 		}
-		if e.ParentSpanID == injectFuncSpan.SpanID {
-			t.Fatalf("resolve.value should be nested under inject.param, got inject.func parent %s", e.ParentSpanID)
+		if e.ParentSpanID == injectSpan.SpanID {
+			t.Fatalf("resolve.value should be nested under inject.param, got inject parent %s", e.ParentSpanID)
 		}
 	}
 
@@ -266,7 +240,7 @@ func TestTryInjectContextUsesGivenParentSpan(t *testing.T) {
 	}
 }
 
-func TestInjectFunctionHasDedicatedSpan(t *testing.T) {
+func TestInjectFunctionDoesNotCreateDedicatedSpan(t *testing.T) {
 	dixtrace.ResetForTest()
 
 	type depA struct{}
@@ -283,7 +257,8 @@ func TestInjectFunctionHasDedicatedSpan(t *testing.T) {
 		t.Fatalf("expected span.start events, got none")
 	}
 
-	var injectSpan, injectFuncSpan dixtrace.Event
+	var injectSpan dixtrace.Event
+	injectFuncCount := 0
 	for _, e := range res.Records {
 		if e.Event != "span.start" {
 			continue
@@ -291,19 +266,16 @@ func TestInjectFunctionHasDedicatedSpan(t *testing.T) {
 		if e.Operation == "inject" && injectSpan.SpanID == "" {
 			injectSpan = e
 		}
-		if e.Operation == "inject.func" && injectFuncSpan.SpanID == "" {
-			injectFuncSpan = e
+		if e.Operation == "inject.func" {
+			injectFuncCount++
 		}
 	}
 
 	if injectSpan.SpanID == "" {
 		t.Fatalf("expected inject span")
 	}
-	if injectFuncSpan.SpanID == "" {
-		t.Fatalf("expected inject.func span")
-	}
-	if injectFuncSpan.ParentSpanID != injectSpan.SpanID {
-		t.Fatalf("inject.func should be child of inject, parent=%q inject=%q", injectFuncSpan.ParentSpanID, injectSpan.SpanID)
+	if injectFuncCount != 0 {
+		t.Fatalf("expected no inject.func span, got %d", injectFuncCount)
 	}
 }
 

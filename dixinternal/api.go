@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pubgo/dix/v2/dixtrace"
 )
 
 // New Dix new
@@ -62,8 +64,11 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) InjectContext(ctx context.Context, param any, opts ...Option) any {
 	component := describeComponent(param)
-	if dep, ok := dix.isCycle(); ok {
+	_, cycleSpan := dixtrace.BeginSpanCtx(ctx, "inject.cycle_check", component, "component", component)
+	dep, ok := dix.isCycle()
+	if ok {
 		err := errors.New("circular dependency: " + dep)
+		cycleSpan.End(err, "component", component, "cycle_path", dep)
 		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component, "error_type", buildErrorType("inject", "cycle_check", false, err.Error()), "hint", buildErrorHint("inject", "cycle_check", false))
 		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
 			Stage:     "cycle_check",
@@ -71,6 +76,7 @@ func (dix *Dix) InjectContext(ctx context.Context, param any, opts ...Option) an
 		})
 		panic(err)
 	}
+	cycleSpan.End(nil, "component", component)
 
 	if err := dix.inject(ctx, param, opts...); err != nil {
 		logger.Error("inject failed", "component", component, "error", err, "error_type", buildErrorType("inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("inject", "inject", false))
@@ -94,8 +100,11 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryInjectContext(ctx context.Context, param any, opts ...Option) error {
 	component := describeComponent(param)
-	if dep, ok := dix.isCycle(); ok {
+	_, cycleSpan := dixtrace.BeginSpanCtx(ctx, "inject.cycle_check", component, "component", component)
+	dep, ok := dix.isCycle()
+	if ok {
 		err := errors.New("circular dependency: " + dep)
+		cycleSpan.End(err, "component", component, "cycle_path", dep)
 		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component, "error_type", buildErrorType("try_inject", "cycle_check", false, err.Error()), "hint", buildErrorHint("try_inject", "cycle_check", false))
 		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
 			Stage:     "cycle_check",
@@ -103,6 +112,7 @@ func (dix *Dix) TryInjectContext(ctx context.Context, param any, opts ...Option)
 		})
 		return err
 	}
+	cycleSpan.End(nil, "component", component)
 
 	err := dix.inject(ctx, param, opts...)
 	if err != nil {

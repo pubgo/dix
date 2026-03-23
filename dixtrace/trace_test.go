@@ -26,9 +26,9 @@ func TestMemorySinkQuery(t *testing.T) {
 func TestDetachedSpanDoesNotBecomeParentOfNestedSpan(t *testing.T) {
 	ResetForTest()
 
-	root := BeginSpan("inject", "comp")
-	err := RunDetachedSpan("inject.param", "arg0", func() error {
-		inner := BeginSpan("resolve.value", "dep")
+	ctx, root := BeginSpanCtx(context.Background(), "inject", "comp")
+	err := RunDetachedSpanCtx(ctx, "inject.param", "arg0", func() error {
+		_, inner := BeginSpanCtx(ctx, "resolve.value", "dep")
 		inner.End(nil)
 		return nil
 	})

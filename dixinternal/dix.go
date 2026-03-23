@@ -277,12 +277,24 @@ func (dix *Dix) executeProvider(ctx context.Context, p *providerFn, outTyp outpu
 
 	// 2. Call provider function
 	start := time.Now()
+	_, callSpan := dixtrace.BeginSpanCtx(ctx, "provider.call", fnName,
+		"provider", traceFnName,
+		"output_type", outTyp.String(),
+		"timeout", opt.ProviderTimeout.String(),
+	)
 
 	logDITrace("provider.call.start", "provider", traceFnName, "output_type", outTyp.String(), "timeout", opt.ProviderTimeout.String())
 	logger.Debug("evaluating provider", "provider", fnName)
 
 	outputs, callErr, timedOut := p.callWithTimeout(inputs, opt.ProviderTimeout)
 	duration := time.Since(start)
+	callSpan.End(callErr,
+		"provider", traceFnName,
+		"output_type", outTyp.String(),
+		"timeout", opt.ProviderTimeout.String(),
+		"duration", duration.String(),
+		"timed_out", timedOut,
+	)
 	if callErr != nil {
 		logDITrace("provider.call.failed",
 			"provider", traceFnName,
@@ -739,7 +751,15 @@ func (dix *Dix) getValue(ctx context.Context, typ reflect.Type, opt Options, isM
 	// Otherwise, resolve from providers
 	logDITrace("resolve.value.search_provider.start", "type", typ.String(), "query_kind", dependencyQueryKind(isMap, isList))
 	resultPath = "provider_lookup"
-	valMap, err := dix.getOutputTypeValues(ctx, typ, opt)
+	providerCtx, providerSpan := dixtrace.BeginSpanCtx(ctx, "resolve.provider", typ.String(),
+		"type", typ.String(),
+		"query_kind", dependencyQueryKind(isMap, isList),
+	)
+	valMap, err := dix.getOutputTypeValues(providerCtx, typ, opt)
+	providerSpan.End(err,
+		"type", typ.String(),
+		"query_kind", dependencyQueryKind(isMap, isList),
+	)
 	if err != nil {
 		logDITrace("resolve.value.search_provider.failed", "type", typ.String(), "error", err)
 		resultPath = "provider_lookup_failed"
@@ -816,10 +836,6 @@ func (dix *Dix) createNotFoundError(typ reflect.Type, valMap map[group][]value, 
 // injectFunc injects dependencies into a function and executes it
 func (dix *Dix) injectFunc(ctx context.Context, fnVal reflect.Value, opt Options) (err error) {
 	traceFnName := GetFnTraceName(fnVal)
-	ctx, span := dixtrace.BeginSpanCtx(ctx, "inject.func", traceFnName, "function", traceFnName)
-	defer func() {
-		span.End(err, "function", traceFnName)
-	}()
 	logDITrace("inject.func.start", "function", traceFnName)
 
 	defer func() {
@@ -990,10 +1006,13 @@ func (dix *Dix) injectStruct(ctx context.Context, structVal reflect.Value, opt O
 // NOTE: This method is NOT thread-safe by itself. Use Inject() or TryInject() which handle locking.
 func (dix *Dix) inject(ctx context.Context, param any, opts ...Option) (err error) {
 	paramType := "<nil>"
+	component := describeComponent(param)
 	if typ := reflect.TypeOf(param); typ != nil {
 		paramType = typ.String()
 	}
-	component := describeComponent(param)
+	if fnVal := reflect.ValueOf(param); fnVal.IsValid() && fnVal.Kind() == reflect.Func && !fnVal.IsNil() {
+		component = GetFnTraceName(fnVal)
+	}
 	ctx, span := dixtrace.BeginSpanCtx(ctx, "inject", component, "param_type", paramType)
 	defer func() {
 		span.End(err, "param_type", paramType)
