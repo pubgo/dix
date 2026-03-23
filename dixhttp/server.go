@@ -131,6 +131,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
 	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
 	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
+	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
@@ -150,6 +151,55 @@ func (s *Server) HandleErrors(w http.ResponseWriter, r *http.Request) {
 
 	errors := s.dix.GetRecentErrors(limit)
 	writeJSON(w, errors)
+}
+
+// HandleDiagnostics returns records from DIX_DIAG_FILE (JSONL).
+// Query params:
+// - kind: trace|error|llm (optional)
+// - event: trace event fuzzy match (optional)
+// - q: full-text search over record JSON (optional)
+// - limit: optional positive integer, default 200, max 2000
+// - before_id: optional record id cursor for older-page query
+// - since_unix_nano: optional lower time bound
+// - until_unix_nano: optional upper time bound
+func (s *Server) HandleDiagnostics(w http.ResponseWriter, r *http.Request) {
+	query := dixinternal.DiagFileQuery{
+		Kind:   strings.TrimSpace(r.URL.Query().Get("kind")),
+		Event:  strings.TrimSpace(r.URL.Query().Get("event")),
+		Search: strings.TrimSpace(r.URL.Query().Get("q")),
+	}
+
+	if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			query.Limit = l
+		}
+	}
+
+	if beforeStr := strings.TrimSpace(r.URL.Query().Get("before_id")); beforeStr != "" {
+		if before, err := strconv.ParseInt(beforeStr, 10, 64); err == nil {
+			query.BeforeID = before
+		}
+	}
+
+	if sinceStr := strings.TrimSpace(r.URL.Query().Get("since_unix_nano")); sinceStr != "" {
+		if since, err := strconv.ParseInt(sinceStr, 10, 64); err == nil {
+			query.SinceUnix = since
+		}
+	}
+
+	if untilStr := strings.TrimSpace(r.URL.Query().Get("until_unix_nano")); untilStr != "" {
+		if until, err := strconv.ParseInt(untilStr, 10, 64); err == nil {
+			query.UntilUnix = until
+		}
+	}
+
+	result, err := dixinternal.ReadDiagFileRecords(query)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read diagnostics: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, result)
 }
 
 // ServeHTTP implements http.Handler interface

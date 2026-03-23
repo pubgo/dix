@@ -151,6 +151,24 @@ When enabled, dix prints `di_trace ...` events with structured key-values (provi
 
 > Note: if `DIX_LLM_DIAG_MODE=machine`, human-readable text logs are suppressed by design, including `di_trace` lines.
 
+### Diagnostic File Collection (Optional)
+
+You can collect detailed diagnostics into a searchable JSONL file:
+
+- Env var: `DIX_DIAG_FILE`
+- Example: `export DIX_DIAG_FILE=.local/dix-diag.jsonl`
+
+Behavior rules:
+
+- If `DIX_DIAG_FILE` is **not configured**, dix keeps the original behavior (no diagnostic file output).
+- If `DIX_DIAG_FILE` is configured, dix appends diagnostic records to file (`trace` / `error` / `llm`).
+- Console verbosity still follows existing controls (`DIX_TRACE_DI`, `DIX_LLM_DIAG_MODE`).
+
+Tip:
+
+- Keep console output concise for users.
+- Keep detailed records in file for search/LLM/offline troubleshooting.
+
 Quick event dictionary:
 
 | Event                                          | Meaning                                                                    |

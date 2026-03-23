@@ -204,4 +204,16 @@ func TestDiagFileConfiguredCollectsTraceErrorAndLLM(t *testing.T) {
 	if !strings.Contains(content, `"kind":"llm"`) {
 		t.Fatalf("expected diagnostic file to include llm records, got: %s", content)
 	}
+
+	if !strings.Contains(content, `"record_id":`) {
+		t.Fatalf("expected diagnostic file to include record_id metadata, got: %s", content)
+	}
+
+	if !strings.Contains(content, `"source":"dix"`) {
+		t.Fatalf("expected diagnostic file to include source metadata, got: %s", content)
+	}
+
+	if !strings.Contains(content, `"llm_diag_mode":"human"`) {
+		t.Fatalf("expected diagnostic file to include llm_diag_mode metadata, got: %s", content)
+	}
 }

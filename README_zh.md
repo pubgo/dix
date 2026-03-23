@@ -151,6 +151,24 @@ export DIX_TRACE_DI=true
 
 > 注意：若设置 `DIX_LLM_DIAG_MODE=machine`，会按设计抑制人类文本日志，`di_trace` 也会被抑制。
 
+### 诊断文件采集（可选）
+
+你可以把更完整的诊断信息写入可检索的 JSONL 文件：
+
+- 环境变量：`DIX_DIAG_FILE`
+- 示例：`export DIX_DIAG_FILE=.local/dix-diag.jsonl`
+
+行为规则：
+
+- 如果 **未配置** `DIX_DIAG_FILE`，dix 保持原有方案（不输出诊断文件）。
+- 如果配置了 `DIX_DIAG_FILE`，dix 会追加写入诊断记录（`trace` / `error` / `llm`）。
+- 终端可见日志仍由现有开关控制（`DIX_TRACE_DI`、`DIX_LLM_DIAG_MODE`）。
+
+建议：
+
+- 终端给用户看“少而准”。
+- 文件给排障/LLM看“全而细”。
+
 事件速查：
 
 | 事件                                           | 含义                                                                    |

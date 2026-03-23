@@ -15,6 +15,7 @@
 - 🧩 **分组清单（前缀聚合）** - 通过包路径/前缀聚合节点
 - 🔎 **前缀过滤** - 只显示匹配前缀的节点/Provider
 - 🧭 **组内子图** - 查看组内及上下游依赖
+- 🗂 **诊断文件查询** - 配置 `DIX_DIAG_FILE` 后，页面可查询并展示 `trace/error/llm` JSONL 记录
 - 📡 **RESTful API** - 提供 JSON 格式的依赖关系数据
 - 🧩 **Mermaid 预览/导出** - 将当前图生成 Mermaid 流程图（支持分组/过滤）
 
@@ -299,6 +300,39 @@ dixhttp.RegisterGroupRules(
     "occurred_at_unix_nano": 1700000000000000000
   }
 ]
+```
+
+### GET `/api/diagnostics?kind=trace&q=provider&event=provider.call.start&limit=200`
+读取并过滤 `DIX_DIAG_FILE` 中的 JSONL 记录。
+
+若未配置 `DIX_DIAG_FILE`，返回 `enabled=false` 且记录为空。
+
+```json
+{
+  "enabled": true,
+  "path": "/tmp/dix-diag.jsonl",
+  "exists": true,
+  "total": 42,
+  "returned": 42,
+  "next_before_id": 0,
+  "records": [
+    {
+      "record_id": 128,
+      "source": "dix",
+      "pid": 12345,
+      "process": "my-app",
+      "hostname": "dev-mac",
+      "trace_di": true,
+      "llm_diag_mode": "dual",
+      "kind": "trace",
+      "event": "provider.call.start",
+      "occurred_at_unix_nano": 1700000000000000000,
+      "fields": {
+        "provider": "github.com/acme/app.main.NewDB"
+      }
+    }
+  ]
+}
 ```
 
 ### GET `/api/package/{packageName}`

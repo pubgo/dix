@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/pubgo/dix/v2/dixinternal"
@@ -113,5 +115,77 @@ func TestHandleErrors(t *testing.T) {
 
 	if events[0].Hint == "" {
 		t.Fatalf("expected hint in error event, got %+v", events[0])
+	}
+}
+
+func TestHandleDiagnosticsWhenEnvNotConfigured(t *testing.T) {
+	t.Setenv("DIX_DIAG_FILE", "")
+
+	server := NewServer(dixinternal.New())
+	req := httptest.NewRequest(http.MethodGet, "/api/diagnostics", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	enabled, _ := resp["enabled"].(bool)
+	if enabled {
+		t.Fatalf("expected enabled=false when DIX_DIAG_FILE is empty, got %+v", resp)
+	}
+}
+
+func TestHandleDiagnosticsReadsFileRecords(t *testing.T) {
+	di := dixinternal.New()
+
+	diagPath := filepath.Join(t.TempDir(), "diag.jsonl")
+	content := "" +
+		`{"record_id":1,"kind":"trace","event":"inject.start","occurred_at_unix_nano":100}` + "\n" +
+		`{"record_id":2,"kind":"error","event":"","occurred_at_unix_nano":200,"payload":{"message":"boom"}}` + "\n"
+
+	if err := os.WriteFile(diagPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write diagnostic file: %v", err)
+	}
+
+	t.Setenv("DIX_DIAG_FILE", diagPath)
+
+	server := NewServer(di)
+	req := httptest.NewRequest(http.MethodGet, "/api/diagnostics?kind=trace&limit=10", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp struct {
+		Enabled bool                         `json:"enabled"`
+		Path    string                       `json:"path"`
+		Total   int                          `json:"total"`
+		Records []dixinternal.DiagFileRecord `json:"records"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if !resp.Enabled {
+		t.Fatalf("expected enabled=true, got %+v", resp)
+	}
+	if resp.Path != diagPath {
+		t.Fatalf("expected path %s, got %s", diagPath, resp.Path)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("expected total filtered records 1, got %d", resp.Total)
+	}
+	if len(resp.Records) != 1 || resp.Records[0].Kind != "trace" {
+		t.Fatalf("expected single trace record, got %+v", resp.Records)
 	}
 }

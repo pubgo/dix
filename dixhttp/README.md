@@ -16,6 +16,7 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🔎 **Prefix Filter** - Show only nodes/providers matching a prefix
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
 - ⏱️ **Startup Runtime Stats** - Show all providers' startup durations (total/avg/last, call count), with executed-only filter (`call_count > 0`)
+- 🗂 **Diagnostic File Query** - When `DIX_DIAG_FILE` is set, UI can query and display `trace/error/llm` JSONL records for troubleshooting
 - 📡 **RESTful API** - Provide JSON format dependency data
 - 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
@@ -284,6 +285,39 @@ Returns recent `Inject` / `TryInject` errors (latest first), useful when startup
     "occurred_at_unix_nano": 1700000000000000000
   }
 ]
+```
+
+### GET `/api/diagnostics?kind=trace&q=provider&event=provider.call.start&limit=200`
+Reads and filters JSONL records from `DIX_DIAG_FILE`.
+
+If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty records.
+
+```json
+{
+  "enabled": true,
+  "path": "/tmp/dix-diag.jsonl",
+  "exists": true,
+  "total": 42,
+  "returned": 42,
+  "next_before_id": 0,
+  "records": [
+    {
+      "record_id": 128,
+      "source": "dix",
+      "pid": 12345,
+      "process": "my-app",
+      "hostname": "dev-mac",
+      "trace_di": true,
+      "llm_diag_mode": "dual",
+      "kind": "trace",
+      "event": "provider.call.start",
+      "occurred_at_unix_nano": 1700000000000000000,
+      "fields": {
+        "provider": "github.com/acme/app.main.NewDB"
+      }
+    }
+  ]
+}
 ```
 
 ### GET `/api/packages`

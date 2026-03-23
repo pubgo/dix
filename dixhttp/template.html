@@ -65,6 +65,36 @@
                         <span>📎 <span x-text="stats.edge_count">-</span> 依赖</span>
                     </div>
                 </div>
+                <div class="relative" x-data="{ open:false }">
+                    <button @click="open = !open"
+                        class="px-3 py-2 text-sm rounded-lg bg-white/20 hover:bg-white/30 transition flex items-center gap-2">
+                        <span>🧪</span>
+                        <span>诊断菜单</span>
+                    </button>
+                    <div x-show="open" x-cloak @click.outside="open = false"
+                        class="absolute right-0 mt-2 w-64 bg-white text-gray-700 rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                        <button @click="openDiagnosticModal('runtime'); open=false"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between">
+                            <span>⏱ Provider 启动耗时</span>
+                            <span class="text-xs text-gray-400" x-text="runtimeStats.length"></span>
+                        </button>
+                        <button @click="openDiagnosticModal('errors'); open=false"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                            <span>🚨 最近注入错误</span>
+                            <span class="text-xs text-gray-400" x-text="recentErrors.length"></span>
+                        </button>
+                        <button @click="openDiagnosticModal('diag'); open=false"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                            <span>🗂 诊断文件记录</span>
+                            <span class="text-xs" :class="diagEnabled ? 'text-green-600' : 'text-orange-500'"
+                                x-text="diagEnabled ? '已启用' : '未启用'"></span>
+                        </button>
+                        <button @click="openDiagnosticModal('error-guide'); open=false"
+                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-100">
+                            🧭 错误类型说明
+                        </button>
+                    </div>
+                </div>
             </div>
         </header>
 
@@ -363,6 +393,13 @@
                                     <span>该 Provider 最近一次执行发生超时</span>
                                 </div>
                             </div>
+                            <div class="mb-4" x-show="isProviderErrored(selectedNode.data)">
+                                <div
+                                    class="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-medium">
+                                    <span>🚨</span>
+                                    <span x-text="providerErrorSummary(selectedNode.data)"></span>
+                                </div>
+                            </div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">输出类型</h4>
                                 <div @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
@@ -484,213 +521,6 @@
                     </template>
                 </div>
 
-                <!-- Startup Runtime Stats -->
-                <div class="p-4 border-t border-gray-200 bg-white">
-                    <div class="flex items-center justify-between mb-2">
-                        <button @click="runtimeStatsCollapsed = !runtimeStatsCollapsed"
-                            class="flex-1 flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-gray-300 bg-gray-50 hover:bg-gray-100 transition">
-                            <span class="text-xs font-semibold text-gray-700 uppercase">⏱ Provider 启动耗时</span>
-                            <span class="inline-flex items-center gap-2">
-                                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                                    :class="runtimeStatsCollapsed ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'"
-                                    x-text="runtimeStatsCollapsed ? '点击展开' : '点击收起'"></span>
-                                <svg class="w-4 h-4 text-gray-600 transition-transform duration-200"
-                                    :class="runtimeStatsCollapsed ? '' : 'rotate-180'" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </span>
-                        </button>
-                        <div class="flex items-center gap-2">
-                            <button @click="openDiagnosticModal('runtime')"
-                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                                大窗
-                            </button>
-                            <button @click="loadRuntimeStats()"
-                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                :disabled="runtimeStatsLoading">
-                                <span x-text="runtimeStatsLoading ? '刷新中...' : '刷新'"></span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="text-[11px] text-gray-500 mb-2 flex items-center justify-between">
-                        <span x-text="`共 ${filteredRuntimeStats.length} / ${runtimeStats.length} 个 provider`"></span>
-                        <span x-show="runtimeStatsUpdatedAt" x-text="`更新时间 ${runtimeStatsUpdatedAt}`"></span>
-                    </div>
-
-                    <div x-show="!runtimeStatsCollapsed" x-cloak>
-                        <div class="mb-2">
-                            <input type="text" x-model="runtimeStatsSearch" placeholder="搜索 provider 函数名"
-                                class="w-full px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
-                        </div>
-
-                        <label class="mb-2 flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
-                            <input type="checkbox" x-model="runtimeStatsOnlyExecuted" class="rounded border-gray-300">
-                            仅显示已执行 provider（call_count &gt; 0）
-                        </label>
-
-                        <div x-show="runtimeStatsError" class="text-xs text-red-500 mb-2" x-text="runtimeStatsError">
-                        </div>
-
-                        <div class="max-h-72 overflow-y-auto border border-gray-200 rounded-lg">
-                            <template x-if="filteredRuntimeStats.length === 0">
-                                <div class="p-3 text-xs text-gray-400"
-                                    x-text="runtimeStatsOnlyExecuted ? '暂无已执行 provider（请先触发一次注入）' : '暂无启动耗时数据（请先触发一次注入）'">
-                                </div>
-                            </template>
-                            <template x-for="(item, idx) in filteredRuntimeStats" :key="runtimeStatKey(item, idx)">
-                                <button @click="focusProviderByRuntime(item)"
-                                    class="w-full text-left px-3 py-2 border-b border-gray-100 last:border-b-0 transition"
-                                    :class="isTimeoutRuntimeStat(item)
-                                        ? 'bg-red-50 hover:bg-red-100 border-l-2 border-l-red-500'
-                                        : 'hover:bg-gray-50'">
-                                    <div class="flex items-start justify-between gap-2">
-                                        <div class="min-w-0">
-                                            <div class="flex items-center gap-2 min-w-0">
-                                                <div class="text-xs font-medium text-gray-700 truncate"
-                                                    x-text="item.function_name || '(unknown)'"></div>
-                                                <span x-show="isTimeoutRuntimeStat(item)"
-                                                    class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold">超时</span>
-                                            </div>
-                                            <div class="text-[11px] text-gray-400 truncate"
-                                                x-text="item.output_type || ''">
-                                            </div>
-                                        </div>
-                                        <div class="text-right shrink-0">
-                                            <div class="text-xs font-semibold"
-                                                :class="isTimeoutRuntimeStat(item) ? 'text-red-700' : 'text-gray-700'"
-                                                x-text="formatDurationNs(item.total_duration)"></div>
-                                            <div class="text-[11px] text-gray-400" x-text="`${item.call_count} 次`">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </button>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recent Errors -->
-                <div class="p-4 border-t border-gray-200 bg-white">
-                    <div class="flex items-center justify-between mb-2">
-                        <button @click="recentErrorsCollapsed = !recentErrorsCollapsed"
-                            class="flex-1 flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-gray-300 bg-gray-50 hover:bg-gray-100 transition">
-                            <span class="text-xs font-semibold text-gray-700 uppercase">🚨 最近注入错误</span>
-                            <span class="inline-flex items-center gap-2">
-                                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                                    :class="recentErrorsCollapsed ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'"
-                                    x-text="recentErrorsCollapsed ? '点击展开' : '点击收起'"></span>
-                                <svg class="w-4 h-4 text-gray-600 transition-transform duration-200"
-                                    :class="recentErrorsCollapsed ? '' : 'rotate-180'" fill="none" stroke="currentColor"
-                                    viewBox="0 0 24 24" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </span>
-                        </button>
-                        <div class="flex items-center gap-2">
-                            <button @click="openDiagnosticModal('errors')"
-                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                                大窗
-                            </button>
-                            <button @click="loadRecentErrors()"
-                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                :disabled="recentErrorsLoading">
-                                <span x-text="recentErrorsLoading ? '刷新中...' : '刷新'"></span>
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="text-[11px] text-gray-500 mb-2 flex items-center justify-between">
-                        <span x-text="`共 ${recentErrors.length} 条`"></span>
-                        <span x-show="recentErrorsUpdatedAt" x-text="`更新时间 ${recentErrorsUpdatedAt}`"></span>
-                    </div>
-
-                    <div x-show="!recentErrorsCollapsed" x-cloak>
-                        <div x-show="recentErrorsError" class="text-xs text-red-500 mb-2" x-text="recentErrorsError">
-                        </div>
-
-                        <div class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
-                            <template x-if="recentErrors.length === 0">
-                                <div class="p-3 text-xs text-gray-400">暂无注入错误记录</div>
-                            </template>
-                            <template x-for="(item, idx) in recentErrors"
-                                :key="`${item.occurred_at_unix_nano || idx}|${idx}`">
-                                <div class="px-3 py-2 border-b border-gray-100 last:border-b-0">
-                                    <div class="flex items-center justify-between gap-2 mb-1">
-                                        <div class="flex items-center gap-1.5 min-w-0">
-                                            <span
-                                                class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold"
-                                                x-text="item.operation || 'inject'"></span>
-                                            <span x-show="item.error_type"
-                                                class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-medium break-all"
-                                                x-text="item.error_type"></span>
-                                            <span x-show="item.stage"
-                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-medium"
-                                                x-text="item.stage"></span>
-                                        </div>
-                                        <span class="text-[10px] text-gray-400"
-                                            x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
-                                    </div>
-                                    <div class="text-[11px] text-gray-500 break-all mb-1"
-                                        x-text="item.provider_function || item.component || ''">
-                                    </div>
-                                    <div class="text-[11px] text-gray-500 break-all mb-1" x-show="item.output_type"
-                                        x-text="`输出: ${item.output_type}`"></div>
-                                    <div class="text-xs text-red-600 break-all" x-text="item.message || ''"></div>
-                                    <div class="text-[11px] text-gray-500 break-all mt-1" x-show="item.root_cause"
-                                        x-text="`根因: ${item.root_cause}`"></div>
-                                    <div class="text-[11px] text-blue-700 break-all mt-1" x-show="item.hint"
-                                        x-text="`Hint: ${item.hint}`"></div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Error Type Guide -->
-                <div class="p-4 border-t border-gray-200 bg-white">
-                    <div class="flex items-center justify-between mb-2">
-                        <button @click="errorTypeGuideCollapsed = !errorTypeGuideCollapsed"
-                            class="flex-1 flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-gray-300 bg-gray-50 hover:bg-gray-100 transition">
-                            <span class="text-xs font-semibold text-gray-700 uppercase">🧭 错误类型说明</span>
-                            <span class="inline-flex items-center gap-2">
-                                <span class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                                    :class="errorTypeGuideCollapsed ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'"
-                                    x-text="errorTypeGuideCollapsed ? '点击展开' : '点击收起'"></span>
-                                <svg class="w-4 h-4 text-gray-600 transition-transform duration-200"
-                                    :class="errorTypeGuideCollapsed ? '' : 'rotate-180'" fill="none"
-                                    stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M19 9l-7 7-7-7" />
-                                </svg>
-                            </span>
-                        </button>
-                        <div class="flex items-center gap-2 ml-2">
-                            <button @click="openDiagnosticModal('error-guide')"
-                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                                大窗
-                            </button>
-                        </div>
-                    </div>
-
-                    <div x-show="!errorTypeGuideCollapsed" x-cloak>
-                        <div class="max-h-56 overflow-y-auto border border-gray-200 rounded-lg">
-                            <template x-for="item in errorTypeGuide" :key="item.code">
-                                <div class="px-3 py-2 border-b border-gray-100 last:border-b-0">
-                                    <div class="inline-flex px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px] font-semibold break-all"
-                                        x-text="item.code"></div>
-                                    <div class="text-xs text-gray-700 mt-1" x-text="item.summary"></div>
-                                    <div class="text-[11px] text-blue-700 mt-1 break-all"
-                                        x-text="`定位建议: ${item.action}`"></div>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- Legend -->
                 <div class="p-4 border-t border-gray-200 bg-gray-50">
                     <h4 class="text-xs font-semibold text-gray-400 uppercase mb-3">图例</h4>
@@ -715,6 +545,10 @@
                             <div class="w-4 h-4 rounded bg-red-200 border border-red-600"></div>
                             <span>超时 Provider（Providers 视图）</span>
                         </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded bg-red-100 border border-red-700"></div>
+                            <span>错误 Provider（Providers 视图）</span>
+                        </div>
                     </div>
                 </div>
             </aside>
@@ -727,7 +561,9 @@
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div class="font-semibold text-gray-700" x-text="diagnosticModalType === 'runtime'
                             ? '⏱ Provider 启动耗时（大视图）'
-                            : (diagnosticModalType === 'errors' ? '🚨 最近注入错误（大视图）' : '🧭 错误类型说明（大视图）')"></div>
+                            : (diagnosticModalType === 'errors'
+                                ? '🚨 最近注入错误（大视图）'
+                                : (diagnosticModalType === 'diag' ? '🗂 诊断文件记录（大视图）' : '🧭 错误类型说明（大视图）'))"></div>
                     <button @click="diagnosticModalOpen = false"
                         class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                         关闭
@@ -737,7 +573,9 @@
                     <input type="text" x-model="diagnosticSearch"
                         :placeholder="diagnosticModalType === 'runtime'
                             ? '搜索函数名/输出类型/错误信息'
-                            : (diagnosticModalType === 'errors' ? '搜索操作/错误类型/阶段/组件/函数/类型/根因/Hint/错误信息' : '搜索错误类型/说明/定位建议')"
+                            : (diagnosticModalType === 'errors'
+                                ? '搜索操作/错误类型/阶段/组件/函数/类型/根因/Hint/错误信息'
+                                : (diagnosticModalType === 'diag' ? '搜索 kind/event/fields/payload' : '搜索错误类型/说明/定位建议'))"
                         class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
                     <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
@@ -748,6 +586,11 @@
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
                         :disabled="recentErrorsLoading">
                         <span x-text="recentErrorsLoading ? '刷新中...' : '刷新错误'"></span>
+                    </button>
+                    <button x-show="diagnosticModalType === 'diag'" @click="refreshDiagFromModal()"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                        :disabled="diagLoading || !diagEnabled">
+                        <span x-text="diagLoading ? '刷新中...' : '刷新诊断'"></span>
                     </button>
                     <button x-show="diagnosticModalType === 'error-guide'" @click="diagnosticSearch = ''"
                         class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
@@ -875,6 +718,76 @@
                             </template>
                         </div>
                     </template>
+
+                    <template x-if="diagnosticModalType === 'diag'">
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2" x-show="diagEnabled">
+                                <select x-model="diagKind"
+                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">全部类型</option>
+                                    <option value="trace">trace</option>
+                                    <option value="error">error</option>
+                                    <option value="llm">llm</option>
+                                </select>
+                                <input type="text" x-model="diagEvent" placeholder="事件过滤（event）"
+                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                <button @click="refreshDiagFromModal()"
+                                    class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                                    :disabled="diagLoading || !diagEnabled">应用过滤</button>
+                            </div>
+
+                            <div class="text-xs text-gray-500" x-show="diagEnabled"
+                                x-text="`文件: ${diagPath || '-'} · 共 ${diagTotal} 条，展示 ${filteredModalDiagRecords.length} 条`">
+                            </div>
+                            <div class="text-xs text-orange-600" x-show="!diagEnabled">未配置 DIX_DIAG_FILE</div>
+                            <div class="text-xs text-red-500" x-show="diagError" x-text="diagError"></div>
+
+                            <template x-if="diagEnabled && filteredModalDiagRecords.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配诊断记录</div>
+                            </template>
+
+                            <template x-for="(item, idx) in filteredModalDiagRecords"
+                                :key="`modal-diag-${item.record_id || idx}-${idx}`">
+                                <div class="border rounded-lg p-3"
+                                    :class="item.kind === 'error' ? 'border-red-200 bg-red-50/30' : 'border-gray-200 bg-white'">
+                                    <div class="flex items-center justify-between gap-2 mb-1">
+                                        <div class="flex items-center gap-1.5 min-w-0">
+                                            <span class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                :class="item.kind === 'error' ? 'bg-red-100 text-red-700' : (item.kind === 'llm' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700')"
+                                                x-text="item.kind || 'trace'"></span>
+                                            <span x-show="item.event"
+                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 text-[10px] font-medium break-all"
+                                                x-text="item.event"></span>
+                                            <span x-show="item.record_id"
+                                                class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[10px] font-medium"
+                                                x-text="`#${item.record_id}`"></span>
+                                        </div>
+                                        <span class="text-[10px] text-gray-400"
+                                            x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                    </div>
+                                    <div class="text-[11px] text-gray-500 break-all mb-1"
+                                        x-text="(item.source || 'dix') + (item.process ? ` · ${item.process}` : '') + (item.hostname ? ` · ${item.hostname}` : '')">
+                                    </div>
+                                    <div class="text-sm break-all"
+                                        :class="item.kind === 'error' ? 'text-red-700 font-semibold' : 'text-gray-700'"
+                                        x-text="diagSummaryText(item)"></div>
+                                    <ul class="mt-2 space-y-1" x-show="diagDetailLines(item).length">
+                                        <template x-for="(line, lineIdx) in diagDetailLines(item)"
+                                            :key="`diag-line-${lineIdx}`">
+                                            <li class="text-xs text-gray-600 break-all" x-text="line"></li>
+                                        </template>
+                                    </ul>
+                                    <details class="mt-2" x-show="item.kind === 'error'">
+                                        <summary class="text-[11px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                            展开原始数据（JSON）
+                                        </summary>
+                                        <pre class="mt-1 p-2 text-[11px] leading-relaxed bg-gray-50 border border-gray-200 rounded whitespace-pre-wrap break-all"
+                                            x-text="diagPrettyJson(item)"></pre>
+                                    </details>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
                 </div>
             </div>
         </div>
@@ -967,6 +880,19 @@
                 recentErrorsError: '',
                 recentErrorsUpdatedAt: '',
                 recentErrorsCollapsed: true,
+                diagEnabled: false,
+                diagPath: '',
+                diagExists: false,
+                diagTotal: 0,
+                diagRecords: [],
+                diagLoading: false,
+                diagError: '',
+                diagUpdatedAt: '',
+                diagCollapsed: true,
+                diagKind: 'error',
+                diagEvent: '',
+                diagSearch: '',
+                diagLimit: 200,
                 errorTypeGuideCollapsed: true,
                 errorTypeGuide: [
                     {
@@ -1099,6 +1025,23 @@
                     });
                 },
 
+                get filteredModalDiagRecords() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.diagRecords || []).filter(item => {
+                        if (!q) {
+                            return true;
+                        }
+                        const kind = String(item.kind || '').toLowerCase();
+                        const event = String(item.event || '').toLowerCase();
+                        const src = String(item.source || '').toLowerCase();
+                        const process = String(item.process || '').toLowerCase();
+                        const host = String(item.hostname || '').toLowerCase();
+                        const fields = JSON.stringify(item.fields || {}).toLowerCase();
+                        const payload = JSON.stringify(item.payload || {}).toLowerCase();
+                        return kind.includes(q) || event.includes(q) || src.includes(q) || process.includes(q) || host.includes(q) || fields.includes(q) || payload.includes(q);
+                    });
+                },
+
                 // Methods
                 async init() {
                     this.loadLocalState();
@@ -1108,6 +1051,7 @@
                     await this.loadDependencies();
                     await this.loadRuntimeStats();
                     await this.loadRecentErrors();
+                    await this.loadDiagFileRecords();
                     if (window.mermaid && window.mermaid.initialize) {
                         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
                     }
@@ -1184,6 +1128,9 @@
                         const data = await res.json();
                         this.recentErrors = Array.isArray(data) ? data : [];
                         this.recentErrorsUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                        if (this.network) {
+                            this.rerenderCurrentGraph();
+                        }
                     } catch (e) {
                         this.recentErrorsError = '加载最近错误失败';
                         console.error('加载最近错误失败:', e);
@@ -1192,16 +1139,181 @@
                     }
                 },
 
+                async loadDiagFileRecords() {
+                    this.diagLoading = true;
+                    this.diagError = '';
+                    try {
+                        const params = new URLSearchParams();
+                        if (this.diagKind) params.set('kind', this.diagKind);
+                        if (this.diagEvent) params.set('event', this.diagEvent);
+                        if (this.diagSearch) params.set('q', this.diagSearch);
+                        params.set('limit', String(this.diagLimit || 200));
+
+                        const res = await fetch(apiUrl('/api/diagnostics?' + params.toString()));
+                        if (!res.ok) {
+                            throw new Error('HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.diagEnabled = !!data.enabled;
+                        this.diagPath = data.path || '';
+                        this.diagExists = !!data.exists;
+                        this.diagTotal = Number(data.total || 0);
+                        this.diagRecords = Array.isArray(data.records) ? data.records : [];
+                        this.diagUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                    } catch (e) {
+                        this.diagError = '加载诊断文件记录失败';
+                        console.error('加载诊断文件记录失败:', e);
+                    } finally {
+                        this.diagLoading = false;
+                    }
+                },
+
                 openDiagnosticModal(type) {
                     if (type === 'errors') {
                         this.diagnosticModalType = 'errors';
+                    } else if (type === 'diag') {
+                        this.diagnosticModalType = 'diag';
+                        if (!this.diagKind) {
+                            this.diagKind = 'error';
+                        }
+                        this.diagnosticSearch = this.diagSearch || '';
+                        this.loadDiagFileRecords();
                     } else if (type === 'error-guide') {
                         this.diagnosticModalType = 'error-guide';
                     } else {
                         this.diagnosticModalType = 'runtime';
                     }
-                    this.diagnosticSearch = '';
+                    if (type !== 'diag') {
+                        this.diagnosticSearch = '';
+                    }
                     this.diagnosticModalOpen = true;
+                },
+
+                refreshDiagFromModal() {
+                    this.diagSearch = this.diagnosticSearch || '';
+                    this.loadDiagFileRecords();
+                },
+
+                diagPayloadValue(item, key) {
+                    if (!item || !item.payload || typeof item.payload !== 'object') {
+                        return '';
+                    }
+
+                    const normalize = (s) => String(s || '')
+                        .toLowerCase()
+                        .replace(/[_\-\s]/g, '');
+
+                    const target = normalize(key);
+                    let val = item.payload[key];
+                    if (val === undefined) {
+                        for (const [k, v] of Object.entries(item.payload)) {
+                            if (normalize(k) === target) {
+                                val = v;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (val === undefined || val === null) {
+                        return '';
+                    }
+                    if (Array.isArray(val)) {
+                        return val.join(', ');
+                    }
+                    return String(val);
+                },
+
+                diagSummaryText(item) {
+                    if (!item) {
+                        return '';
+                    }
+                    if (item.kind === 'error') {
+                        const msg = this.diagPayloadValue(item, 'message') || this.diagPayloadValue(item, 'root_cause');
+                        if (msg) {
+                            return msg;
+                        }
+                        const et = this.diagPayloadValue(item, 'error_type');
+                        return et ? `错误事件（${et}）` : '错误事件（无 message）';
+                    }
+                    if (item.kind === 'trace') {
+                        const provider = (item.fields && item.fields.provider) ? ` · ${item.fields.provider}` : '';
+                        return `${item.event || 'trace'}${provider}`;
+                    }
+                    if (item.kind === 'llm') {
+                        const errType = this.diagPayloadValue(item, 'error_type');
+                        return errType ? `LLM 诊断: ${errType}` : 'LLM 诊断记录';
+                    }
+                    return item.event || '诊断记录';
+                },
+
+                diagDetailLines(item) {
+                    const lines = [];
+                    if (!item) {
+                        return lines;
+                    }
+
+                    if (item.kind === 'error') {
+                        const pairs = [
+                            ['类型', this.diagPayloadValue(item, 'error_type')],
+                            ['阶段', this.diagPayloadValue(item, 'stage')],
+                            ['操作', this.diagPayloadValue(item, 'operation')],
+                            ['Provider', this.diagPayloadValue(item, 'provider_function')],
+                            ['输出类型', this.diagPayloadValue(item, 'output_type')],
+                            ['输入类型', this.diagPayloadValue(item, 'input_type')],
+                            ['根因', this.diagPayloadValue(item, 'root_cause')],
+                            ['Hint', this.diagPayloadValue(item, 'hint')],
+                        ];
+                        pairs.forEach(([k, v]) => {
+                            if (v) {
+                                lines.push(`${k}: ${v}`);
+                            }
+                        });
+
+                        // 若关键字段为空，补充 payload 里其他可见字段，避免“看不到信息”
+                        if (lines.length <= 1 && item.payload && typeof item.payload === 'object') {
+                            const shown = new Set(['message', 'error_type', 'stage', 'operation', 'provider_function', 'output_type', 'input_type', 'root_cause', 'hint']);
+                            Object.entries(item.payload).forEach(([k, v]) => {
+                                const key = String(k || '').toLowerCase();
+                                if (shown.has(key)) {
+                                    return;
+                                }
+                                if (v !== undefined && v !== null && String(v) !== '') {
+                                    lines.push(`${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`);
+                                }
+                            });
+                        }
+
+                        return lines;
+                    }
+
+                    if (item.kind === 'trace' && item.fields && typeof item.fields === 'object') {
+                        for (const [k, v] of Object.entries(item.fields)) {
+                            if (v !== undefined && v !== null && String(v) !== '') {
+                                lines.push(`${k}: ${v}`);
+                            }
+                        }
+                        return lines;
+                    }
+
+                    if (item.kind === 'llm' && item.payload && typeof item.payload === 'object') {
+                        const keys = ['operation', 'error_type', 'stage', 'provider_function', 'output_type', 'message', 'root_cause', 'hint'];
+                        keys.forEach((k) => {
+                            const v = this.diagPayloadValue(item, k);
+                            if (v) {
+                                lines.push(`${k}: ${v}`);
+                            }
+                        });
+                    }
+
+                    return lines;
+                },
+
+                diagPrettyJson(item) {
+                    try {
+                        return JSON.stringify(item, null, 2);
+                    } catch (e) {
+                        return String(item || '');
+                    }
                 },
 
                 async selectPackage(pkgName) {
@@ -1581,7 +1693,7 @@
                     if (this.currentView === 'providers') {
                         this.allData.providers.forEach((provider) => {
                             const providerNodeId = provider.id;
-                            const fnName = this.formatFunctionName(provider.function_name);
+                            const fnName = this.providerNodeLabel(provider);
                             const outputType = this.formatTypeName(provider.output_type);
 
                             // Provider node
@@ -1878,7 +1990,7 @@
                         if (!nodeMap.has(providerNodeId)) {
                             nodes.push({
                                 id: providerNodeId,
-                                label: this.formatFunctionName(provider.function_name),
+                                label: this.providerNodeLabel(provider),
                                 title: this.buildProviderTooltip(provider),
                                 color: this.getProviderNodeColor(provider),
                                 shape: 'box',
@@ -2055,7 +2167,66 @@
                     return this.isTimeoutRuntimeStat(this.getRuntimeStatForProvider(provider));
                 },
 
+                normalizeProviderKey(v) {
+                    return String(v || '').trim().toLowerCase();
+                },
+
+                getProviderErrorFor(provider) {
+                    if (!provider || !this.recentErrors || this.recentErrors.length === 0) {
+                        return null;
+                    }
+                    const fn = this.normalizeProviderKey(provider.function_name);
+                    const out = this.normalizeProviderKey(provider.output_type);
+                    if (!fn && !out) {
+                        return null;
+                    }
+
+                    for (const err of this.recentErrors) {
+                        if (!err) continue;
+                        const errFn = this.normalizeProviderKey(err.provider_function);
+                        const errOut = this.normalizeProviderKey(err.output_type);
+                        if (fn && errFn && fn === errFn) {
+                            return err;
+                        }
+                        if (fn && out && errFn && errOut && fn === errFn && out === errOut) {
+                            return err;
+                        }
+                    }
+                    return null;
+                },
+
+                isProviderErrored(provider) {
+                    return !!this.getProviderErrorFor(provider);
+                },
+
+                providerNodeLabel(provider) {
+                    const base = this.formatFunctionName(provider.function_name);
+                    if (this.isProviderErrored(provider)) {
+                        return `🚨 ${base}`;
+                    }
+                    return base;
+                },
+
+                providerErrorSummary(provider) {
+                    const err = this.getProviderErrorFor(provider);
+                    if (!err) {
+                        return '';
+                    }
+                    const msg = String(err.message || '').trim();
+                    const stage = String(err.stage || '').trim();
+                    if (msg && stage) {
+                        return `最近错误（${stage}）：${msg}`;
+                    }
+                    if (msg) {
+                        return `最近错误：${msg}`;
+                    }
+                    return '最近有错误事件';
+                },
+
                 getProviderNodeColor(provider) {
+                    if (this.isProviderErrored(provider)) {
+                        return { background: '#fee2e2', border: '#b91c1c' };
+                    }
                     if (this.isProviderTimedOut(provider)) {
                         return { background: '#fecaca', border: '#dc2626' };
                     }
@@ -2139,6 +2310,17 @@
                         tip += '耗时: ' + this.formatDurationNs(runtime.total_duration) + '\n';
                         if (this.isTimeoutRuntimeStat(runtime)) {
                             tip += '⚠ 超时: ' + (runtime.last_error || 'timeout') + '\n';
+                        }
+                    }
+
+                    const err = this.getProviderErrorFor(provider);
+                    if (err) {
+                        tip += '🚨 最近错误: ' + (err.message || '-') + '\n';
+                        if (err.stage) {
+                            tip += '阶段: ' + err.stage + '\n';
+                        }
+                        if (err.error_type) {
+                            tip += '类型: ' + err.error_type + '\n';
                         }
                     }
 
