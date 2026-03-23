@@ -205,14 +205,25 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">深度:</span>
-                        <select x-model="currentDepth" @change="onDepthChange()"
-                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
-                            <option value="1">1 级</option>
-                            <option value="2">2 级</option>
-                            <option value="3">3 级</option>
-                            <option value="5">5 级</option>
-                            <option value="0">全部</option>
-                        </select>
+                        <span
+                            class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-semibold">可输入</span>
+                        <button @click="decreaseDepth()"
+                            class="w-7 h-7 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50">-</button>
+                        <input x-model="currentDepth" type="number" min="0" step="1" list="depth-presets"
+                            @change="onDepthChange()" @blur="onDepthChange()" @keydown.enter.prevent="onDepthChange()"
+                            placeholder="0=全部"
+                            class="w-24 px-3 py-1.5 text-sm border-2 border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
+                        <button @click="increaseDepth()"
+                            class="w-7 h-7 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50">+</button>
+                        <span class="text-[11px] text-gray-400">0=全部，最大128</span>
+                        <datalist id="depth-presets">
+                            <option value="1"></option>
+                            <option value="2"></option>
+                            <option value="3"></option>
+                            <option value="5"></option>
+                            <option value="10"></option>
+                            <option value="0"></option>
+                        </datalist>
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="flex items-center gap-2 text-xs font-medium text-gray-500 cursor-pointer">
@@ -2235,6 +2246,7 @@
                 },
 
                 onDepthChange() {
+                    this.normalizeCurrentDepth(2);
                     if (this.focusedType) {
                         if (this.focusedGraph === 'dependency') {
                             this.showDependencyGraph(this.focusedType, 'type');
@@ -2250,6 +2262,39 @@
                         return;
                     }
                     this.renderGraph();
+                },
+
+                parseDepthValue(defaultDepth = 2) {
+                    const raw = String(this.currentDepth ?? '').trim();
+                    let depth = Number.parseInt(raw, 10);
+                    if (!Number.isFinite(depth) || depth < 0) {
+                        depth = defaultDepth;
+                    }
+                    // 防止极端值导致页面卡顿
+                    if (depth > 128) {
+                        depth = 128;
+                    }
+                    return depth;
+                },
+
+                normalizeCurrentDepth(defaultDepth = 2) {
+                    const depth = this.parseDepthValue(defaultDepth);
+                    this.currentDepth = String(depth);
+                    return depth;
+                },
+
+                increaseDepth() {
+                    const depth = this.normalizeCurrentDepth(2);
+                    const next = Math.min(depth + 1, 128);
+                    this.currentDepth = String(next);
+                    this.onDepthChange();
+                },
+
+                decreaseDepth() {
+                    const depth = this.normalizeCurrentDepth(2);
+                    const next = Math.max(depth - 1, 0);
+                    this.currentDepth = String(next);
+                    this.onDepthChange();
                 },
 
                 rerenderCurrentGraph() {
@@ -2373,7 +2418,7 @@
                     this.focusedGraph = 'dependency';
                     this.focusedGroup = null;
 
-                    const depth = parseInt(this.currentDepth) || 2;
+                    const depth = this.parseDepthValue(2);
                     const nodes = [];
                     const edges = [];
                     const nodeMap = new Map();
@@ -2772,7 +2817,7 @@
                     this.focusedGraph = 'type';
                     this.focusedGroup = null;
                     try {
-                        const depth = parseInt(this.currentDepth) || 0;
+                        const depth = this.parseDepthValue(0);
                         const url = apiUrl(`/api/type/${encodeURIComponent(typeName)}?depth=${depth}`);
                         const res = await fetch(url);
                         const data = await res.json();
@@ -2860,7 +2905,7 @@
                     const memberList = this.groupMembers[groupName] || [];
                     if (memberList.length === 0) return;
 
-                    const depth = parseInt(this.currentDepth) || 0;
+                    const depth = this.parseDepthValue(0);
                     const depthLimit = depth > 0 ? depth : Number.POSITIVE_INFINITY;
 
                     const memberIds = new Set(memberList.map(m => m.id));
