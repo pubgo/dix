@@ -64,35 +64,44 @@
                         <span>📦 <span x-text="stats.package_count">-</span> 包</span>
                         <span>⚡ <span x-text="stats.provider_count">-</span> Providers</span>
                         <span>📎 <span x-text="stats.edge_count">-</span> 依赖</span>
+                        <span class="px-2 py-0.5 rounded bg-white/20 text-white/90 text-xs"
+                            x-text="`UI: ${uiVersion}`"></span>
                     </div>
                 </div>
-                <div class="relative" x-data="{ open:false }">
-                    <button @click="open = !open"
+                <div class="flex items-center gap-2">
+                    <button @click="openDiagnosticModal('trace')"
                         class="px-3 py-2 text-sm rounded-lg bg-white/20 hover:bg-white/30 transition flex items-center gap-2">
-                        <span>🧪</span>
-                        <span>诊断菜单</span>
+                        <span>🧵</span>
+                        <span>Trace 诊断</span>
                     </button>
-                    <div x-show="open" x-cloak @click.outside="open = false"
-                        class="absolute right-0 mt-2 w-64 bg-white text-gray-700 rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
-                        <button @click="openDiagnosticModal('runtime'); open=false"
-                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between">
-                            <span>⏱ Provider 启动耗时</span>
-                            <span class="text-xs text-gray-400" x-text="runtimeStats.length"></span>
+                    <div class="relative" x-data="{ open:false }">
+                        <button @click="open = !open"
+                            class="px-3 py-2 text-sm rounded-lg bg-white/20 hover:bg-white/30 transition flex items-center gap-2">
+                            <span>🧪</span>
+                            <span>诊断菜单</span>
                         </button>
-                        <button @click="openDiagnosticModal('errors'); open=false"
-                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
-                            <span>🚨 最近注入错误</span>
-                            <span class="text-xs text-gray-400" x-text="recentErrors.length"></span>
-                        </button>
-                        <button @click="openDiagnosticModal('trace'); open=false"
-                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
-                            <span>🧵 调用链 Trace</span>
-                            <span class="text-xs text-gray-400" x-text="traceRecords.length"></span>
-                        </button>
-                        <button @click="openDiagnosticModal('error-guide'); open=false"
-                            class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-100">
-                            🧭 错误类型说明
-                        </button>
+                        <div x-show="open" x-cloak @click.outside="open = false"
+                            class="absolute right-0 mt-2 w-72 bg-white text-gray-700 rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                            <button @click="openDiagnosticModal('runtime'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between">
+                                <span>⏱ Provider 启动耗时</span>
+                                <span class="text-xs text-gray-400" x-text="runtimeStats.length"></span>
+                            </button>
+                            <button @click="openDiagnosticModal('errors'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                                <span>🚨 最近注入错误</span>
+                                <span class="text-xs text-gray-400" x-text="recentErrors.length"></span>
+                            </button>
+                            <button @click="openDiagnosticModal('trace'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                                <span>🧵 调用链 Trace（含深度输入）</span>
+                                <span class="text-xs text-gray-400" x-text="traceRecords.length"></span>
+                            </button>
+                            <button @click="openDiagnosticModal('error-guide'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-100">
+                                🧭 错误类型说明
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -568,6 +577,14 @@
                 </div>
             </aside>
         </div>
+
+        <!-- Floating Trace Entry -->
+        <button @click="openDiagnosticModal('trace')"
+            class="fixed bottom-5 right-5 z-40 px-4 py-2.5 rounded-full bg-primary-600 text-white text-sm font-medium shadow-lg hover:bg-primary-700 transition flex items-center gap-2">
+            <span>🧵</span>
+            <span>Trace 诊断入口</span>
+        </button>
+
         <!-- Provider Detail Modal -->
         <div x-show="providerDetailModalOpen" x-cloak
             class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
@@ -582,97 +599,99 @@
                     </button>
                 </div>
 
-                <div class="flex-1 overflow-auto p-4" x-show="providerModalNode && providerModalNode.data">
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="border border-gray-300 rounded-lg p-3 bg-white">
-                            <div class="text-xs font-semibold text-gray-700 uppercase mb-2">节点信息</div>
-                            <div class="text-sm text-gray-900 break-all"
-                                x-text="providerModalNode.data.function_name || ''"></div>
-                            <div class="text-xs text-gray-700 mt-1 break-all"
-                                x-text="providerModalNode.data.output_type || ''"></div>
-                            <div class="text-xs text-gray-700 mt-1 break-all"
-                                x-show="providerModalNode.data.function_pkg"
-                                x-text="`函数包: ${providerModalNode.data.function_pkg}`"></div>
-                            <div class="text-xs text-gray-700 mt-1 break-all"
-                                x-show="providerModalNode.data.function_file"
-                                x-text="`位置: ${providerModalNode.data.function_file}:${providerModalNode.data.function_line || 0}`">
+                <template x-if="providerModalNode && providerModalNode.data">
+                    <div class="flex-1 overflow-auto p-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="border border-gray-300 rounded-lg p-3 bg-white">
+                                <div class="text-xs font-semibold text-gray-700 uppercase mb-2">节点信息</div>
+                                <div class="text-sm text-gray-900 break-all"
+                                    x-text="providerModalNode.data.function_name || ''"></div>
+                                <div class="text-xs text-gray-700 mt-1 break-all"
+                                    x-text="providerModalNode.data.output_type || ''"></div>
+                                <div class="text-xs text-gray-700 mt-1 break-all"
+                                    x-show="providerModalNode.data.function_pkg"
+                                    x-text="`函数包: ${providerModalNode.data.function_pkg}`"></div>
+                                <div class="text-xs text-gray-700 mt-1 break-all"
+                                    x-show="providerModalNode.data.function_file"
+                                    x-text="`位置: ${providerModalNode.data.function_file}:${providerModalNode.data.function_line || 0}`">
+                                </div>
+                                <div class="mt-2" x-show="(providerModalNode.data.input_types || []).length">
+                                    <div class="text-xs text-gray-700 mb-1">输入类型</div>
+                                    <ul class="space-y-1 max-h-44 overflow-y-auto">
+                                        <template x-for="(it, idx) in (providerModalNode.data.input_types || [])"
+                                            :key="`modal-in-${idx}-${it}`">
+                                            <li class="px-2 py-1 text-xs bg-gray-100 text-gray-900 rounded break-all"
+                                                x-text="it"></li>
+                                        </template>
+                                    </ul>
+                                </div>
                             </div>
-                            <div class="mt-2" x-show="(providerModalNode.data.input_types || []).length">
-                                <div class="text-xs text-gray-700 mb-1">输入类型</div>
-                                <ul class="space-y-1 max-h-44 overflow-y-auto">
-                                    <template x-for="(it, idx) in (providerModalNode.data.input_types || [])"
-                                        :key="`modal-in-${idx}-${it}`">
-                                        <li class="px-2 py-1 text-xs bg-gray-100 text-gray-900 rounded break-all"
-                                            x-text="it"></li>
-                                    </template>
-                                </ul>
+
+                            <div class="border border-gray-300 rounded-lg p-3 bg-white">
+                                <div class="text-xs font-semibold text-gray-700 uppercase mb-2">运行时状态</div>
+                                <template x-if="getRuntimeStatForProvider(providerModalNode.data)">
+                                    <div class="space-y-1 text-xs text-gray-800">
+                                        <div>总耗时：<span class="font-semibold"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).total_duration)"></span>
+                                        </div>
+                                        <div>平均耗时：<span class="font-semibold"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).average_duration)"></span>
+                                        </div>
+                                        <div>最后一次：<span class="font-semibold"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).last_duration)"></span>
+                                        </div>
+                                        <div>调用次数：<span class="font-semibold"
+                                                x-text="getRuntimeStatForProvider(providerModalNode.data).call_count"></span>
+                                        </div>
+                                        <div x-show="getRuntimeStatForProvider(providerModalNode.data).last_error"
+                                            class="text-red-700 break-all font-medium">
+                                            最近错误：<span
+                                                x-text="getRuntimeStatForProvider(providerModalNode.data).last_error"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template x-if="!getRuntimeStatForProvider(providerModalNode.data)">
+                                    <div class="text-xs text-gray-500">暂无运行时数据</div>
+                                </template>
                             </div>
                         </div>
 
-                        <div class="border border-gray-300 rounded-lg p-3 bg-white">
-                            <div class="text-xs font-semibold text-gray-700 uppercase mb-2">运行时状态</div>
-                            <template x-if="getRuntimeStatForProvider(providerModalNode.data)">
-                                <div class="space-y-1 text-xs text-gray-800">
-                                    <div>总耗时：<span class="font-semibold"
-                                            x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).total_duration)"></span>
-                                    </div>
-                                    <div>平均耗时：<span class="font-semibold"
-                                            x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).average_duration)"></span>
-                                    </div>
-                                    <div>最后一次：<span class="font-semibold"
-                                            x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).last_duration)"></span>
-                                    </div>
-                                    <div>调用次数：<span class="font-semibold"
-                                            x-text="getRuntimeStatForProvider(providerModalNode.data).call_count"></span>
-                                    </div>
-                                    <div x-show="getRuntimeStatForProvider(providerModalNode.data).last_error"
-                                        class="text-red-700 break-all font-medium">
-                                        最近错误：<span
-                                            x-text="getRuntimeStatForProvider(providerModalNode.data).last_error"></span>
+                        <div class="mt-4 border rounded-lg p-3"
+                            :class="providerModalError() ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'">
+                            <div class="text-xs font-semibold text-gray-700 uppercase mb-2">错误信息</div>
+                            <template x-if="providerModalError()">
+                                <div>
+                                    <div class="text-sm text-red-800 font-semibold break-all"
+                                        x-text="providerModalError().message || '未知错误'"></div>
+                                    <div class="mt-2 space-y-1 text-xs text-gray-800">
+                                        <div x-show="providerModalError().error_type"
+                                            x-text="`类型: ${providerModalError().error_type}`"></div>
+                                        <div x-show="providerModalError().stage"
+                                            x-text="`阶段: ${providerModalError().stage}`"></div>
+                                        <div x-show="providerModalError().operation"
+                                            x-text="`操作: ${providerModalError().operation}`"></div>
+                                        <div x-show="providerModalError().root_cause"
+                                            x-text="`根因: ${providerModalError().root_cause}`"></div>
+                                        <div x-show="providerModalError().hint" class="text-blue-800"
+                                            x-text="`Hint: ${providerModalError().hint}`"></div>
+                                        <div x-show="providerModalError().occurred_at_unix_nano"
+                                            x-text="`时间: ${formatErrorTime(providerModalError().occurred_at_unix_nano)}`">
+                                        </div>
                                     </div>
                                 </div>
                             </template>
-                            <template x-if="!getRuntimeStatForProvider(providerModalNode.data)">
-                                <div class="text-xs text-gray-500">暂无运行时数据</div>
+                            <template x-if="!providerModalError()">
+                                <div class="text-xs text-gray-500">该 Provider 暂无最近错误事件</div>
                             </template>
                         </div>
-                    </div>
 
-                    <div class="mt-4 border rounded-lg p-3"
-                        :class="providerModalError() ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'">
-                        <div class="text-xs font-semibold text-gray-700 uppercase mb-2">错误信息</div>
-                        <template x-if="providerModalError()">
-                            <div>
-                                <div class="text-sm text-red-800 font-semibold break-all"
-                                    x-text="providerModalError().message || '未知错误'"></div>
-                                <div class="mt-2 space-y-1 text-xs text-gray-800">
-                                    <div x-show="providerModalError().error_type"
-                                        x-text="`类型: ${providerModalError().error_type}`"></div>
-                                    <div x-show="providerModalError().stage"
-                                        x-text="`阶段: ${providerModalError().stage}`"></div>
-                                    <div x-show="providerModalError().operation"
-                                        x-text="`操作: ${providerModalError().operation}`"></div>
-                                    <div x-show="providerModalError().root_cause"
-                                        x-text="`根因: ${providerModalError().root_cause}`"></div>
-                                    <div x-show="providerModalError().hint" class="text-blue-800"
-                                        x-text="`Hint: ${providerModalError().hint}`"></div>
-                                    <div x-show="providerModalError().occurred_at_unix_nano"
-                                        x-text="`时间: ${formatErrorTime(providerModalError().occurred_at_unix_nano)}`">
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
-                        <template x-if="!providerModalError()">
-                            <div class="text-xs text-gray-500">该 Provider 暂无最近错误事件</div>
-                        </template>
+                        <details class="mt-4">
+                            <summary class="text-xs text-gray-700 cursor-pointer">展开原始节点数据（JSON）</summary>
+                            <pre class="mt-2 p-2 text-[11px] leading-relaxed bg-gray-50 text-gray-900 border border-gray-300 rounded whitespace-pre-wrap break-all"
+                                x-text="providerPrettyJson(providerModalNode)"></pre>
+                        </details>
                     </div>
-
-                    <details class="mt-4">
-                        <summary class="text-xs text-gray-700 cursor-pointer">展开原始节点数据（JSON）</summary>
-                        <pre class="mt-2 p-2 text-[11px] leading-relaxed bg-gray-50 text-gray-900 border border-gray-300 rounded whitespace-pre-wrap break-all"
-                            x-text="providerPrettyJson(providerModalNode)"></pre>
-                    </details>
-                </div>
+                </template>
             </div>
         </div>
 
@@ -890,6 +909,18 @@
                                     <input type="checkbox" x-model="traceOnlyErrorSpan" class="rounded border-gray-300">
                                     仅错误 span
                                 </label>
+                                <span class="text-xs text-gray-500 shrink-0">深度:</span>
+                                <span
+                                    class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-semibold shrink-0">可输入
+                                    0=全部</span>
+                                <button @click="decreaseTraceDepth()"
+                                    class="w-7 h-7 text-xs border border-gray-300 rounded-md bg-white hover:bg-gray-50">-</button>
+                                <input x-model="traceDepth" type="number" min="0" step="1"
+                                    @change="normalizeTraceDepth()" @blur="normalizeTraceDepth()"
+                                    @keydown.enter.prevent="normalizeTraceDepth()" placeholder="0=全部"
+                                    class="w-20 px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                <button @click="increaseTraceDepth()"
+                                    class="w-7 h-7 text-xs border border-gray-300 rounded-md bg-white hover:bg-gray-50">+</button>
                                 <button x-show="traceTreeMode" @click="expandAllTraceSpans()"
                                     class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                     全部展开
@@ -1149,6 +1180,7 @@
                 sidebarCollapsed: false,
                 stats: { provider_count: 0, object_count: 0, package_count: 0, edge_count: 0 },
                 packages: [],
+                uiVersion: 'trace-entry-v5-20260323',
                 packageSearch: '',
                 globalSearch: '',
                 searchResults: [],
@@ -1200,6 +1232,7 @@
                 traceIndentMode: 'log',
                 traceViewMode: 'span',
                 traceOnlyErrorSpan: false,
+                traceDepth: '0',
                 traceCollapsedSpanKeys: {},
                 traceCollapsedGroupKeys: {},
                 traceFullscreen: false,
@@ -1571,6 +1604,15 @@
                             }
                             return true;
                         });
+
+                        const depthLimit = this.parseTraceDepthValue();
+                        if (depthLimit > 0) {
+                            g.treeRows = g.treeRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.visibleTreeRows = g.visibleTreeRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.spanRows = g.spanRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.visibleSpanRows = g.visibleSpanRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.records = g.treeRows;
+                        }
                     });
                     // 按每条 trace 的 span 数量倒序；数量相同再按最近时间倒序
                     groups.sort((a, b) => {
@@ -1767,6 +1809,36 @@
 
                 refreshTraceFromModal() {
                     this.loadTraceRecords();
+                },
+
+                parseTraceDepthValue() {
+                    const raw = String(this.traceDepth ?? '').trim();
+                    let depth = Number.parseInt(raw, 10);
+                    if (!Number.isFinite(depth) || depth < 0) {
+                        depth = 0;
+                    }
+                    if (depth > 256) {
+                        depth = 256;
+                    }
+                    return depth;
+                },
+
+                normalizeTraceDepth() {
+                    const depth = this.parseTraceDepthValue();
+                    this.traceDepth = String(depth);
+                    return depth;
+                },
+
+                increaseTraceDepth() {
+                    const depth = this.normalizeTraceDepth();
+                    const next = Math.min(depth + 1, 256);
+                    this.traceDepth = String(next);
+                },
+
+                decreaseTraceDepth() {
+                    const depth = this.normalizeTraceDepth();
+                    const next = Math.max(depth - 1, 0);
+                    this.traceDepth = String(next);
                 },
 
                 traceProviderLabel(item) {
