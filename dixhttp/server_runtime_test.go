@@ -2,6 +2,7 @@ package dixhttp
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,15 @@ import (
 )
 
 type runtimeStatsDep struct{}
+type basePathTypeDep interface {
+	Name() string
+}
+
+type basePathTypeDepImpl struct{}
+
+func (basePathTypeDepImpl) Name() string {
+	return "dep"
+}
 
 func TestHandleRuntimeStats(t *testing.T) {
 	di := dixinternal.New()
@@ -187,5 +197,87 @@ func TestHandleDiagnosticsReadsFileRecords(t *testing.T) {
 	}
 	if len(resp.Records) != 1 || resp.Records[0].Kind != "trace" {
 		t.Fatalf("expected single trace record, got %+v", resp.Records)
+	}
+}
+
+func TestHandleDetailsRoutesWithBasePath(t *testing.T) {
+	di := dixinternal.New()
+	di.Provide(func() basePathTypeDep { return basePathTypeDepImpl{} })
+
+	if err := di.TryInject(func(basePathTypeDep) {}); err != nil {
+		t.Fatalf("failed to initialize basePathTypeDep: %v", err)
+	}
+
+	providerDetails := di.GetProviderDetails()
+	if len(providerDetails) == 0 {
+		t.Fatal("expected provider details")
+	}
+
+	targetType := ""
+	targetPkg := ""
+	for _, d := range providerDetails {
+		if d.FunctionName != "" && d.OutputType != "" {
+			targetType = d.OutputType
+			targetPkg = extractPackage(d.OutputType)
+			if targetPkg != "" {
+				break
+			}
+		}
+	}
+
+	if targetType == "" || targetPkg == "" {
+		t.Fatalf("failed to locate provider detail with valid type/package: %+v", providerDetails)
+	}
+
+	server := NewServerWithOptions(di, WithBasePath("/dix"))
+
+	t.Run("package details", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dix/api/package/"+targetPkg, nil)
+		rr := httptest.NewRecorder()
+
+		server.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+
+		var resp PackageDetailsData
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode package response: %v", err)
+		}
+
+		if resp.Package != targetPkg {
+			t.Fatalf("expected package %q, got %q", targetPkg, resp.Package)
+		}
+	})
+
+	t.Run("type details", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/dix/api/type/"+targetType+"?depth=1", nil)
+		rr := httptest.NewRecorder()
+
+		server.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+		}
+
+		var resp TypeDetailsData
+		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+			t.Fatalf("failed to decode type response: %v", err)
+		}
+
+		if resp.RootType != targetType {
+			t.Fatalf("expected root type %q, got %q", targetType, resp.RootType)
+		}
+	})
+}
+
+func TestWriteJSONEncodeFailureReturns500(t *testing.T) {
+	rr := httptest.NewRecorder()
+
+	writeJSON(rr, map[string]float64{"nan": math.NaN()})
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
 	}
 }

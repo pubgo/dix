@@ -2,6 +2,9 @@ package dixtrace
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -109,5 +112,49 @@ func TestTraceIDSequenceOnlyIncrementsOnRootSpan(t *testing.T) {
 	}
 	if anotherRootStart.TraceID != "t-2" {
 		t.Fatalf("expected next root trace id t-2, got %s", anotherRootStart.TraceID)
+	}
+}
+
+func TestMemorySinkQueryLimitReturnsLatestAndPaginationCursor(t *testing.T) {
+	sink := NewMemorySink(16)
+	sink.Write(Event{ID: 1, OccurredAt: 100, Event: "e1"})
+	sink.Write(Event{ID: 2, OccurredAt: 200, Event: "e2"})
+	sink.Write(Event{ID: 3, OccurredAt: 300, Event: "e3"})
+
+	first := sink.Query(Query{Limit: 2})
+	if first.Total != 3 || first.Returned != 2 {
+		t.Fatalf("expected total=3 returned=2, got total=%d returned=%d", first.Total, first.Returned)
+	}
+	if len(first.Records) != 2 || first.Records[0].ID != 3 || first.Records[1].ID != 2 {
+		t.Fatalf("expected latest first [3,2], got %+v", first.Records)
+	}
+	if first.NextBefore != 2 {
+		t.Fatalf("expected next_before_id=2, got %d", first.NextBefore)
+	}
+
+	second := sink.Query(Query{Limit: 2, BeforeID: first.NextBefore})
+	if second.Total != 1 || second.Returned != 1 {
+		t.Fatalf("expected second page total=1 returned=1, got total=%d returned=%d", second.Total, second.Returned)
+	}
+	if len(second.Records) != 1 || second.Records[0].ID != 1 {
+		t.Fatalf("expected second page [1], got %+v", second.Records)
+	}
+}
+
+func TestFileSinkAlwaysTruncatesExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "trace.jsonl")
+	if err := os.WriteFile(path, []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("failed to seed trace file: %v", err)
+	}
+
+	sink := NewFileSink(path)
+	sink.Write(Event{ID: 1, OccurredAt: 1, Event: "span.start"})
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read trace file: %v", err)
+	}
+	if strings.Contains(string(b), "seed\n") {
+		t.Fatalf("expected existing content to be truncated, got: %q", string(b))
 	}
 }

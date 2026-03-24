@@ -296,14 +296,13 @@ func (m *MemorySink) Query(q Query) ReadResult {
 		return result
 	}
 
-	start := len(matched) - limit
-	if start < 0 {
-		start = 0
+	if limit > len(matched) {
+		limit = len(matched)
 	}
-	result.Records = append(result.Records, matched[start:]...)
+	result.Records = append(result.Records, matched[:limit]...)
 	result.Returned = len(result.Records)
-	if start > 0 {
-		result.NextBefore = result.Records[0].ID
+	if len(matched) > limit {
+		result.NextBefore = result.Records[len(result.Records)-1].ID
 	}
 	return result
 }
@@ -333,7 +332,7 @@ func (f *FileSink) ensureFile() *os.File {
 	if dir != "." && dir != "" {
 		_ = os.MkdirAll(dir, 0o755)
 	}
-	fd, err := os.OpenFile(f.path, os.O_CREATE|os.O_APPEND|os.O_WRONLY|os.O_TRUNC, 0o644)
+	fd, err := os.OpenFile(f.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return nil
 	}

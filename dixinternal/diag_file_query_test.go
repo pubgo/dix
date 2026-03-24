@@ -66,3 +66,30 @@ func TestReadDiagFileRecordsFromLines_TimeDescending(t *testing.T) {
 		t.Fatalf("expected latest-first order [22,23,21], got %+v", result.Records)
 	}
 }
+
+func TestReadDiagFileRecordsFromLines_LimitReturnsLatestAndCursor(t *testing.T) {
+	lines := []string{
+		`{"record_id":31,"kind":"trace","occurred_at_unix_nano":100}`,
+		`{"record_id":32,"kind":"trace","occurred_at_unix_nano":200}`,
+		`{"record_id":33,"kind":"trace","occurred_at_unix_nano":300}`,
+	}
+
+	first := ReadDiagFileRecordsFromLines(lines, DiagFileQuery{Kind: "trace", Limit: 2})
+	if first.Total != 3 || first.Returned != 2 {
+		t.Fatalf("expected total=3 returned=2, got total=%d returned=%d", first.Total, first.Returned)
+	}
+	if len(first.Records) != 2 || first.Records[0].RecordID != 33 || first.Records[1].RecordID != 32 {
+		t.Fatalf("expected latest-first [33,32], got %+v", first.Records)
+	}
+	if first.NextBefore != 32 {
+		t.Fatalf("expected next_before_id=32, got %d", first.NextBefore)
+	}
+
+	second := ReadDiagFileRecordsFromLines(lines, DiagFileQuery{Kind: "trace", Limit: 2, BeforeID: first.NextBefore})
+	if second.Total != 1 || second.Returned != 1 {
+		t.Fatalf("expected second page total=1 returned=1, got total=%d returned=%d", second.Total, second.Returned)
+	}
+	if len(second.Records) != 1 || second.Records[0].RecordID != 31 {
+		t.Fatalf("expected second page [31], got %+v", second.Records)
+	}
+}

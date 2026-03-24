@@ -412,14 +412,13 @@ func ReadDiagFileRecords(query DiagFileQuery) (DiagFileReadResult, error) {
 		return result, nil
 	}
 
-	start := len(all) - limit
-	if start < 0 {
-		start = 0
+	if limit > len(all) {
+		limit = len(all)
 	}
-	result.Records = append(result.Records, all[start:]...)
+	result.Records = append(result.Records, all[:limit]...)
 	result.Returned = len(result.Records)
-	if start > 0 {
-		result.NextBefore = result.Records[0].RecordID
+	if len(all) > limit {
+		result.NextBefore = result.Records[len(result.Records)-1].RecordID
 	}
 
 	return result, nil
@@ -455,14 +454,13 @@ func ReadDiagFileRecordsFromLines(lines []string, query DiagFileQuery) DiagFileR
 	})
 
 	result.Total = len(all)
-	start := len(all) - limit
-	if start < 0 {
-		start = 0
+	if limit > len(all) {
+		limit = len(all)
 	}
-	result.Records = append(result.Records, all[start:]...)
+	result.Records = append(result.Records, all[:limit]...)
 	result.Returned = len(result.Records)
-	if start > 0 && len(result.Records) > 0 {
-		result.NextBefore = result.Records[0].RecordID
+	if len(all) > limit && len(result.Records) > 0 {
+		result.NextBefore = result.Records[len(result.Records)-1].RecordID
 	}
 	return result
 }

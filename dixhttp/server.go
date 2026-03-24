@@ -1,6 +1,7 @@
 package dixhttp
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -350,7 +351,12 @@ func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
 // HandlePackageDetails returns details for a specific package
 func (s *Server) HandlePackageDetails(w http.ResponseWriter, r *http.Request) {
 	// Extract package name from URL
-	pkgName := strings.TrimPrefix(r.URL.Path, "/api/package/")
+	prefix := s.basePath + "/api/package/"
+	pkgName := strings.TrimPrefix(r.URL.Path, prefix)
+	if pkgName == r.URL.Path {
+		http.Error(w, "package name required", http.StatusBadRequest)
+		return
+	}
 	if pkgName == "" {
 		http.Error(w, "package name required", http.StatusBadRequest)
 		return
@@ -407,7 +413,12 @@ func (s *Server) HandlePackageDetails(w http.ResponseWriter, r *http.Request) {
 // HandleTypeDetails returns dependency details for a specific type
 func (s *Server) HandleTypeDetails(w http.ResponseWriter, r *http.Request) {
 	// Extract type name from URL
-	typeName := strings.TrimPrefix(r.URL.Path, "/api/type/")
+	prefix := s.basePath + "/api/type/"
+	typeName := strings.TrimPrefix(r.URL.Path, prefix)
+	if typeName == r.URL.Path {
+		http.Error(w, "type name required", http.StatusBadRequest)
+		return
+	}
 	if typeName == "" {
 		http.Error(w, "type name required", http.StatusBadRequest)
 		return
@@ -721,12 +732,15 @@ func extractPackage(typeName string) string {
 }
 
 func writeJSON(w http.ResponseWriter, data any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(data); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
-	}
+	_, _ = w.Write(buf.Bytes())
 }
 
 func normalizeBasePath(basePath string) string {
