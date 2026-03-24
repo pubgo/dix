@@ -94,7 +94,7 @@
                             </button>
                             <button @click="openDiagnosticModal('trace'); open=false"
                                 class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
-                                <span>🧵 调用链 Trace（含深度输入）</span>
+                                <span>🧵 调用链 Trace</span>
                                 <span class="text-xs text-gray-400" x-text="traceRecords.length"></span>
                             </button>
                             <button @click="openDiagnosticModal('error-guide'); open=false"
@@ -208,25 +208,16 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">深度:</span>
-                        <span
-                            class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-semibold">可输入</span>
-                        <button @click="decreaseDepth()"
-                            class="w-7 h-7 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50">-</button>
-                        <input x-model="currentDepth" type="number" min="0" step="1" list="depth-presets"
-                            @change="onDepthChange()" @blur="onDepthChange()" @keydown.enter.prevent="onDepthChange()"
-                            placeholder="0=全部"
-                            class="w-24 px-3 py-1.5 text-sm border-2 border-blue-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
-                        <button @click="increaseDepth()"
-                            class="w-7 h-7 text-sm border border-gray-300 rounded-md bg-white hover:bg-gray-50">+</button>
+                        <select x-model="currentDepth" @change="onDepthChange()"
+                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
+                            <option value="1">1 级</option>
+                            <option value="2">2 级</option>
+                            <option value="3">3 级</option>
+                            <option value="5">5 级</option>
+                            <option value="10">10 级</option>
+                            <option value="0">全部</option>
+                        </select>
                         <span class="text-[11px] text-gray-400">0=全部，最大128</span>
-                        <datalist id="depth-presets">
-                            <option value="1"></option>
-                            <option value="2"></option>
-                            <option value="3"></option>
-                            <option value="5"></option>
-                            <option value="10"></option>
-                            <option value="0"></option>
-                        </datalist>
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="flex items-center gap-2 text-xs font-medium text-gray-500 cursor-pointer">
@@ -700,7 +691,7 @@
             class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
             @keydown.escape.window="closeDiagnosticModal()">
             <div x-ref="diagnosticPanel" class="bg-white shadow-xl flex flex-col"
-                :class="diagnosticModalType === 'trace' ? 'w-[99vw] h-[97vh] max-w-none rounded-md' : 'w-[94vw] h-[88vh] rounded-xl'">
+                :class="diagnosticModalType === 'trace' ? 'w-screen h-screen max-w-none rounded-none' : 'w-[94vw] h-[88vh] rounded-xl'">
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div class="font-semibold text-gray-700" x-text="diagnosticModalType === 'runtime'
                             ? '⏱ Provider 启动耗时（大视图）'
@@ -746,7 +737,7 @@
                         清空搜索
                     </button>
                 </div>
-                <div class="flex-1 overflow-auto p-4">
+                <div class="flex-1 overflow-auto" :class="diagnosticModalType === 'trace' ? 'p-2' : 'p-4'">
                     <template x-if="diagnosticModalType === 'runtime'">
                         <div class="space-y-2">
                             <div class="text-xs text-gray-500" x-text="`共 ${filteredModalRuntimeStats.length} 条`"></div>
@@ -869,16 +860,17 @@
                     </template>
 
                     <template x-if="diagnosticModalType === 'trace'">
-                        <div class="space-y-2">
-                            <div class="flex items-center gap-2">
+                        <div class="space-y-2" :class="isSingleTraceView() ? 'h-full flex flex-col min-h-0' : ''">
+                            <div
+                                class="flex flex-wrap items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 p-2">
                                 <select x-model="traceViewMode"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
-                                    <option value="span">按 Span 汇总</option>
-                                    <option value="event">原始事件</option>
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="span">Span</option>
+                                    <option value="event">Event</option>
                                 </select>
                                 <select x-model="traceOperation"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
-                                    <option value="">全部 operation</option>
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">Operation</option>
                                     <option value="inject">inject</option>
                                     <option value="inject.cycle_check">inject.cycle_check</option>
                                     <option value="resolve.value">resolve.value</option>
@@ -888,60 +880,55 @@
                                     <option value="provider.call">provider.call</option>
                                 </select>
                                 <select x-model="traceStatus"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
-                                    <option value="">全部状态</option>
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">状态</option>
                                     <option value="start">start</option>
                                     <option value="ok">ok</option>
                                     <option value="error">error</option>
                                 </select>
-                                <input type="text" x-model="traceEvent" placeholder="事件过滤（event）"
-                                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
-                                <label class="flex items-center gap-1.5 text-xs text-gray-600 shrink-0">
+                                <input type="text" x-model="traceEvent" placeholder="event 过滤"
+                                    class="min-w-[120px] flex-1 px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                <label class="flex items-center gap-1 text-[11px] text-gray-600 shrink-0">
                                     <input type="checkbox" x-model="traceTreeMode" class="rounded border-gray-300">
                                     树形
                                 </label>
                                 <select x-show="traceTreeMode" x-model="traceIndentMode"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
-                                    <option value="log">缩进：对数（大项目推荐）</option>
-                                    <option value="linear">缩进：线性（传统）</option>
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="log">缩进：对数</option>
+                                    <option value="linear">缩进：线性</option>
                                 </select>
-                                <label class="flex items-center gap-1.5 text-xs text-gray-600 shrink-0">
+                                <label class="flex items-center gap-1 text-[11px] text-gray-600 shrink-0">
                                     <input type="checkbox" x-model="traceOnlyErrorSpan" class="rounded border-gray-300">
-                                    仅错误 span
+                                    仅错误
                                 </label>
-                                <span class="text-xs text-gray-500 shrink-0">深度:</span>
-                                <span
-                                    class="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-semibold shrink-0">可输入
-                                    0=全部</span>
-                                <button @click="decreaseTraceDepth()"
-                                    class="w-7 h-7 text-xs border border-gray-300 rounded-md bg-white hover:bg-gray-50">-</button>
-                                <input x-model="traceDepth" type="number" min="0" step="1"
-                                    @change="normalizeTraceDepth()" @blur="normalizeTraceDepth()"
-                                    @keydown.enter.prevent="normalizeTraceDepth()" placeholder="0=全部"
-                                    class="w-20 px-2 py-1.5 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
-                                <button @click="increaseTraceDepth()"
-                                    class="w-7 h-7 text-xs border border-gray-300 rounded-md bg-white hover:bg-gray-50">+</button>
-                                <button x-show="traceTreeMode" @click="expandAllTraceSpans()"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                                    全部展开
-                                </button>
+                                <span class="text-[11px] text-gray-500 shrink-0">深度</span>
+                                <select x-model="traceDepth"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="0">全部</option>
+                                    <option value="1">1 级</option>
+                                    <option value="2">2 级</option>
+                                    <option value="3">3 级</option>
+                                    <option value="5">5 级</option>
+                                    <option value="10">10 级</option>
+                                    <option value="20">20 级</option>
+                                </select>
                                 <button @click="collapseAllTraceGroups()"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                                    折叠全部 Trace
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md bg-white hover:bg-gray-100">
+                                    折叠全部
                                 </button>
                                 <button @click="expandAllTraceGroups()"
-                                    class="px-2 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
-                                    展开全部 Trace
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md bg-white hover:bg-gray-100">
+                                    展开全部
                                 </button>
                                 <button @click="refreshTraceFromModal()"
-                                    class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                    :disabled="traceLoading">应用过滤</button>
+                                    class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md bg-white hover:bg-gray-100"
+                                    :disabled="traceLoading">刷新</button>
                             </div>
 
-                            <div class="text-xs text-gray-500"
+                            <div class="text-[11px] text-gray-500"
                                 x-text="traceViewMode === 'span'
-                                    ? `共 ${traceRecords.length} 条事件，汇总 ${traceSpanTotal} 个 span，链路 ${traceGroups.length} 条`
-                                    : `共 ${traceRecords.length} 条，过滤后 ${filteredModalTraceRecords.length} 条，链路 ${traceGroups.length} 条`">
+                                    ? `事件 ${traceRecords.length} · Span ${traceSpanTotal} · 链路 ${traceGroups.length}`
+                                    : `总 ${traceRecords.length} · 过滤 ${filteredModalTraceRecords.length} · 链路 ${traceGroups.length}`">
                             </div>
                             <div class="text-xs text-red-500" x-show="traceError" x-text="traceError"></div>
 
@@ -950,181 +937,238 @@
                                 </div>
                             </template>
 
-                            <template x-for="(group, gIdx) in traceGroups"
-                                :key="`trace-group-${group.traceId || gIdx}`">
-                                <div class="border border-gray-200 rounded-lg p-3 bg-white">
-                                    <div class="flex items-center justify-between gap-2 mb-2">
-                                        <div class="min-w-0">
-                                            <div class="text-xs text-gray-500">trace_id</div>
-                                            <div class="text-sm font-semibold text-gray-800 break-all"
-                                                x-text="group.traceId || '(missing-trace-id)'"></div>
-                                            <div class="mt-1 text-[11px] text-gray-600 break-all"
-                                                x-show="group.injectFunction"
-                                                x-text="`inject: ${group.injectFunction}`"></div>
+                            <div :class="isSingleTraceView() ? 'flex-1 min-h-0' : 'space-y-2'">
+                                <template x-for="(group, gIdx) in traceGroups"
+                                    :key="`trace-group-${group.traceId || gIdx}`">
+                                    <div class="border rounded-lg p-3" :class="{
+                                        'border-red-200 bg-red-50/20': group.hasSpanError,
+                                        'border-gray-200 bg-white': !group.hasSpanError,
+                                        'flex-1 min-h-0 flex flex-col': isSingleTraceView(),
+                                    }">
+                                        <div class="flex items-center justify-between gap-2 mb-2">
+                                            <div class="min-w-0">
+                                                <div class="text-[11px] text-gray-500">trace_id</div>
+                                                <div class="flex items-center gap-2 min-w-0">
+                                                    <div class="text-xs font-semibold text-gray-800 break-all"
+                                                        x-text="group.traceId || '(missing-trace-id)'"></div>
+                                                    <span x-show="group.hasSpanError"
+                                                        class="shrink-0 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold">span-error</span>
+                                                </div>
+                                                <div class="mt-0.5 text-[10px] text-gray-600 break-all"
+                                                    x-show="group.injectFunction"
+                                                    x-text="`inject: ${group.injectFunction}`"></div>
+                                            </div>
+                                            <div class="text-right text-[11px] text-gray-500 shrink-0">
+                                                <button @click="toggleTraceGroupCollapse(group.traceId)"
+                                                    class="mb-1 px-1.5 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                    :title="isTraceGroupCollapsed(group.traceId) ? '展开该 trace' : '折叠该 trace'"
+                                                    x-text="isTraceGroupCollapsed(group.traceId) ? '▸ 展开' : '▾ 折叠'"></button>
+                                                <button @click="focusSingleTrace(group.traceId)"
+                                                    class="mb-1 ml-1 px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-[10px] text-blue-700 hover:bg-blue-100"
+                                                    title="仅查看当前 trace（自动过滤并全屏）">
+                                                    仅看此条
+                                                </button>
+                                                <div x-text="`events ${group.total}`"></div>
+                                                <div x-text="`errors ${group.errorCount}`"></div>
+                                                <div x-show="group.hasSpanError" class="text-red-600"
+                                                    x-text="`span ${group.spanErrorCount}`"></div>
+                                            </div>
                                         </div>
-                                        <div class="text-right text-xs text-gray-500 shrink-0">
-                                            <button @click="toggleTraceGroupCollapse(group.traceId)"
-                                                class="mb-1 px-1.5 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
-                                                :title="isTraceGroupCollapsed(group.traceId) ? '展开该 trace' : '折叠该 trace'"
-                                                x-text="isTraceGroupCollapsed(group.traceId) ? '▸ 展开' : '▾ 折叠'"></button>
-                                            <div x-text="`${group.total} events`"></div>
-                                            <div x-text="`errors: ${group.errorCount}`"></div>
+
+                                        <div x-show="!isTraceGroupCollapsed(group.traceId)"
+                                            :class="isSingleTraceView() ? 'flex-1 min-h-0 space-y-1.5 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50/50' : 'space-y-1.5 max-h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50/50'">
+                                            <template x-if="traceViewMode === 'span'">
+                                                <div class="space-y-1.5">
+                                                    <template
+                                                        x-for="(item, idx) in (traceTreeMode ? group.visibleSpanRows : group.spanRows)"
+                                                        :key="`trace-span-${group.traceId}-${item.span_id || idx}-${idx}`">
+                                                        <div class="text-xs border rounded p-2"
+                                                            :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
+                                                            :style="traceTreeMode ? traceIndentStyle(item) : ''">
+                                                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                                <button x-show="traceTreeMode && item._canToggle"
+                                                                    @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
+                                                                    class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                                    :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
+                                                                    x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
+                                                                <span x-show="traceTreeMode"
+                                                                    class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                                                                    x-text="`L${item._depth || 0}`"></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
+                                                                    x-text="item.operation || '-' "></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                                    :class="item.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
+                                                                    x-text="item.status || 'ok'"></span>
+                                                                <span class="text-[10px] text-gray-500"
+                                                                    x-text="`events:${item.event_count || 0}`"></span>
+                                                                <span class="text-[10px] text-gray-400"
+                                                                    x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all">
+                                                                <span class="text-gray-500">span:</span>
+                                                                <span x-text="item.span_id || '-' "></span>
+                                                                <span class="text-gray-500 ml-2">parent:</span>
+                                                                <span x-text="item.parent_span_id || '-' "></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all"
+                                                                x-show="traceProviderLabel(item)">
+                                                                <span x-text="traceProviderLabel(item)"></span>
+                                                            </div>
+                                                            <details class="mt-1"
+                                                                x-show="traceProviderFunctions(item).length > 1">
+                                                                <summary
+                                                                    class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                                                    全部 provider
+                                                                </summary>
+                                                                <ul class="mt-1 space-y-0.5">
+                                                                    <template
+                                                                        x-for="(fn, fidx) in traceProviderFunctions(item)"
+                                                                        :key="`trace-span-provider-${item.span_id || 'x'}-${fidx}`">
+                                                                        <li class="text-[10px] text-gray-600 break-all"
+                                                                            x-text="fn"></li>
+                                                                    </template>
+                                                                </ul>
+                                                            </details>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceOutputType(item)"
+                                                                x-text="`output: ${traceOutputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceInputType(item)"
+                                                                x-text="`input: ${traceInputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceTypeMeta(item)"
+                                                                x-text="traceTypeMeta(item)">
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="item.duration_ns"
+                                                                x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
+                                                            </div>
+                                                            <div x-show="traceErrorText(item)"
+                                                                class="mt-1 rounded border border-red-200 bg-red-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                                                                    error
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[11px] text-red-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorMultilineText(item)"></pre>
+                                                            </div>
+                                                            <div x-show="traceErrorContext(item)"
+                                                                class="mt-1 rounded border border-amber-200 bg-amber-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                                                    ctx
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[10px] text-amber-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorContextMultiline(item)"></pre>
+                                                            </div>
+                                                            <div class="text-[10px] text-blue-700 break-all"
+                                                                x-show="tracePackagePathLabel(item)"
+                                                                x-text="`pkg: ${tracePackagePathLabel(item)}`"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="traceViewMode !== 'span'">
+                                                <div class="space-y-1.5">
+                                                    <template
+                                                        x-for="(item, idx) in (traceTreeMode ? group.visibleTreeRows : group.records)"
+                                                        :key="`trace-item-${group.traceId}-${item.id || idx}-${idx}`">
+                                                        <div class="text-xs border rounded p-2"
+                                                            :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
+                                                            :style="traceTreeMode ? traceIndentStyle(item) : ''">
+                                                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                                <button x-show="traceTreeMode && item._canToggle"
+                                                                    @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
+                                                                    class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                                    :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
+                                                                    x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
+                                                                <span x-show="traceTreeMode"
+                                                                    class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                                                                    x-text="`L${item._depth || 0}`"></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
+                                                                    x-text="item.operation || '-' "></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                                    :class="item.status === 'error' ? 'bg-red-100 text-red-700' : (item.status === 'start' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')"
+                                                                    x-text="item.status || 'ok'"></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px]"
+                                                                    x-text="item.event || '-' "></span>
+                                                                <span class="text-[10px] text-gray-400"
+                                                                    x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all">
+                                                                <span class="text-gray-500">span:</span>
+                                                                <span x-text="item.span_id || '-' "></span>
+                                                                <span class="text-gray-500 ml-2">parent:</span>
+                                                                <span x-text="item.parent_span_id || '-' "></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all"
+                                                                x-show="traceProviderLabel(item)">
+                                                                <span x-text="traceProviderLabel(item)"></span>
+                                                            </div>
+                                                            <details class="mt-1"
+                                                                x-show="traceProviderFunctions(item).length > 1">
+                                                                <summary
+                                                                    class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                                                    全部 provider
+                                                                </summary>
+                                                                <ul class="mt-1 space-y-0.5">
+                                                                    <template
+                                                                        x-for="(fn, fidx) in traceProviderFunctions(item)"
+                                                                        :key="`trace-event-provider-${item.span_id || 'x'}-${fidx}`">
+                                                                        <li class="text-[10px] text-gray-600 break-all"
+                                                                            x-text="fn"></li>
+                                                                    </template>
+                                                                </ul>
+                                                            </details>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceOutputType(item)"
+                                                                x-text="`output: ${traceOutputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceInputType(item)"
+                                                                x-text="`input: ${traceInputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceTypeMeta(item)"
+                                                                x-text="traceTypeMeta(item)">
+                                                            </div>
+                                                            <div x-show="traceErrorText(item)"
+                                                                class="mt-1 rounded border border-red-200 bg-red-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                                                                    error
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[11px] text-red-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorMultilineText(item)"></pre>
+                                                            </div>
+                                                            <div x-show="traceErrorContext(item)"
+                                                                class="mt-1 rounded border border-amber-200 bg-amber-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                                                    ctx
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[10px] text-amber-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorContextMultiline(item)"></pre>
+                                                            </div>
+                                                            <div class="text-[10px] text-blue-700 break-all"
+                                                                x-show="tracePackagePathLabel(item)"
+                                                                x-text="`pkg: ${tracePackagePathLabel(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="item.duration_ns"
+                                                                x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
                                         </div>
                                     </div>
-
-                                    <div x-show="!isTraceGroupCollapsed(group.traceId)"
-                                        class="space-y-1.5 max-h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50/50">
-                                        <template x-if="traceViewMode === 'span'">
-                                            <div class="space-y-1.5">
-                                                <template
-                                                    x-for="(item, idx) in (traceTreeMode ? group.visibleSpanRows : group.spanRows)"
-                                                    :key="`trace-span-${group.traceId}-${item.span_id || idx}-${idx}`">
-                                                    <div class="text-xs border rounded p-2"
-                                                        :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
-                                                        :style="traceTreeMode ? traceIndentStyle(item) : ''">
-                                                        <div class="flex items-center gap-2 flex-wrap mb-1">
-                                                            <button x-show="traceTreeMode && item._canToggle"
-                                                                @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
-                                                                class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
-                                                                :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
-                                                                x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
-                                                            <span x-show="traceTreeMode"
-                                                                class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
-                                                                x-text="`L${item._depth || 0}`"></span>
-                                                            <span
-                                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
-                                                                x-text="item.operation || '-' "></span>
-                                                            <span
-                                                                class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                                                                :class="item.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
-                                                                x-text="item.status || 'ok'"></span>
-                                                            <span class="text-[10px] text-gray-500"
-                                                                x-text="`events:${item.event_count || 0}`"></span>
-                                                            <span class="text-[10px] text-gray-400"
-                                                                x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-700 break-all">
-                                                            <span class="text-gray-500">span:</span>
-                                                            <span x-text="item.span_id || '-' "></span>
-                                                            <span class="text-gray-500 ml-2">parent:</span>
-                                                            <span x-text="item.parent_span_id || '-' "></span>
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-700 break-all"
-                                                            x-show="traceProviderLabel(item)">
-                                                            <span x-text="traceProviderLabel(item)"></span>
-                                                        </div>
-                                                        <details class="mt-1"
-                                                            x-show="traceProviderFunctions(item).length > 1">
-                                                            <summary
-                                                                class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
-                                                                查看全部 provider 签名
-                                                            </summary>
-                                                            <ul class="mt-1 space-y-0.5">
-                                                                <template
-                                                                    x-for="(fn, fidx) in traceProviderFunctions(item)"
-                                                                    :key="`trace-span-provider-${item.span_id || 'x'}-${fidx}`">
-                                                                    <li class="text-[10px] text-gray-600 break-all"
-                                                                        x-text="fn"></li>
-                                                                </template>
-                                                            </ul>
-                                                        </details>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="traceOutputType(item)"
-                                                            x-text="`output: ${traceOutputType(item)}`"></div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="traceInputType(item)"
-                                                            x-text="`input: ${traceInputType(item)}`"></div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="traceTypeMeta(item)" x-text="traceTypeMeta(item)">
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.duration_ns"
-                                                            x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.error" x-text="`error: ${item.error}`"></div>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </template>
-
-                                        <template x-if="traceViewMode !== 'span'">
-                                            <div class="space-y-1.5">
-                                                <template
-                                                    x-for="(item, idx) in (traceTreeMode ? group.visibleTreeRows : group.records)"
-                                                    :key="`trace-item-${group.traceId}-${item.id || idx}-${idx}`">
-                                                    <div class="text-xs border rounded p-2"
-                                                        :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
-                                                        :style="traceTreeMode ? traceIndentStyle(item) : ''">
-                                                        <div class="flex items-center gap-2 flex-wrap mb-1">
-                                                            <button x-show="traceTreeMode && item._canToggle"
-                                                                @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
-                                                                class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
-                                                                :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
-                                                                x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
-                                                            <span x-show="traceTreeMode"
-                                                                class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
-                                                                x-text="`L${item._depth || 0}`"></span>
-                                                            <span
-                                                                class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
-                                                                x-text="item.operation || '-' "></span>
-                                                            <span
-                                                                class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
-                                                                :class="item.status === 'error' ? 'bg-red-100 text-red-700' : (item.status === 'start' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')"
-                                                                x-text="item.status || 'ok'"></span>
-                                                            <span
-                                                                class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px]"
-                                                                x-text="item.event || '-' "></span>
-                                                            <span class="text-[10px] text-gray-400"
-                                                                x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-700 break-all">
-                                                            <span class="text-gray-500">span:</span>
-                                                            <span x-text="item.span_id || '-' "></span>
-                                                            <span class="text-gray-500 ml-2">parent:</span>
-                                                            <span x-text="item.parent_span_id || '-' "></span>
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-700 break-all"
-                                                            x-show="traceProviderLabel(item)">
-                                                            <span x-text="traceProviderLabel(item)"></span>
-                                                        </div>
-                                                        <details class="mt-1"
-                                                            x-show="traceProviderFunctions(item).length > 1">
-                                                            <summary
-                                                                class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
-                                                                查看全部 provider 签名
-                                                            </summary>
-                                                            <ul class="mt-1 space-y-0.5">
-                                                                <template
-                                                                    x-for="(fn, fidx) in traceProviderFunctions(item)"
-                                                                    :key="`trace-event-provider-${item.span_id || 'x'}-${fidx}`">
-                                                                    <li class="text-[10px] text-gray-600 break-all"
-                                                                        x-text="fn"></li>
-                                                                </template>
-                                                            </ul>
-                                                        </details>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="traceOutputType(item)"
-                                                            x-text="`output: ${traceOutputType(item)}`"></div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="traceInputType(item)"
-                                                            x-text="`input: ${traceInputType(item)}`"></div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="traceTypeMeta(item)" x-text="traceTypeMeta(item)">
-                                                        </div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.error" x-text="`error: ${item.error}`"></div>
-                                                        <div class="text-[11px] text-gray-600 break-all"
-                                                            x-show="item.duration_ns"
-                                                            x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
-                                                        </div>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </div>
-                            </template>
+                                </template>
+                            </div>
                         </div>
                     </template>
                 </div>
@@ -1519,7 +1563,7 @@
                         });
 
                         // 汇总 span 视图（一个 span 一行，默认更易读）
-                        g.spanRows = Array.from(spanRep.entries()).map(([sid, startRec]) => {
+                        const allSpanRows = Array.from(spanRep.entries()).map(([sid, startRec]) => {
                             const endRec = spanEnd.get(sid);
                             const errRec = spanError.get(sid);
                             const status = (endRec && endRec.status) || (errRec ? 'error' : 'ok');
@@ -1555,6 +1599,10 @@
                                 _canToggle: (spanChildCount.get(sid) || 0) > 0,
                             };
                         });
+
+                        g.spanErrorCount = allSpanRows.filter((row) => String(row.status || '').toLowerCase() === 'error' || String(row.error || '').trim()).length;
+                        g.hasSpanError = g.spanErrorCount > 0;
+                        g.spanRows = allSpanRows;
 
                         if (this.traceOnlyErrorSpan) {
                             g.spanRows = g.spanRows.filter((row) => row.status === 'error');
@@ -1807,8 +1855,27 @@
                     }
                 },
 
+                async focusSingleTrace(traceId) {
+                    const id = String(traceId || '').trim();
+                    if (!id || this.diagnosticModalType !== 'trace') {
+                        return;
+                    }
+
+                    this.diagnosticSearch = id;
+                    this.traceCollapsedGroupKeys = {};
+                    this.traceCollapsedSpanKeys = {};
+
+                    if (!this.traceFullscreen) {
+                        await this.toggleTraceFullscreen();
+                    }
+                },
+
                 refreshTraceFromModal() {
                     this.loadTraceRecords();
+                },
+
+                isSingleTraceView() {
+                    return this.diagnosticModalType === 'trace' && Array.isArray(this.traceGroups) && this.traceGroups.length === 1;
                 },
 
                 parseTraceDepthValue() {
@@ -1940,6 +2007,147 @@
                     return parts.join(' · ');
                 },
 
+                firstNonEmpty(...values) {
+                    for (const v of values) {
+                        const s = String(v ?? '').trim();
+                        if (s) {
+                            return s;
+                        }
+                    }
+                    return '';
+                },
+
+                traceErrorText(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    return this.firstNonEmpty(
+                        item.error,
+                        item.message,
+                        attrs.error,
+                        attrs.message,
+                        attrs.root_cause,
+                        attrs.cause,
+                    );
+                },
+
+                traceErrorContext(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const parts = [];
+
+                    const stage = this.firstNonEmpty(attrs.stage);
+                    if (stage) parts.push(`stage=${stage}`);
+
+                    const queryKind = this.firstNonEmpty(attrs.query_kind);
+                    if (queryKind) parts.push(`query=${queryKind}`);
+
+                    if (attrs.index !== undefined && attrs.index !== null && String(attrs.index).trim() !== '') {
+                        parts.push(`index=${attrs.index}`);
+                    }
+
+                    const resultPath = this.firstNonEmpty(attrs.result_path);
+                    if (resultPath) parts.push(`path=${resultPath}`);
+
+                    const timedOut = attrs.timed_out;
+                    if (timedOut === true || String(timedOut).toLowerCase() === 'true') {
+                        parts.push('timed_out=true');
+                    }
+
+                    const hint = this.firstNonEmpty(attrs.hint);
+                    if (hint) parts.push(`hint=${hint}`);
+
+                    const root = this.firstNonEmpty(attrs.root_cause);
+                    if (root) parts.push(`root=${root}`);
+
+                    return parts.join(' · ');
+                },
+
+                toMultilineText(text) {
+                    const s = String(text || '').trim();
+                    if (!s) {
+                        return '';
+                    }
+                    return s
+                        .replace(/\s*\|\s*/g, '\n')
+                        .replace(/\s*·\s*/g, '\n')
+                        .replace(/\s*;\s*/g, '\n')
+                        .replace(/\s+,\s+(?=(stage|query|index|path|hint|root|timed_out)=)/gi, '\n')
+                        .replace(/\s+caused by:\s+/gi, '\ncaused by: ')
+                        .trim();
+                },
+
+                traceErrorMultilineText(item) {
+                    return this.toMultilineText(this.traceErrorText(item));
+                },
+
+                traceErrorContextMultiline(item) {
+                    return this.toMultilineText(this.traceErrorContext(item));
+                },
+
+                extractPkgPathFromSymbol(symbol) {
+                    const s = String(symbol || '').trim();
+                    if (!s) {
+                        return '';
+                    }
+
+                    const lastDot = s.lastIndexOf('.');
+                    if (lastDot > 0) {
+                        const pkg = s.slice(0, lastDot).trim();
+                        if (pkg.includes('/')) {
+                            return pkg;
+                        }
+                        if (pkg.includes('.') && !pkg.includes('(')) {
+                            return pkg;
+                        }
+                    }
+
+                    if (s.includes('/')) {
+                        return s;
+                    }
+
+                    return '';
+                },
+
+                tracePackagePathLabel(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const candidates = [];
+
+                    candidates.push(item.component);
+                    candidates.push(item.provider_function);
+                    candidates.push(this.traceProviderLabel(item));
+                    candidates.push(this.traceInputType(item));
+                    candidates.push(this.traceOutputType(item));
+                    candidates.push(attrs.provider);
+                    candidates.push(attrs.provider_function);
+                    candidates.push(attrs.provider_candidates);
+
+                    const providerFns = this.traceProviderFunctions(item);
+                    for (const fn of providerFns) {
+                        candidates.push(fn);
+                    }
+
+                    const seen = new Set();
+                    const pkgList = [];
+                    for (const c of candidates) {
+                        const pkg = this.extractPkgPathFromSymbol(c);
+                        if (!pkg || seen.has(pkg)) {
+                            continue;
+                        }
+                        seen.add(pkg);
+                        pkgList.push(pkg);
+                    }
+
+                    return pkgList.join(' | ');
+                },
+
                 traceIndentStyle(item) {
                     const depth = Math.max(0, Number((item && item._depth) || 0));
                     const mode = String(this.traceIndentMode || 'log');
@@ -2009,10 +2217,6 @@
                         next[key] = true;
                     }
                     this.traceCollapsedSpanKeys = next;
-                },
-
-                expandAllTraceSpans() {
-                    this.traceCollapsedSpanKeys = {};
                 },
 
                 openProviderDetailModal(node) {
