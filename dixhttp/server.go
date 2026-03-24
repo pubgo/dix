@@ -1,6 +1,7 @@
 package dixhttp
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/pubgo/dix/v2/dixinternal"
+	"github.com/pubgo/dix/v2/dixtrace"
 )
 
 //go:embed template.html
@@ -129,10 +131,102 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(indexPath, s.HandleIndex)
 	s.mux.HandleFunc(base+"/api/dependencies", s.HandleDependencies)
 	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
+	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
+	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
+	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
+	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
 	s.mux.HandleFunc(base+"/api/group-rules", s.HandleGroupRules)
+}
+
+// HandleErrors returns recent Inject/TryInject error events.
+// Query params:
+// - limit: optional positive integer to limit returned rows.
+func (s *Server) HandleErrors(w http.ResponseWriter, r *http.Request) {
+	limit := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	errors := s.dix.GetRecentErrors(limit)
+	writeJSON(w, errors)
+}
+
+// HandleDiagnostics returns records from DIX_DIAG_FILE (JSONL).
+// Query params:
+// - kind: trace|error|llm (optional)
+// - event: trace event fuzzy match (optional)
+// - q: full-text search over record JSON (optional)
+// - limit: optional positive integer, default 200, max 2000
+// - before_id: optional record id cursor for older-page query
+// - since_unix_nano: optional lower time bound
+// - until_unix_nano: optional upper time bound
+func (s *Server) HandleDiagnostics(w http.ResponseWriter, r *http.Request) {
+	query := dixinternal.DiagFileQuery{
+		Kind:   strings.TrimSpace(r.URL.Query().Get("kind")),
+		Event:  strings.TrimSpace(r.URL.Query().Get("event")),
+		Search: strings.TrimSpace(r.URL.Query().Get("q")),
+	}
+
+	if limitStr := strings.TrimSpace(r.URL.Query().Get("limit")); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil {
+			query.Limit = l
+		}
+	}
+
+	if beforeStr := strings.TrimSpace(r.URL.Query().Get("before_id")); beforeStr != "" {
+		if before, err := strconv.ParseInt(beforeStr, 10, 64); err == nil {
+			query.BeforeID = before
+		}
+	}
+
+	if sinceStr := strings.TrimSpace(r.URL.Query().Get("since_unix_nano")); sinceStr != "" {
+		if since, err := strconv.ParseInt(sinceStr, 10, 64); err == nil {
+			query.SinceUnix = since
+		}
+	}
+
+	if untilStr := strings.TrimSpace(r.URL.Query().Get("until_unix_nano")); untilStr != "" {
+		if until, err := strconv.ParseInt(untilStr, 10, 64); err == nil {
+			query.UntilUnix = until
+		}
+	}
+
+	result, err := dixinternal.ReadDiagFileRecords(query)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to read diagnostics: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	writeJSON(w, result)
+}
+
+// HandleTrace returns in-memory dixtrace events.
+// Query params:
+// - trace_id, operation, status, event, component, provider, output_type, q
+// - limit, before_id, since_unix_nano, until_unix_nano
+func (s *Server) HandleTrace(w http.ResponseWriter, r *http.Request) {
+	params := map[string]any{
+		"trace_id":        strings.TrimSpace(r.URL.Query().Get("trace_id")),
+		"operation":       strings.TrimSpace(r.URL.Query().Get("operation")),
+		"status":          strings.TrimSpace(r.URL.Query().Get("status")),
+		"event":           strings.TrimSpace(r.URL.Query().Get("event")),
+		"component":       strings.TrimSpace(r.URL.Query().Get("component")),
+		"provider":        strings.TrimSpace(r.URL.Query().Get("provider")),
+		"output_type":     strings.TrimSpace(r.URL.Query().Get("output_type")),
+		"q":               strings.TrimSpace(r.URL.Query().Get("q")),
+		"limit":           strings.TrimSpace(r.URL.Query().Get("limit")),
+		"before_id":       strings.TrimSpace(r.URL.Query().Get("before_id")),
+		"since_unix_nano": strings.TrimSpace(r.URL.Query().Get("since_unix_nano")),
+		"until_unix_nano": strings.TrimSpace(r.URL.Query().Get("until_unix_nano")),
+	}
+
+	result := dixtrace.QueryEvents(dixtrace.ParseQueryFromMap(params))
+	writeJSON(w, result)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -191,6 +285,25 @@ func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, stats)
 }
 
+// HandleRuntimeStats returns provider runtime stats for startup/perf diagnosis.
+// Query params:
+// - limit: optional positive integer to limit returned rows.
+func (s *Server) HandleRuntimeStats(w http.ResponseWriter, r *http.Request) {
+	limit := 0
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	stats := s.dix.GetProviderRuntimeStats()
+	if limit > 0 && len(stats) > limit {
+		stats = stats[:limit]
+	}
+
+	writeJSON(w, stats)
+}
+
 // HandlePackages returns list of packages for navigation
 func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	providerDetails := s.dix.GetProviderDetails()
@@ -238,7 +351,12 @@ func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
 // HandlePackageDetails returns details for a specific package
 func (s *Server) HandlePackageDetails(w http.ResponseWriter, r *http.Request) {
 	// Extract package name from URL
-	pkgName := strings.TrimPrefix(r.URL.Path, "/api/package/")
+	prefix := s.basePath + "/api/package/"
+	pkgName := strings.TrimPrefix(r.URL.Path, prefix)
+	if pkgName == r.URL.Path {
+		http.Error(w, "package name required", http.StatusBadRequest)
+		return
+	}
 	if pkgName == "" {
 		http.Error(w, "package name required", http.StatusBadRequest)
 		return
@@ -295,7 +413,12 @@ func (s *Server) HandlePackageDetails(w http.ResponseWriter, r *http.Request) {
 // HandleTypeDetails returns dependency details for a specific type
 func (s *Server) HandleTypeDetails(w http.ResponseWriter, r *http.Request) {
 	// Extract type name from URL
-	typeName := strings.TrimPrefix(r.URL.Path, "/api/type/")
+	prefix := s.basePath + "/api/type/"
+	typeName := strings.TrimPrefix(r.URL.Path, prefix)
+	if typeName == r.URL.Path {
+		http.Error(w, "type name required", http.StatusBadRequest)
+		return
+	}
 	if typeName == "" {
 		http.Error(w, "type name required", http.StatusBadRequest)
 		return
@@ -437,6 +560,8 @@ func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyD
 			OutputPkg:    detail.OutputPkg,
 			FunctionName: detail.FunctionName,
 			FunctionPkg:  detail.FunctionPkg,
+			FunctionFile: detail.FunctionFile,
+			FunctionLine: detail.FunctionLine,
 			InputTypes:   detail.InputTypes,
 			InputPkgs:    detail.InputPkgs,
 		}
@@ -545,6 +670,8 @@ type ProviderInfo struct {
 	OutputPkg    string   `json:"output_pkg"`
 	FunctionName string   `json:"function_name"`
 	FunctionPkg  string   `json:"function_pkg"`
+	FunctionFile string   `json:"function_file"`
+	FunctionLine int      `json:"function_line"`
 	InputTypes   []string `json:"input_types"`
 	InputPkgs    []string `json:"input_pkgs"`
 }
@@ -605,12 +732,15 @@ func extractPackage(typeName string) string {
 }
 
 func writeJSON(w http.ResponseWriter, data any) {
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(data); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to encode JSON: %v", err), http.StatusInternalServerError)
-	}
+	_, _ = w.Write(buf.Bytes())
 }
 
 func normalizeBasePath(basePath string) string {

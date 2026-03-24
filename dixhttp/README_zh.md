@@ -15,6 +15,8 @@
 - 🧩 **分组清单（前缀聚合）** - 通过包路径/前缀聚合节点
 - 🔎 **前缀过滤** - 只显示匹配前缀的节点/Provider
 - 🧭 **组内子图** - 查看组内及上下游依赖
+- 🗂 **诊断文件查询** - 配置 `DIX_DIAG_FILE` 后，页面可查询并展示 `trace/error/llm` JSONL 记录
+- 🧵 **Trace 时间线查询** - 通过 `/api/trace` 查询 `dixtrace` 内存统一事件（支持多维过滤）；文件持久化优先使用 `DIX_TRACE_FILE`，未配置时回退复用 `DIX_DIAG_FILE`
 - 📡 **RESTful API** - 提供 JSON 格式的依赖关系数据
 - 🧩 **Mermaid 预览/导出** - 将当前图生成 Mermaid 流程图（支持分组/过滤）
 
@@ -97,11 +99,11 @@ server := dixhttp.NewServerWithOptions(
 
 ### 三栏布局
 
-| 区域 | 说明 |
-|------|------|
-| **左侧 - 包列表** | 按包分组的 Provider 列表，支持搜索过滤，可折叠收起 |
-| **中间 - 依赖图** | 交互式依赖关系图，支持拖拽、缩放、点击 |
-| **右侧 - 详情面板** | 显示选中节点的详细信息，可点击跳转 |
+| 区域                | 说明                                               |
+| ------------------- | -------------------------------------------------- |
+| **左侧 - 包列表**   | 按包分组的 Provider 列表，支持搜索过滤，可折叠收起 |
+| **中间 - 依赖图**   | 交互式依赖关系图，支持拖拽、缩放、点击             |
+| **右侧 - 详情面板** | 显示选中节点的详细信息，可点击跳转                 |
 
 ## 核心功能
 
@@ -146,12 +148,12 @@ server := dixhttp.NewServerWithOptions(
 
 深度决定了向上/向下展开多少层依赖：
 
-| 深度 | 说明 | 适用场景 |
-|------|------|---------|
-| 1 | 只显示直接依赖/被依赖 | 快速查看直接关系 |
-| 2 | 显示两层关系（默认） | 日常使用推荐 |
-| 3-5 | 显示更多层级 | 追踪复杂依赖链 |
-| 全部 | 展示完整依赖树 | 小型项目或特定分析 |
+| 深度 | 说明                  | 适用场景           |
+| ---- | --------------------- | ------------------ |
+| 1    | 只显示直接依赖/被依赖 | 快速查看直接关系   |
+| 2    | 显示两层关系（默认）  | 日常使用推荐       |
+| 3-5  | 显示更多层级          | 追踪复杂依赖链     |
+| 全部 | 展示完整依赖树        | 小型项目或特定分析 |
 
 **示例**：假设依赖链是 `Config → Database → UserService → Handler`
 
@@ -214,13 +216,13 @@ dixhttp.RegisterGroupRules(
 
 ## 交互操作
 
-| 操作 | 效果 |
-|------|------|
-| **单击节点** | 右侧显示详情 |
-| **双击节点** | 以该节点为中心展示依赖图 |
-| **拖拽节点** | 移动节点位置 |
-| **滚轮缩放** | 放大/缩小图形 |
-| **点击详情中的类型** | 跳转查看该类型的依赖 |
+| 操作                 | 效果                     |
+| -------------------- | ------------------------ |
+| **单击节点**         | 右侧显示详情             |
+| **双击节点**         | 以该节点为中心展示依赖图 |
+| **拖拽节点**         | 移动节点位置             |
+| **滚轮缩放**         | 放大/缩小图形            |
+| **点击详情中的类型** | 跳转查看该类型的依赖     |
 
 ## Mermaid 支持
 
@@ -279,6 +281,93 @@ dixhttp.RegisterGroupRules(
   ],
   "objects": [...],
   "edges": [...]
+}
+```
+
+### GET `/api/errors?limit=50`
+返回最近的 `Inject` / `TryInject` 错误（按时间倒序），用于在启动阶段注入失败后继续排查。
+
+```json
+[
+  {
+    "operation": "provider_execute",
+    "component": "main.main.func12",
+    "stage": "resolve_input",
+    "provider_function": "main.main.func12",
+    "output_type": "*main.UserService",
+    "input_type": "*main.Database",
+    "root_cause": "value not found: type=*main.Database ...",
+    "message": "failed to get input value for provider: value not found: type=*main.Database ...",
+    "occurred_at_unix_nano": 1700000000000000000
+  }
+]
+```
+
+### GET `/api/diagnostics?kind=trace&q=provider&event=provider.call.start&limit=200`
+读取并过滤 `DIX_DIAG_FILE` 中的 JSONL 记录。
+
+若未配置 `DIX_DIAG_FILE`，返回 `enabled=false` 且记录为空。
+
+```json
+{
+  "enabled": true,
+  "path": "/tmp/dix-diag.jsonl",
+  "exists": true,
+  "total": 42,
+  "returned": 42,
+  "next_before_id": 0,
+  "records": [
+    {
+      "record_id": 128,
+      "source": "dix",
+      "pid": 12345,
+      "process": "my-app",
+      "hostname": "dev-mac",
+      "trace_di": true,
+      "llm_diag_mode": "dual",
+      "kind": "trace",
+      "event": "provider.call.start",
+      "occurred_at_unix_nano": 1700000000000000000,
+      "fields": {
+        "provider": "github.com/acme/app.main.NewDB"
+      }
+    }
+  ]
+}
+```
+
+### GET `/api/trace?operation=provider&status=error&limit=200`
+返回来自 `dixtrace` 的内存统一 trace 事件。
+
+文件落盘行为：
+
+- 优先使用 `DIX_TRACE_FILE`（若已配置）。
+- 当未配置 `DIX_TRACE_FILE` 且已配置 `DIX_DIAG_FILE` 时，trace 文件落盘会以追加模式复用 `DIX_DIAG_FILE`（单文件排查配置）。
+
+支持过滤参数：
+
+- `trace_id`, `operation`, `status`, `event`, `component`, `provider`, `output_type`, `q`
+- `limit`, `before_id`, `since_unix_nano`, `until_unix_nano`
+
+```json
+{
+  "enabled": true,
+  "total": 2,
+  "returned": 2,
+  "records": [
+    {
+      "id": 102,
+      "operation": "provider",
+      "phase": "call.failed",
+      "event": "provider.call.failed",
+      "status": "error",
+      "provider_function": "github.com/acme/app.main.NewDB",
+      "output_type": "*db.Client",
+      "error": "dial tcp timeout",
+      "timed_out": true,
+      "occurred_at_unix_nano": 1700000000000000000
+    }
+  ]
 }
 ```
 

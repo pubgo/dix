@@ -1,7 +1,13 @@
 package main
 
 import (
+	"errors"
+	"io"
 	"log"
+	"net"
+	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/pubgo/dix/v2"
@@ -197,6 +203,31 @@ func (n *NotificationService) Name() string {
 	return "NotificationService"
 }
 
+// SlowRemoteClient 模拟一个外部慢依赖
+type SlowRemoteClient struct {
+	Ready bool
+}
+
+// TimeoutProbe 仅用于触发 SlowRemoteClient 的构建
+type TimeoutProbe struct {
+	Client *SlowRemoteClient
+}
+
+// StartupMissingDependency 用于模拟“注入缺失依赖”
+type StartupMissingDependency struct{}
+
+// StartupResolveInputMissing 用于模拟“provider 输入依赖缺失”
+type StartupResolveInputMissing struct{}
+
+// StartupResolveInputProbe 用于触发 StartupResolveInputMissing 的解析
+type StartupResolveInputProbe struct{}
+
+// StartupBrokenComponent 用于模拟“provider 返回 error”
+type StartupBrokenComponent struct{}
+
+// StartupPanicComponent 用于模拟“provider panic”
+type StartupPanicComponent struct{}
+
 // ==================== 业务逻辑层 ====================
 
 // UserController 用户控制器
@@ -225,9 +256,194 @@ type Application struct {
 	ServiceMap          map[string]Service // 服务映射（使用具体接口类型）
 }
 
+const defaultHTTPAddr = ":8080"
+
+func isMachineDiagMode() bool {
+	mode := strings.TrimSpace(strings.ToLower(os.Getenv("DIX_LLM_DIAG_MODE")))
+	switch mode {
+	case "only", "machine", "machine-only", "machine_only", "json":
+		return true
+	default:
+		return false
+	}
+}
+
+func configureExampleLogOutput() {
+	if isMachineDiagMode() {
+		log.SetOutput(io.Discard)
+	}
+}
+
+func startVisualizationServer(server *dixhttp.Server) error {
+	addr := os.Getenv("DIX_HTTP_ADDR")
+	if addr == "" {
+		addr = defaultHTTPAddr
+	}
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		if addr == defaultHTTPAddr {
+			log.Printf("⚠️ Port %s unavailable (%v), trying a random available port...", addr, err)
+			ln, err = net.Listen("tcp", ":0")
+		}
+		if err != nil {
+			return err
+		}
+	}
+
+	actualAddr := ln.Addr().String()
+	displayAddr := actualAddr
+	if _, port, splitErr := net.SplitHostPort(actualAddr); splitErr == nil && port != "" {
+		displayAddr = "localhost:" + port
+	}
+
+	log.Printf("🚀 Starting HTTP server on http://%s", displayAddr)
+	log.Printf("📊 Open http://%s in your browser to view dependency relationships", displayAddr)
+	log.Println("📡 API endpoints:")
+	log.Println("   - GET /api/dependencies - JSON data of dependencies")
+	log.Println("   - GET /api/runtime-stats - Provider startup runtime stats")
+	log.Println("   - GET /api/errors - Recent Inject/TryInject errors")
+	log.Println("   - GET /api/trace - In-memory dixtrace timeline query")
+	log.Println("   - GET /api/graph?type=providers - DOT graph format")
+	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
+	log.Println("   - GET /api/graph?type=objects - Objects graph")
+	log.Println("")
+	log.Println("💡 This example demonstrates:")
+	log.Println("   - Interface-based dependency injection")
+	log.Println("   - Multiple implementations (RedisCache, FileCache)")
+	log.Println("   - Map and Slice dependencies")
+	log.Println("   - Struct output (auto-flattening)")
+	log.Println("   - Multi-layer architecture (Config -> Services -> Controllers -> Application)")
+	log.Println("   - Complex dependency chains")
+	log.Println("   - Simulated timeout provider (for red-highlight diagnosis)")
+	log.Println("")
+	log.Println("💡 Runtime stats will include a timeout provider sample for diagnostics!")
+
+	httpServer := &http.Server{Handler: server}
+	return httpServer.Serve(ln)
+}
+
+func logStartupScenarioResult(di *dix.Dix, scenario string, err error, previousCount int) {
+	if err == nil {
+		return
+	}
+
+	recent := di.GetRecentErrors(0)
+	if len(recent) == 0 {
+		log.Printf("⚠️ [startup-diagnostic][%s] err=%v (no recent error records)", scenario, err)
+		return
+	}
+
+	newCount := len(recent) - previousCount
+	if newCount <= 0 {
+		newCount = 1
+	}
+	if newCount > len(recent) {
+		newCount = len(recent)
+	}
+
+	log.Printf("⚠️ [startup-diagnostic][%s] captured %d record(s)", scenario, newCount)
+	for i := newCount - 1; i >= 0; i-- {
+		item := recent[i]
+		recordIndex := newCount - i
+		log.Printf("   - record=%d", recordIndex)
+		log.Printf("     type=%s", item.ErrorType)
+		log.Printf("     op=%s", item.Operation)
+		if item.Stage != "" {
+			log.Printf("     stage=%s", item.Stage)
+		}
+		log.Printf("     message=%s", item.Message)
+		if item.ProviderFunction != "" {
+			log.Printf("     provider=%s", item.ProviderFunction)
+		}
+		if item.OutputType != "" {
+			log.Printf("     output=%s", item.OutputType)
+		}
+		if item.InputType != "" {
+			log.Printf("     input=%s", item.InputType)
+		}
+		if item.Hint != "" {
+			log.Printf("     hint=%s", item.Hint)
+		}
+	}
+}
+
+func runStartupErrorScenarios(di *dix.Dix) {
+	log.Println("🧪 Running startup error diagnostics...")
+
+	before := len(di.GetRecentErrors(0))
+	if err := di.TryProvide(nil); err != nil {
+		logStartupScenarioResult(di, "invalid_provider_registration", err, before)
+	}
+
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupMissingDependency) {}); err != nil {
+		logStartupScenarioResult(di, "inject_missing_dependency", err, before)
+	}
+
+	dix.Provide(di, func(*StartupResolveInputMissing) *StartupResolveInputProbe {
+		return &StartupResolveInputProbe{}
+	})
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupResolveInputProbe) {}); err != nil {
+		logStartupScenarioResult(di, "provider_input_unresolved", err, before)
+	}
+
+	dix.Provide(di, func(logger Logger) (*StartupBrokenComponent, error) {
+		logger.Info("[demo] StartupBrokenComponent returns intentional error")
+		return nil, errors.New("demo startup: provider return error")
+	})
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupBrokenComponent) {}); err != nil {
+		logStartupScenarioResult(di, "provider_return_error", err, before)
+	}
+
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(logger Logger) error {
+		logger.Info("[demo] inject callback returns intentional error")
+		return errors.New("demo startup: inject callback error")
+	}); err != nil {
+		logStartupScenarioResult(di, "inject_callback_error", err, before)
+	}
+
+	dix.Provide(di, func(logger Logger) *StartupPanicComponent {
+		logger.Info("[demo] StartupPanicComponent panics intentionally")
+		panic("demo startup: provider panic")
+	})
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*StartupPanicComponent) {}); err != nil {
+		logStartupScenarioResult(di, "provider_panic", err, before)
+	}
+
+	before = len(di.GetRecentErrors(0))
+	if err := di.TryInject(func(*TimeoutProbe) {}); err != nil {
+		logStartupScenarioResult(di, "provider_timeout", err, before)
+	}
+
+	// 循环依赖演示使用临时容器，避免污染主容器导致后续所有注入失败。
+	cycleDI := dix.New()
+	type cycleA struct{}
+	type cycleB struct{}
+	type cycleC struct{}
+	dix.Provide(cycleDI, func(*cycleC) *cycleA { return &cycleA{} })
+	dix.Provide(cycleDI, func(*cycleA) *cycleB { return &cycleB{} })
+	dix.Provide(cycleDI, func(*cycleB) *cycleC { return &cycleC{} })
+	beforeCycle := len(cycleDI.GetRecentErrors(0))
+	if err := cycleDI.TryInject(func(*cycleA) {}); err != nil {
+		logStartupScenarioResult(cycleDI, "dependency_cycle(temp_container)", err, beforeCycle)
+	}
+
+	log.Println("🧪 Startup diagnostics done. Visit /api/errors to verify error_type/hint recognition.")
+}
+
 func main() {
+	configureExampleLogOutput()
+
 	// Create a Dix container
-	di := dix.New()
+	di := dix.New(
+		dix.WithProviderTimeout(200*time.Millisecond),
+		dix.WithSlowProviderThreshold(80*time.Millisecond),
+	)
 
 	// ==================== 注册基础组件 ====================
 
@@ -292,6 +508,21 @@ func main() {
 			Timeout: config.Timeout,
 			Logger:  logger,
 		}
+	})
+
+	// ==================== 模拟异常场景（用于可视化排查） ====================
+
+	// 模拟慢依赖：刻意 sleep 超过 ProviderTimeout，触发 timeout
+	dix.Provide(di, func(logger Logger) *SlowRemoteClient {
+		logger.Info("[demo] SlowRemoteClient start (expected timeout)")
+		time.Sleep(450 * time.Millisecond)
+		logger.Info("[demo] SlowRemoteClient done")
+		return &SlowRemoteClient{Ready: true}
+	})
+
+	// 触发 SlowRemoteClient 的解析
+	dix.Provide(di, func(client *SlowRemoteClient) *TimeoutProbe {
+		return &TimeoutProbe{Client: client}
 	})
 
 	// ==================== 注册服务层 ====================
@@ -415,7 +646,7 @@ func main() {
 	log.Println("📦 Pre-creating objects for visualization...")
 
 	// 使用函数注入来创建对象（这种方式可以处理指针类型）
-	dix.Inject(di, func(
+	if err := di.TryInject(func(
 		app *Application,
 		userService *UserService,
 		orderService *OrderService,
@@ -450,7 +681,12 @@ func main() {
 		if allServices != nil {
 			log.Printf("✅ Services list created with %d services", len(allServices))
 		}
-	})
+	}); err != nil {
+		log.Printf("⚠️ pre-create injection failed, web will still start for diagnostics: %v", err)
+	}
+
+	// 在启动阶段统一触发多类可识别错误，便于验证 error_type/hint 的识别与定位
+	runStartupErrorScenarios(di)
 
 	log.Println("")
 
@@ -459,26 +695,7 @@ func main() {
 	// Create HTTP server for visualization
 	server := dixhttp.NewServer((*dixinternal.Dix)(di))
 
-	// Start the HTTP server
-	log.Println("🚀 Starting HTTP server on http://localhost:8080")
-	log.Println("📊 Open http://localhost:8080 in your browser to view dependency relationships")
-	log.Println("📡 API endpoints:")
-	log.Println("   - GET /api/dependencies - JSON data of dependencies")
-	log.Println("   - GET /api/graph?type=providers - DOT graph format")
-	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
-	log.Println("   - GET /api/graph?type=objects - Objects graph")
-	log.Println("")
-	log.Println("💡 This example demonstrates:")
-	log.Println("   - Interface-based dependency injection")
-	log.Println("   - Multiple implementations (RedisCache, FileCache)")
-	log.Println("   - Map and Slice dependencies")
-	log.Println("   - Struct output (auto-flattening)")
-	log.Println("   - Multi-layer architecture (Config -> Services -> Controllers -> Application)")
-	log.Println("   - Complex dependency chains")
-	log.Println("")
-	log.Println("💡 Objects view will now show all created instances!")
-
-	if err := server.ListenAndServe(":8080"); err != nil {
+	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
 		log.Fatal("Server error:", err)
 	}
 }

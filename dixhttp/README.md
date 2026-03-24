@@ -15,6 +15,9 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🧩 **Group Rules (Prefix Aggregation)** - Aggregate nodes by package/prefix rules
 - 🔎 **Prefix Filter** - Show only nodes/providers matching a prefix
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
+- ⏱️ **Startup Runtime Stats** - Show all providers' startup durations (total/avg/last, call count), with executed-only filter (`call_count > 0`)
+- 🗂 **Diagnostic File Query** - When `DIX_DIAG_FILE` is set, UI can query and display `trace/error/llm` JSONL records for troubleshooting
+- 🧵 **Trace Timeline Query** - Query unified in-memory trace events from `dixtrace` via `/api/trace` (with rich filters); for file persistence, `DIX_TRACE_FILE` is preferred, and falls back to `DIX_DIAG_FILE` when unset
 - 📡 **RESTful API** - Provide JSON format dependency data
 - 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
@@ -97,11 +100,11 @@ server := dixhttp.NewServerWithOptions(
 
 ### Three-Panel Layout
 
-| Area | Description |
-|------|-------------|
-| **Left - Package List** | Provider list grouped by package, searchable, collapsible |
-| **Center - Dependency Graph** | Interactive graph with drag, zoom, click support |
-| **Right - Details Panel** | Show selected node details with clickable navigation |
+| Area                          | Description                                               |
+| ----------------------------- | --------------------------------------------------------- |
+| **Left - Package List**       | Provider list grouped by package, searchable, collapsible |
+| **Center - Dependency Graph** | Interactive graph with drag, zoom, click support          |
+| **Right - Details Panel**     | Show selected node details with clickable navigation      |
 
 ## Core Features
 
@@ -146,12 +149,12 @@ After searching or clicking a type, the system shows that type as center:
 
 Depth determines how many levels to expand up/down:
 
-| Depth | Description | Use Case |
-|-------|-------------|----------|
-| 1 | Only direct dependencies/dependents | Quick view of direct relationships |
-| 2 | Two levels (default) | Recommended for daily use |
-| 3-5 | More levels | Track complex dependency chains |
-| All | Show complete dependency tree | Small projects or specific analysis |
+| Depth | Description                         | Use Case                            |
+| ----- | ----------------------------------- | ----------------------------------- |
+| 1     | Only direct dependencies/dependents | Quick view of direct relationships  |
+| 2     | Two levels (default)                | Recommended for daily use           |
+| 3-5   | More levels                         | Track complex dependency chains     |
+| All   | Show complete dependency tree       | Small projects or specific analysis |
 
 **Example**: Assume dependency chain is `Config → Database → UserService → Handler`
 
@@ -215,13 +218,13 @@ Left panel features:
 
 ## Interactions
 
-| Operation | Effect |
-|-----------|--------|
-| **Single Click** | Show details in right panel |
-| **Double Click** | Show dependency graph centered on that node |
-| **Drag Node** | Move node position |
-| **Scroll Zoom** | Zoom in/out graph |
-| **Click Type in Details** | Jump to view that type's dependencies |
+| Operation                 | Effect                                      |
+| ------------------------- | ------------------------------------------- |
+| **Single Click**          | Show details in right panel                 |
+| **Double Click**          | Show dependency graph centered on that node |
+| **Drag Node**             | Move node position                          |
+| **Scroll Zoom**           | Zoom in/out graph                           |
+| **Click Type in Details** | Jump to view that type's dependencies       |
 
 ## Mermaid Support
 
@@ -246,6 +249,110 @@ Returns summary statistics
   "object_count": 15,
   "package_count": 8,
   "edge_count": 67
+}
+```
+
+### GET `/api/runtime-stats?limit=20`
+Returns provider runtime metrics sorted by total duration (desc), useful for finding slow startup components.
+
+```json
+[
+  {
+    "function_name": "main.NewUserService",
+    "output_type": "*service.UserService",
+    "call_count": 1,
+    "total_duration": 3456789,
+    "average_duration": 3456789,
+    "last_duration": 3456789,
+    "last_run_at_unix_nano": 1700000000000000000
+  }
+]
+```
+
+### GET `/api/errors?limit=50`
+Returns recent `Inject` / `TryInject` errors (latest first), useful when startup injection fails before full initialization.
+
+```json
+[
+  {
+    "operation": "provider_execute",
+    "component": "main.main.func12",
+    "stage": "resolve_input",
+    "provider_function": "main.main.func12",
+    "output_type": "*main.UserService",
+    "input_type": "*main.Database",
+    "root_cause": "value not found: type=*main.Database ...",
+    "message": "failed to get input value for provider: value not found: type=*main.Database ...",
+    "occurred_at_unix_nano": 1700000000000000000
+  }
+]
+```
+
+### GET `/api/diagnostics?kind=trace&q=provider&event=provider.call.start&limit=200`
+Reads and filters JSONL records from `DIX_DIAG_FILE`.
+
+If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty records.
+
+```json
+{
+  "enabled": true,
+  "path": "/tmp/dix-diag.jsonl",
+  "exists": true,
+  "total": 42,
+  "returned": 42,
+  "next_before_id": 0,
+  "records": [
+    {
+      "record_id": 128,
+      "source": "dix",
+      "pid": 12345,
+      "process": "my-app",
+      "hostname": "dev-mac",
+      "trace_di": true,
+      "llm_diag_mode": "dual",
+      "kind": "trace",
+      "event": "provider.call.start",
+      "occurred_at_unix_nano": 1700000000000000000,
+      "fields": {
+        "provider": "github.com/acme/app.main.NewDB"
+      }
+    }
+  ]
+}
+```
+
+### GET `/api/trace?operation=provider&status=error&limit=200`
+Returns in-memory unified trace events from `dixtrace`.
+
+File sink behavior:
+
+- Prefer `DIX_TRACE_FILE` when configured.
+- If `DIX_TRACE_FILE` is unset and `DIX_DIAG_FILE` is set, trace file sink reuses `DIX_DIAG_FILE` in append mode (single-file troubleshooting setup).
+
+Supported filters:
+
+- `trace_id`, `operation`, `status`, `event`, `component`, `provider`, `output_type`, `q`
+- `limit`, `before_id`, `since_unix_nano`, `until_unix_nano`
+
+```json
+{
+  "enabled": true,
+  "total": 2,
+  "returned": 2,
+  "records": [
+    {
+      "id": 102,
+      "operation": "provider",
+      "phase": "call.failed",
+      "event": "provider.call.failed",
+      "status": "error",
+      "provider_function": "github.com/acme/app.main.NewDB",
+      "output_type": "*db.Client",
+      "error": "dial tcp timeout",
+      "timed_out": true,
+      "occurred_at_unix_nano": 1700000000000000000
+    }
+  ]
 }
 ```
 

@@ -3,11 +3,39 @@ package dixinternal
 import (
 	"bytes"
 	"errors"
+	"io"
 	"log/slog"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
+
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+
+	original := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe: %v", err)
+	}
+
+	os.Stderr = w
+	defer func() {
+		os.Stderr = original
+		_ = r.Close()
+	}()
+
+	fn()
+	_ = w.Close()
+
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("failed to read captured stderr: %v", err)
+	}
+	return string(out)
+}
 
 // Types for TestListInjection and TestMapInjection
 type testInterface interface {
@@ -1763,6 +1791,18 @@ func TestTryProvide(t *testing.T) {
 	}
 }
 
+func TestTryProvideNoStackTraceByDefault(t *testing.T) {
+	d := New()
+
+	output := captureStderr(t, func() {
+		_ = d.TryProvide(nil)
+	})
+
+	if strings.Contains(output, "runtime/debug.Stack") || strings.Contains(output, "goroutine ") {
+		t.Fatalf("expected no stack trace output by default log level, got: %s", output)
+	}
+}
+
 // TestTryInject tests the TryInject method which returns error instead of panic
 func TestTryInject(t *testing.T) {
 	d := New()
@@ -1794,6 +1834,26 @@ func TestTryInject(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("TryInject should return error when inject function returns error")
+	}
+
+	recent := d.GetRecentErrors(5)
+	if len(recent) == 0 {
+		t.Fatal("expected recent errors to contain try_inject callback error")
+	}
+
+	foundCallbackErr := false
+	for _, item := range recent {
+		if item.Operation == "try_inject" && item.ErrorType == "inject_callback_error" {
+			foundCallbackErr = true
+			if item.Hint == "" {
+				t.Fatal("expected hint for inject_callback_error")
+			}
+			break
+		}
+	}
+
+	if !foundCallbackErr {
+		t.Fatalf("expected inject_callback_error in recent errors, got: %+v", recent)
 	}
 }
 
@@ -1896,5 +1956,266 @@ func TestParseInputType(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGetProviderRuntimeStatsIncludeAllProviders(t *testing.T) {
+	type depA struct{}
+	type depB struct{}
+
+	d := New()
+	d.Provide(func() *depA { return &depA{} })
+	d.Provide(func() *depB { return &depB{} })
+
+	// Only trigger depA to be initialized.
+	if err := d.TryInject(func(*depA) {}); err != nil {
+		t.Fatalf("failed to inject depA: %v", err)
+	}
+
+	stats := d.GetProviderRuntimeStats()
+	if len(stats) < 2 {
+		t.Fatalf("expected at least 2 runtime stats (user providers), got %d", len(stats))
+	}
+
+	var foundA, foundB bool
+	for _, s := range stats {
+		switch s.OutputType {
+		case "*dixinternal.depA":
+			foundA = true
+			if s.CallCount < 1 {
+				t.Fatalf("depA should be initialized at least once, got call_count=%d", s.CallCount)
+			}
+		case "*dixinternal.depB":
+			foundB = true
+			if s.CallCount != 0 {
+				t.Fatalf("depB should not be initialized, got call_count=%d", s.CallCount)
+			}
+		}
+	}
+
+	if !foundA || !foundB {
+		t.Fatalf("expected both depA and depB stats, foundA=%v foundB=%v", foundA, foundB)
+	}
+}
+
+func TestProviderTimeout(t *testing.T) {
+	type slowDep struct{}
+
+	d := New(WithProviderTimeout(20 * time.Millisecond))
+	d.Provide(func() *slowDep {
+		time.Sleep(120 * time.Millisecond)
+		return &slowDep{}
+	})
+
+	err := d.TryInject(func(*slowDep) {})
+	if err == nil {
+		t.Fatal("expected timeout error, got nil")
+	}
+
+	if !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("expected timeout error, got: %v", err)
+	}
+
+	recent := d.GetRecentErrors(10)
+	foundTimeout := false
+	for _, item := range recent {
+		if item.Operation == "provider_execute" && item.TimedOut {
+			foundTimeout = true
+			if item.ErrorType != "provider_timeout" {
+				t.Fatalf("expected provider_timeout error_type, got %s", item.ErrorType)
+			}
+			if item.Hint == "" {
+				t.Fatal("expected timeout record to include hint")
+			}
+			break
+		}
+	}
+
+	if !foundTimeout {
+		t.Fatal("expected provider timeout event in recent errors")
+	}
+}
+
+func TestDefaultProviderTimeout(t *testing.T) {
+	d := New()
+	if got := d.Option().ProviderTimeout; got != DefaultProviderTimeout {
+		t.Fatalf("expected default ProviderTimeout=%s, got %s", DefaultProviderTimeout, got)
+	}
+}
+
+func TestDisableDefaultProviderTimeout(t *testing.T) {
+	d := New(WithProviderTimeout(0))
+	if got := d.Option().ProviderTimeout; got != 0 {
+		t.Fatalf("expected ProviderTimeout=0 when disabled explicitly, got %s", got)
+	}
+}
+
+func TestDefaultSlowProviderThreshold(t *testing.T) {
+	d := New()
+	if got := d.Option().SlowProviderThreshold; got != DefaultSlowProviderThreshold {
+		t.Fatalf("expected default SlowProviderThreshold=%s, got %s", DefaultSlowProviderThreshold, got)
+	}
+}
+
+func TestDisableDefaultSlowProviderThreshold(t *testing.T) {
+	d := New(WithSlowProviderThreshold(0))
+	if got := d.Option().SlowProviderThreshold; got != 0 {
+		t.Fatalf("expected SlowProviderThreshold=0 when disabled explicitly, got %s", got)
+	}
+}
+
+func TestTryInjectRecordsRecentErrors(t *testing.T) {
+	type missingDep struct{}
+
+	d := New()
+	err := d.TryInject(func(*missingDep) {})
+	if err == nil {
+		t.Fatal("expected TryInject error for missing dependency")
+	}
+
+	recent := d.GetRecentErrors(10)
+	if len(recent) == 0 {
+		t.Fatal("expected recent errors to contain at least one record")
+	}
+
+	if recent[0].Operation != "try_inject" {
+		t.Fatalf("expected operation try_inject, got %s", recent[0].Operation)
+	}
+
+	if recent[0].ErrorType == "" {
+		t.Fatal("expected error_type in recent error")
+	}
+
+	if recent[0].Hint == "" {
+		t.Fatal("expected hint in recent error")
+	}
+
+	if !strings.Contains(recent[0].Message, "missingDep") {
+		t.Fatalf("expected recent error message to mention missingDep, got: %s", recent[0].Message)
+	}
+}
+
+func TestTerminalLLMDiagnosticLine(t *testing.T) {
+	type missingDep struct{}
+	t.Setenv(llmDiagModeEnv, llmDiagModeDual)
+
+	d := New()
+	output := captureStderr(t, func() {
+		_ = d.TryInject(func(*missingDep) {})
+	})
+
+	if !strings.Contains(output, "DIX_LLM_DIAG ") {
+		t.Fatalf("expected terminal output to contain DIX_LLM_DIAG line, got: %s", output)
+	}
+
+	if !strings.Contains(output, `"error_type":"inject_dependency_missing"`) {
+		t.Fatalf("expected llm diag line to contain inject_dependency_missing, got: %s", output)
+	}
+}
+
+func TestGetRecentErrorsLimitLatestFirst(t *testing.T) {
+	type missingA struct{}
+	type missingB struct{}
+
+	d := New()
+	_ = d.TryInject(func(*missingA) {})
+	_ = d.TryInject(func(*missingB) {})
+
+	recent := d.GetRecentErrors(1)
+	if len(recent) != 1 {
+		t.Fatalf("expected exactly one recent error with limit=1, got %d", len(recent))
+	}
+
+	if !strings.Contains(recent[0].Message, "missingB") {
+		t.Fatalf("expected latest error to mention missingB, got: %s", recent[0].Message)
+	}
+}
+
+func TestTryProvideRecordsRecentErrors(t *testing.T) {
+	d := New()
+	err := d.TryProvide(nil)
+	if err == nil {
+		t.Fatal("expected TryProvide to return error for nil provider")
+	}
+
+	recent := d.GetRecentErrors(1)
+	if len(recent) != 1 {
+		t.Fatalf("expected one recent error, got %d", len(recent))
+	}
+
+	if recent[0].Operation != "try_provide" {
+		t.Fatalf("expected operation try_provide, got %s", recent[0].Operation)
+	}
+
+	if recent[0].Stage != "registration" {
+		t.Fatalf("expected stage registration, got %s", recent[0].Stage)
+	}
+
+	if recent[0].ErrorType != "provider_registration_invalid" {
+		t.Fatalf("expected error_type provider_registration_invalid, got %s", recent[0].ErrorType)
+	}
+
+	if recent[0].Hint == "" {
+		t.Fatal("expected hint in recent error")
+	}
+}
+
+func TestProviderExecutionErrorRecordedWithDetails(t *testing.T) {
+	type brokenDep struct{}
+
+	d := New()
+	d.Provide(func() (*brokenDep, error) {
+		return nil, errors.New("provider boom")
+	})
+
+	err := d.TryInject(func(*brokenDep) {})
+	if err == nil {
+		t.Fatal("expected TryInject to fail when provider returns error")
+	}
+
+	recent := d.GetRecentErrors(10)
+	if len(recent) == 0 {
+		t.Fatal("expected recent errors to contain provider execution records")
+	}
+
+	var found bool
+	for _, item := range recent {
+		if item.Operation == "provider_execute" {
+			found = true
+			if item.ProviderFunction == "" {
+				t.Fatal("expected provider function in provider_execute error")
+			}
+			if item.OutputType == "" {
+				t.Fatal("expected output type in provider_execute error")
+			}
+			if item.Stage == "" {
+				t.Fatal("expected stage in provider_execute error")
+			}
+			if item.ErrorType != "provider_return_error" {
+				t.Fatalf("expected provider_return_error, got %s", item.ErrorType)
+			}
+			if item.Hint == "" {
+				t.Fatal("expected hint in provider_execute error")
+			}
+			break
+		}
+	}
+
+	if !found {
+		t.Fatal("expected at least one provider_execute record")
+	}
+}
+
+func TestTimeoutOptionValidate(t *testing.T) {
+	opts := Options{ProviderTimeout: -1 * time.Second}
+	err := opts.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for negative ProviderTimeout")
+	}
+
+	opts = Options{SlowProviderThreshold: -1 * time.Second}
+	err = opts.Validate()
+	if err == nil {
+		t.Fatal("expected validation error for negative SlowProviderThreshold")
 	}
 }

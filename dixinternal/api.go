@@ -1,9 +1,16 @@
 package dixinternal
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"runtime"
+	"sort"
 	"strings"
+	"time"
+
+	"github.com/pubgo/dix/v2/dixtrace"
 )
 
 // New Dix new
@@ -14,19 +21,33 @@ func New(opts ...Option) *Dix {
 // Provide registers a provider function. Panics on error.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Provide(param any) {
+	component := describeComponent(param)
+	defer func() {
+		if r := recover(); r != nil {
+			err := normalizeRecoveredError(r)
+			logger.Error("provide failed", "component", component, "error", err, "error_type", buildErrorType("provide", "registration", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("provide", "registration", false))
+			dix.recordRecentErrorWithContext("provide", component, err, recentErrorContext{
+				Stage:     "registration",
+				RootCause: rootCauseMessage(err),
+			})
+			panic(err)
+		}
+	}()
 	dix.provide(param)
 }
 
 // TryProvide registers a provider function. Returns error instead of panicking.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryProvide(param any) (err error) {
+	component := describeComponent(param)
 	defer func() {
 		if r := recover(); r != nil {
-			if e, ok := r.(error); ok {
-				err = e
-			} else {
-				err = errors.New(r.(string))
-			}
+			err = normalizeRecoveredError(r)
+			logger.Warn("try provide failed", "component", component, "error", err, "error_type", buildErrorType("try_provide", "registration", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_provide", "registration", false))
+			dix.recordRecentErrorWithContext("try_provide", component, err, recentErrorContext{
+				Stage:     "registration",
+				RootCause: rootCauseMessage(err),
+			})
 		}
 	}()
 	dix.provide(param)
@@ -36,12 +57,33 @@ func (dix *Dix) TryProvide(param any) (err error) {
 // Inject injects dependencies into the given parameter. Panics on error.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) Inject(param any, opts ...Option) any {
-	if dep, ok := dix.isCycle(); ok {
-		logger.Error("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
-		panic(errors.New("circular dependency: " + dep))
-	}
+	return dix.InjectContext(context.Background(), param, opts...)
+}
 
-	if err := dix.inject(param, opts...); err != nil {
+// InjectContext injects dependencies using the provided context as trace propagation root. Panics on error.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
+func (dix *Dix) InjectContext(ctx context.Context, param any, opts ...Option) any {
+	component := describeComponent(param)
+	ctx, cycleSpan := dixtrace.BeginSpanCtx(ctx, "inject.cycle_check", component, "component", component)
+	dep, ok := dix.isCycle()
+	if ok {
+		err := errors.New("circular dependency: " + dep)
+		cycleSpan.End(err, "component", component, "cycle_path", dep)
+		logger.Error("dependency cycle detected", "cycle_path", dep, "component", component, "error_type", buildErrorType("inject", "cycle_check", false, err.Error()), "hint", buildErrorHint("inject", "cycle_check", false))
+		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
+			Stage:     "cycle_check",
+			RootCause: rootCauseMessage(err),
+		})
+		panic(err)
+	}
+	cycleSpan.End(nil, "component", component)
+
+	if err := dix.inject(ctx, param, opts...); err != nil {
+		logger.Error("inject failed", "component", component, "error", err, "error_type", buildErrorType("inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("inject", "inject", false))
+		dix.recordRecentErrorWithContext("inject", component, err, recentErrorContext{
+			Stage:     "inject",
+			RootCause: rootCauseMessage(err),
+		})
 		panic(err)
 	}
 	return param
@@ -50,12 +92,37 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 // TryInject injects dependencies into the given parameter. Returns error instead of panicking.
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryInject(param any, opts ...Option) error {
-	if dep, ok := dix.isCycle(); ok {
-		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", reflect.TypeOf(param).String())
-		return errors.New("circular dependency: " + dep)
-	}
+	return dix.TryInjectContext(context.Background(), param, opts...)
+}
 
-	return dix.inject(param, opts...)
+// TryInjectContext injects dependencies using the provided context as trace propagation root.
+// Returns error instead of panicking.
+// NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
+func (dix *Dix) TryInjectContext(ctx context.Context, param any, opts ...Option) error {
+	component := describeComponent(param)
+	ctx, cycleSpan := dixtrace.BeginSpanCtx(ctx, "inject.cycle_check", component, "component", component)
+	dep, ok := dix.isCycle()
+	if ok {
+		err := errors.New("circular dependency: " + dep)
+		cycleSpan.End(err, "component", component, "cycle_path", dep)
+		logger.Warn("dependency cycle detected", "cycle_path", dep, "component", component, "error_type", buildErrorType("try_inject", "cycle_check", false, err.Error()), "hint", buildErrorHint("try_inject", "cycle_check", false))
+		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
+			Stage:     "cycle_check",
+			RootCause: rootCauseMessage(err),
+		})
+		return err
+	}
+	cycleSpan.End(nil, "component", component)
+
+	err := dix.inject(ctx, param, opts...)
+	if err != nil {
+		logger.Warn("try inject failed", "component", component, "error", err, "error_type", buildErrorType("try_inject", "inject", false, err.Error()), "root_cause", rootCauseMessage(err), "hint", buildErrorHint("try_inject", "inject", false))
+		dix.recordRecentErrorWithContext("try_inject", component, err, recentErrorContext{
+			Stage:     "inject",
+			RootCause: rootCauseMessage(err),
+		})
+	}
+	return err
 }
 
 // GetProvideAllInputTypes returns all input types for a given type, including struct fields
@@ -99,8 +166,41 @@ type ProviderDetails struct {
 	OutputPkg    string
 	FunctionName string
 	FunctionPkg  string
+	FunctionFile string
+	FunctionLine int
 	InputTypes   []string
 	InputPkgs    []string
+}
+
+// ProviderRuntimeStats contains provider runtime metrics for diagnostics.
+type ProviderRuntimeStats struct {
+	FunctionName      string        `json:"function_name"`
+	OutputType        string        `json:"output_type"`
+	CallCount         int           `json:"call_count"`
+	TotalDuration     time.Duration `json:"total_duration"`
+	AverageDuration   time.Duration `json:"average_duration"`
+	LastDuration      time.Duration `json:"last_duration"`
+	LastError         string        `json:"last_error,omitempty"`
+	LastRunAtUnixNano int64         `json:"last_run_at_unix_nano"`
+}
+
+// RecentError contains a recently captured Inject/TryInject failure event.
+type RecentError struct {
+	Operation          string        `json:"operation"`
+	ErrorType          string        `json:"error_type,omitempty"`
+	Component          string        `json:"component"`
+	Stage              string        `json:"stage,omitempty"`
+	ProviderFunction   string        `json:"provider_function,omitempty"`
+	OutputType         string        `json:"output_type,omitempty"`
+	InputType          string        `json:"input_type,omitempty"`
+	InputTypes         []string      `json:"input_types,omitempty"`
+	Message            string        `json:"message"`
+	RootCause          string        `json:"root_cause,omitempty"`
+	Hint               string        `json:"hint,omitempty"`
+	TimedOut           bool          `json:"timed_out,omitempty"`
+	Duration           time.Duration `json:"duration,omitempty"`
+	Timeout            time.Duration `json:"timeout,omitempty"`
+	OccurredAtUnixNano int64         `json:"occurred_at_unix_nano"`
 }
 
 // GetProviderDetails returns detailed information about all providers
@@ -109,6 +209,7 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 	for outputType, providerList := range dix.providers {
 		for _, providerFn := range providerList {
 			fnName := GetFnName(providerFn.fn)
+			fnFile, fnLine := resolveFuncLocation(providerFn.fn)
 			var inputTypes []string
 			var inputPkgs []string
 			seen := make(map[string]bool)
@@ -139,12 +240,118 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 				OutputPkg:    resolveTypePkgPath(outputType),
 				FunctionName: fnName,
 				FunctionPkg:  resolveFuncPkgPath(fnName),
+				FunctionFile: fnFile,
+				FunctionLine: fnLine,
 				InputTypes:   inputTypes,
 				InputPkgs:    inputPkgs,
 			})
 		}
 	}
 	return details
+}
+
+// GetProviderRuntimeStats returns runtime stats sorted by total duration (descending).
+// This is helpful for startup latency diagnosis.
+func (dix *Dix) GetProviderRuntimeStats() []ProviderRuntimeStats {
+	stats := make([]ProviderRuntimeStats, 0, len(dix.providers))
+	seen := make(map[reflect.Value]bool)
+
+	for _, providerList := range dix.providers {
+		for _, p := range providerList {
+			if p == nil || seen[p.fn] {
+				continue
+			}
+			seen[p.fn] = true
+
+			outputType := ""
+			if p.output != nil && p.output.typ != nil {
+				outputType = p.output.typ.String()
+			}
+
+			item := ProviderRuntimeStats{
+				FunctionName: GetFnName(p.fn),
+				OutputType:   outputType,
+			}
+
+			if s, ok := dix.providerStats[p.fn]; ok && s != nil {
+				avg := time.Duration(0)
+				if s.CallCount > 0 {
+					avg = s.TotalDuration / time.Duration(s.CallCount)
+				}
+				item.FunctionName = s.FunctionName
+				if s.OutputType != "" {
+					item.OutputType = s.OutputType
+				}
+				item.CallCount = s.CallCount
+				item.TotalDuration = s.TotalDuration
+				item.AverageDuration = avg
+				item.LastDuration = s.LastDuration
+				item.LastError = s.LastError
+				item.LastRunAtUnixNano = s.LastRunAt.UnixNano()
+			}
+
+			stats = append(stats, item)
+		}
+	}
+
+	sort.Slice(stats, func(i, j int) bool {
+		if stats[i].TotalDuration == stats[j].TotalDuration {
+			return stats[i].FunctionName < stats[j].FunctionName
+		}
+		return stats[i].TotalDuration > stats[j].TotalDuration
+	})
+
+	return stats
+}
+
+// GetRecentErrors returns recent Inject/TryInject errors in reverse-chronological order.
+// limit <= 0 means return all currently retained errors.
+func (dix *Dix) GetRecentErrors(limit int) []RecentError {
+	total := len(dix.recentErrors)
+	if total == 0 {
+		return []RecentError{}
+	}
+
+	if limit <= 0 || limit > total {
+		limit = total
+	}
+
+	result := make([]RecentError, 0, limit)
+	for i := total - 1; i >= 0 && len(result) < limit; i-- {
+		r := dix.recentErrors[i]
+		result = append(result, RecentError{
+			Operation:          r.Operation,
+			ErrorType:          r.ErrorType,
+			Component:          r.Component,
+			Stage:              r.Stage,
+			ProviderFunction:   r.ProviderFunction,
+			OutputType:         r.OutputType,
+			InputType:          r.InputType,
+			InputTypes:         append([]string{}, r.InputTypes...),
+			Message:            r.Message,
+			RootCause:          r.RootCause,
+			Hint:               r.Hint,
+			TimedOut:           r.TimedOut,
+			Duration:           r.Duration,
+			Timeout:            r.Timeout,
+			OccurredAtUnixNano: r.Occurred.UnixNano(),
+		})
+	}
+
+	return result
+}
+
+func normalizeRecoveredError(r any) error {
+	if r == nil {
+		return errors.New("unknown panic")
+	}
+	if e, ok := r.(error); ok {
+		return e
+	}
+	if s, ok := r.(string); ok {
+		return errors.New(s)
+	}
+	return fmt.Errorf("panic: %v", r)
 }
 
 func resolveTypePkgPath(typ reflect.Type) string {
@@ -172,4 +379,19 @@ func resolveFuncPkgPath(fnName string) string {
 		return name[:idx]
 	}
 	return ""
+}
+
+func resolveFuncLocation(fn reflect.Value) (string, int) {
+	if !fn.IsValid() || fn.IsZero() {
+		return "", 0
+	}
+
+	pc := fn.Pointer()
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		return "", 0
+	}
+
+	file, line := f.FileLine(pc)
+	return file, line
 }

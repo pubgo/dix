@@ -3,8 +3,8 @@ package dixinternal
 import (
 	"fmt"
 	"reflect"
-	"runtime/debug"
 	"strings"
+	"time"
 )
 
 type providerInputType struct {
@@ -43,10 +43,15 @@ type providerFn struct {
 	hasError  bool
 }
 
+type providerCallResult struct {
+	outputs []reflect.Value
+	err     error
+}
+
 func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.PrintStack()
+			maybePrintStack()
 			if rErr, ok := r.(error); ok {
 				err = rErr
 			} else {
@@ -55,15 +60,40 @@ func (n providerFn) call(in []reflect.Value) (outputs []reflect.Value, err error
 
 			logger.Error("failed to invoke provider",
 				"error", err,
+				"error_type", buildErrorType("provider_execute", "call", false, err.Error()),
 				"fn_name", GetFnName(n.fn),
 				"fn_type", n.fn.Type().String(),
 				"input_data", reflectValueToString(in),
 				"input_types", reflectTypesToString(n.inputList),
-				"output_type", n.output.typ.String())
+				"output_type", n.output.typ.String(),
+				"hint", "provider 内部发生 panic：建议在 provider 内捕获异常并返回 error；可临时开启 debug 日志查看堆栈")
 		}
 	}()
 
 	return n.fn.Call(in), nil
+}
+
+func (n providerFn) callWithTimeout(in []reflect.Value, timeout time.Duration) (outputs []reflect.Value, err error, timedOut bool) {
+	if timeout <= 0 {
+		outputs, err = n.call(in)
+		return outputs, err, false
+	}
+
+	resultCh := make(chan providerCallResult, 1)
+	go func() {
+		outputs, callErr := n.call(in)
+		resultCh <- providerCallResult{outputs: outputs, err: callErr}
+	}()
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case res := <-resultCh:
+		return res.outputs, res.err, false
+	case <-timer.C:
+		return nil, fmt.Errorf("provider execution timeout after %s", timeout), true
+	}
 }
 
 // reflectTypesToString converts input type list to readable string

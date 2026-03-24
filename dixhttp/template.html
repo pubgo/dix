@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,7 +10,10 @@
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <style>
-        [x-cloak] { display: none !important; }
+        [x-cloak] {
+            display: none !important;
+        }
+
         .vis-tooltip {
             background: white !important;
             border: 1px solid #e5e7eb !important;
@@ -21,6 +25,7 @@
             max-width: 400px !important;
             font-family: ui-monospace, monospace !important;
         }
+
         .mermaid-preview svg {
             max-width: 100%;
             height: auto;
@@ -44,12 +49,14 @@
         }
     </script>
 </head>
+
 <body class="bg-gray-50 h-screen flex flex-col overflow-hidden">
     <div x-data="app()" x-init="init()" class="flex flex-col h-full">
         <!-- Header -->
         <header class="bg-gradient-to-r from-primary-500 to-purple-600 text-white px-6 py-4 shadow-lg flex-shrink-0">
             <div class="flex items-center justify-between">
                 <div>
+
                     <h1 class="text-xl font-semibold flex items-center gap-2">
                         <span>🔗</span> Dix 依赖关系可视化
                     </h1>
@@ -57,6 +64,44 @@
                         <span>📦 <span x-text="stats.package_count">-</span> 包</span>
                         <span>⚡ <span x-text="stats.provider_count">-</span> Providers</span>
                         <span>📎 <span x-text="stats.edge_count">-</span> 依赖</span>
+                        <span class="px-2 py-0.5 rounded bg-white/20 text-white/90 text-xs"
+                            x-text="`UI: ${uiVersion}`"></span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="openDiagnosticModal('trace')"
+                        class="px-3 py-2 text-sm rounded-lg bg-white/20 hover:bg-white/30 transition flex items-center gap-2">
+                        <span>🧵</span>
+                        <span>Trace 诊断</span>
+                    </button>
+                    <div class="relative" x-data="{ open:false }">
+                        <button @click="open = !open"
+                            class="px-3 py-2 text-sm rounded-lg bg-white/20 hover:bg-white/30 transition flex items-center gap-2">
+                            <span>🧪</span>
+                            <span>诊断菜单</span>
+                        </button>
+                        <div x-show="open" x-cloak @click.outside="open = false"
+                            class="absolute right-0 mt-2 w-72 bg-white text-gray-700 rounded-lg shadow-xl border border-gray-200 z-50 overflow-hidden">
+                            <button @click="openDiagnosticModal('runtime'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between">
+                                <span>⏱ Provider 启动耗时</span>
+                                <span class="text-xs text-gray-400" x-text="runtimeStats.length"></span>
+                            </button>
+                            <button @click="openDiagnosticModal('errors'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                                <span>🚨 最近注入错误</span>
+                                <span class="text-xs text-gray-400" x-text="recentErrors.length"></span>
+                            </button>
+                            <button @click="openDiagnosticModal('trace'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center justify-between border-t border-gray-100">
+                                <span>🧵 调用链 Trace</span>
+                                <span class="text-xs text-gray-400" x-text="traceRecords.length"></span>
+                            </button>
+                            <button @click="openDiagnosticModal('error-guide'); open=false"
+                                class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-t border-gray-100">
+                                🧭 错误类型说明
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -65,82 +110,72 @@
         <!-- Main Content -->
         <div class="flex flex-1 overflow-hidden">
             <!-- Left Sidebar - Package List (Collapsible) -->
-            <aside 
-                :class="sidebarCollapsed ? 'w-12' : 'w-72'"
-                class="bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300"
-            >
+            <aside :class="sidebarCollapsed ? 'w-12' : 'w-72'"
+                class="bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300">
                 <!-- Collapse Toggle Button -->
-                <div class="p-2 border-b border-gray-200 bg-gray-50 flex items-center" :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
+                <div class="p-2 border-b border-gray-200 bg-gray-50 flex items-center"
+                    :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
                     <h3 x-show="!sidebarCollapsed" class="text-sm font-semibold text-gray-600 pl-2">📦 包列表</h3>
-                    <button 
-                        @click="sidebarCollapsed = !sidebarCollapsed"
+                    <button @click="sidebarCollapsed = !sidebarCollapsed"
                         class="p-1.5 hover:bg-gray-200 rounded transition"
-                        :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
-                    >
-                        <svg x-show="!sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
+                        :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'">
+                        <svg x-show="!sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
                         </svg>
-                        <svg x-show="sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
+                        <svg x-show="sidebarCollapsed" class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor"
+                            viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                         </svg>
                     </button>
                 </div>
-                
+
                 <!-- Sidebar Content (hidden when collapsed) -->
                 <template x-if="!sidebarCollapsed">
                     <div class="flex flex-col flex-1 overflow-hidden">
                         <div class="p-4 border-b border-gray-200">
                             <div class="relative">
-                                <input 
-                                    type="text" 
-                                    x-model="packageSearch"
-                                    placeholder="搜索包名..."
-                                    class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                                >
+                                <input type="text" x-model="packageSearch" placeholder="搜索包名..."
+                                    class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition">
                                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
                             </div>
                         </div>
                         <div class="flex-1 overflow-y-auto p-2">
                             <!-- All packages option -->
-                            <div 
-                                @click="selectPackage(null)"
+                            <div @click="selectPackage(null)"
                                 :class="{'bg-primary-500 text-white': !currentPackage, 'hover:bg-gray-100': currentPackage}"
-                                class="p-3 rounded-lg cursor-pointer mb-1 transition"
-                            >
+                                class="p-3 rounded-lg cursor-pointer mb-1 transition">
                                 <div class="font-medium text-sm">📁 全部</div>
-                                <span 
+                                <span
                                     :class="{'bg-white/20 text-white': !currentPackage, 'bg-gray-200 text-gray-600': currentPackage}"
                                     class="inline-block mt-1 px-2 py-0.5 rounded-full text-xs"
-                                    x-text="totalProviders + ' providers'"
-                                ></span>
+                                    x-text="totalProviders + ' providers'"></span>
                             </div>
                             <!-- Package items -->
                             <template x-for="pkg in filteredPackages" :key="pkg.name">
-                                <div 
-                                    @click="selectPackage(pkg.name)"
+                                <div @click="selectPackage(pkg.name)"
                                     :class="{'bg-primary-500 text-white': currentPackage === pkg.name, 'hover:bg-gray-100': currentPackage !== pkg.name}"
-                                    class="p-3 rounded-lg cursor-pointer mb-1 transition"
-                                >
-                                    <div class="font-medium text-sm break-all" x-text="formatPackageName(pkg.name)"></div>
-                                    <span 
+                                    class="p-3 rounded-lg cursor-pointer mb-1 transition">
+                                    <div class="font-medium text-sm break-all" x-text="formatPackageName(pkg.name)">
+                                    </div>
+                                    <span
                                         :class="{'bg-white/20 text-white': currentPackage === pkg.name, 'bg-gray-200 text-gray-600': currentPackage !== pkg.name}"
                                         class="inline-block mt-1 px-2 py-0.5 rounded-full text-xs"
-                                        x-text="pkg.provider_count + ' providers'"
-                                    ></span>
+                                        x-text="pkg.provider_count + ' providers'"></span>
                                 </div>
                             </template>
                         </div>
                     </div>
                 </template>
-                
+
                 <!-- Collapsed state icons -->
                 <div x-show="sidebarCollapsed" class="flex-1 overflow-y-auto py-2">
-                    <div 
-                        @click="sidebarCollapsed = false; selectPackage(null)"
+                    <div @click="sidebarCollapsed = false; selectPackage(null)"
                         :class="{'bg-primary-500 text-white': !currentPackage}"
                         class="mx-2 p-2 rounded-lg cursor-pointer mb-1 flex items-center justify-center hover:bg-gray-100 transition"
-                        title="全部"
-                    >
+                        title="全部">
                         📁
                     </div>
                 </div>
@@ -152,49 +187,42 @@
                 <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-4 flex-wrap">
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">视图:</span>
-                        <button 
-                            @click="switchView('providers')"
+                        <button @click="switchView('providers')"
                             :class="{'bg-primary-500 text-white border-primary-500': currentView === 'providers', 'bg-white hover:bg-gray-50': currentView !== 'providers'}"
-                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1"
-                        >
+                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1">
                             <span>⚡</span> Providers
                         </button>
-                        <button 
-                            @click="switchView('types')"
+                        <button @click="switchView('types')"
                             :class="{'bg-primary-500 text-white border-primary-500': currentView === 'types', 'bg-white hover:bg-gray-50': currentView !== 'types'}"
-                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1"
-                        >
+                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1">
                             <span>🔷</span> 类型依赖
                         </button>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">布局:</span>
-                        <select 
-                            x-model="currentLayout"
-                            @change="renderGraph()"
-                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
+                        <select x-model="currentLayout" @change="renderGraph()"
+                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
                             <option value="hierarchical">层级布局</option>
                             <option value="force">力导向</option>
                         </select>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">深度:</span>
-                        <select 
-                            x-model="currentDepth"
-                            @change="onDepthChange()"
-                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
+                        <select x-model="currentDepth" @change="onDepthChange()"
+                            class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 outline-none">
                             <option value="1">1 级</option>
                             <option value="2">2 级</option>
                             <option value="3">3 级</option>
                             <option value="5">5 级</option>
+                            <option value="10">10 级</option>
                             <option value="0">全部</option>
                         </select>
+                        <span class="text-[11px] text-gray-400">0=全部，最大128</span>
                     </div>
                     <div class="flex items-center gap-2">
                         <label class="flex items-center gap-2 text-xs font-medium text-gray-500 cursor-pointer">
-                            <input type="checkbox" x-model="aggregateGroups" @change="saveLocalState(); renderGraph()" class="rounded border-gray-300">
+                            <input type="checkbox" x-model="aggregateGroups" @change="saveLocalState(); renderGraph()"
+                                class="rounded border-gray-300">
                             按分组聚合
                         </label>
                     </div>
@@ -206,17 +234,10 @@
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">前缀过滤:</span>
-                        <input
-                            type="text"
-                            x-model="filterPrefix"
-                            @input="renderGraph()"
-                            placeholder="输入包路径/类型/函数前缀"
-                            class="w-64 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                        >
-                        <button
-                            @click="filterPrefix=''; renderGraph()"
-                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                        >
+                        <input type="text" x-model="filterPrefix" @input="renderGraph()" placeholder="输入包路径/类型/函数前缀"
+                            class="w-64 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                        <button @click="filterPrefix=''; renderGraph()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                             清除
                         </button>
                     </div>
@@ -224,22 +245,13 @@
                         <summary class="cursor-pointer text-gray-500">分组清单</summary>
                         <div class="mt-2 bg-white border border-gray-200 rounded-lg p-3 w-[520px]">
                             <div class="flex items-center gap-2 mb-2">
-                                <input
-                                    type="text"
-                                    x-model="newGroupName"
-                                    placeholder="组名（如 service）"
-                                    class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                >
-                                <input
-                                    type="text"
-                                    x-model="newGroupPrefix"
+                                <input type="text" x-model="newGroupName" placeholder="组名（如 service）"
+                                    class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                <input type="text" x-model="newGroupPrefix"
                                     placeholder="匹配前缀（如 github.com/acme/app/service/）"
-                                    class="flex-[2] px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                >
-                                <button
-                                    @click="addGroup()"
-                                    class="px-2 py-1 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600"
-                                >
+                                    class="flex-[2] px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                <button @click="addGroup()"
+                                    class="px-2 py-1 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600">
                                     添加
                                 </button>
                             </div>
@@ -247,13 +259,12 @@
                                 <div class="text-[11px] text-gray-500 mb-1">可选前缀（来自包路径，点击填充）</div>
                                 <div class="flex flex-wrap gap-2 max-h-24 overflow-y-auto">
                                     <template x-for="p in prefixSuggestions" :key="p">
-                                        <button
-                                            @click="newGroupPrefix = p"
+                                        <button @click="newGroupPrefix = p"
                                             class="px-2 py-1 text-[11px] border border-gray-200 rounded-md hover:bg-gray-50"
-                                            x-text="p"
-                                        ></button>
+                                            x-text="p"></button>
                                     </template>
-                                    <div x-show="prefixSuggestions.length === 0" class="text-[11px] text-gray-400">暂无可选前缀</div>
+                                    <div x-show="prefixSuggestions.length === 0" class="text-[11px] text-gray-400">
+                                        暂无可选前缀</div>
                                 </div>
                             </div>
                             <div class="space-y-2 max-h-48 overflow-y-auto">
@@ -261,24 +272,16 @@
                                     <div class="border border-gray-200 rounded-md p-2">
                                         <div class="flex items-center justify-between mb-1">
                                             <div class="font-medium text-gray-700" x-text="grp.name"></div>
-                                            <button
-                                                @click="removeGroup(gidx)"
-                                                class="text-xs text-red-500 hover:underline"
-                                            >
+                                            <button @click="removeGroup(gidx)"
+                                                class="text-xs text-red-500 hover:underline">
                                                 删除组
                                             </button>
                                         </div>
                                         <div class="flex items-center gap-2 mb-2">
-                                            <input
-                                                type="text"
-                                                x-model="grp._rename"
-                                                placeholder="新组名"
-                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                            >
-                                            <button
-                                                @click="renameGroup(gidx)"
-                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                            >
+                                            <input type="text" x-model="grp._rename" placeholder="新组名"
+                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                            <button @click="renameGroup(gidx)"
+                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                                 修改
                                             </button>
                                         </div>
@@ -286,26 +289,18 @@
                                             <template x-for="(p, pidx) in grp.prefixes" :key="p + pidx">
                                                 <div class="flex items-center gap-2">
                                                     <span class="text-gray-500 break-all" x-text="p"></span>
-                                                    <button
-                                                        @click="removePrefix(gidx, pidx)"
-                                                        class="text-xs text-red-400 hover:underline"
-                                                    >
+                                                    <button @click="removePrefix(gidx, pidx)"
+                                                        class="text-xs text-red-400 hover:underline">
                                                         移除
                                                     </button>
                                                 </div>
                                             </template>
                                         </div>
                                         <div class="flex items-center gap-2 mt-2">
-                                            <input
-                                                type="text"
-                                                x-model="grp._newPrefix"
-                                                placeholder="新增前缀"
-                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none"
-                                            >
-                                            <button
-                                                @click="addPrefix(gidx)"
-                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                                            >
+                                            <input type="text" x-model="grp._newPrefix" placeholder="新增前缀"
+                                                class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                                            <button @click="addPrefix(gidx)"
+                                                class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                                 添加前缀
                                             </button>
                                         </div>
@@ -315,70 +310,52 @@
                             </div>
                         </div>
                     </details>
-                    <button 
-                        @click="resetView()"
-                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
-                    >
+                    <button @click="resetView()"
+                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1">
                         <span>🔄</span> 重置
                     </button>
-                    <button
-                        @click="exportSvg()"
+                    <button @click="exportSvg()"
                         class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
-                        :disabled="!network"
-                    >
+                        :disabled="!network">
                         <span>⬇️</span> 下载 SVG
                     </button>
-                    <button
-                        @click="openMermaid()"
+                    <button @click="openMermaid()"
                         class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
-                        :disabled="!network"
-                    >
+                        :disabled="!network">
                         <span>🧩</span> Mermaid
                     </button>
-                    
+
                     <!-- Global Search -->
                     <div class="flex-1"></div>
                     <div class="relative" x-data="{ open: false }">
-                        <input 
-                            type="text" 
-                            x-model="globalSearch"
-                            @input="onGlobalSearchInput()"
-                            @focus="open = true"
-                            @keydown.escape="open = false"
-                            @keydown.enter="selectFirstSearchResult()"
+                        <input type="text" x-model="globalSearch" @input="onGlobalSearchInput()" @focus="open = true"
+                            @keydown.escape="open = false" @keydown.enter="selectFirstSearchResult()"
                             placeholder="搜索类型或函数名..."
-                            class="w-64 pl-9 pr-4 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
-                        >
+                            class="w-64 pl-9 pr-4 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
-                        
+
                         <!-- Search Results Dropdown -->
-                        <div 
-                            x-show="open && globalSearch.length > 0 && searchResults.length > 0"
-                            @click.outside="open = false"
-                            x-cloak
-                            class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto z-50"
-                        >
+                        <div x-show="open && globalSearch.length > 0 && searchResults.length > 0"
+                            @click.outside="open = false" x-cloak
+                            class="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto z-50">
                             <template x-for="(result, index) in searchResults" :key="result.id">
-                                <div 
-                                    @click="selectSearchResult(result); open = false"
+                                <div @click="selectSearchResult(result); open = false"
                                     :class="{'bg-primary-50': index === 0}"
-                                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0"
-                                >
+                                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-0">
                                     <div class="flex items-center gap-2">
-                                        <span 
-                                            :class="{
+                                        <span :class="{
                                                 'bg-green-100 text-green-700': result.type === 'provider',
                                                 'bg-blue-100 text-blue-700': result.type === 'type'
-                                            }"
-                                            class="px-1.5 py-0.5 rounded text-xs font-medium"
-                                            x-text="result.type === 'provider' ? 'Provider' : 'Type'"
-                                        ></span>
-                                        <span class="text-sm font-medium text-gray-700 truncate" x-text="result.label"></span>
+                                            }" class="px-1.5 py-0.5 rounded text-xs font-medium"
+                                            x-text="result.type === 'provider' ? 'Provider' : 'Type'"></span>
+                                        <span class="text-sm font-medium text-gray-700 truncate"
+                                            x-text="result.label"></span>
                                     </div>
                                     <div class="text-xs text-gray-400 truncate mt-0.5" x-text="result.fullName"></div>
                                 </div>
                             </template>
-                            <div x-show="searchResults.length === 0 && globalSearch.length > 0" class="px-3 py-4 text-center text-gray-400 text-sm">
+                            <div x-show="searchResults.length === 0 && globalSearch.length > 0"
+                                class="px-3 py-4 text-center text-gray-400 text-sm">
                                 未找到匹配结果
                             </div>
                         </div>
@@ -389,13 +366,12 @@
                 <div class="flex-1 relative">
                     <div id="network" class="w-full h-full"></div>
                     <!-- Loading Overlay -->
-                    <div 
-                        x-show="loading" 
-                        x-cloak
-                        class="absolute inset-0 bg-white/90 flex items-center justify-center z-50"
-                    >
+                    <div x-show="loading" x-cloak
+                        class="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
                         <div class="text-center">
-                            <div class="w-10 h-10 border-3 border-gray-200 border-t-primary-500 rounded-full animate-spin mx-auto mb-3"></div>
+                            <div
+                                class="w-10 h-10 border-3 border-gray-200 border-t-primary-500 rounded-full animate-spin mx-auto mb-3">
+                            </div>
                             <div class="text-gray-500 text-sm">加载中...</div>
                         </div>
                     </div>
@@ -418,35 +394,93 @@
                         <div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">函数名</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.function_name"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.function_name"></div>
+                            </div>
+                            <div class="mb-4" x-show="isProviderTimedOut(selectedNode.data)">
+                                <div
+                                    class="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-medium">
+                                    <span>⏱</span>
+                                    <span>该 Provider 最近一次执行发生超时</span>
+                                </div>
+                            </div>
+                            <div class="mb-4" x-show="isProviderErrored(selectedNode.data)">
+                                <div
+                                    class="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-red-100 text-red-700 text-xs font-medium">
+                                    <span>🚨</span>
+                                    <span x-text="providerErrorSummary(selectedNode.data)"></span>
+                                </div>
                             </div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">输出类型</h4>
-                                <div 
-                                    @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
-                                    class="text-sm text-primary-600 break-all leading-relaxed cursor-pointer hover:underline" 
-                                    x-text="selectedNode.data.output_type"
-                                ></div>
+                                <div @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
+                                    class="text-sm text-primary-600 break-all leading-relaxed cursor-pointer hover:underline"
+                                    x-text="selectedNode.data.output_type"></div>
+                            </div>
+                            <div class="mb-5" x-show="selectedNode.data.function_pkg">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">函数包路径</h4>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.function_pkg"></div>
+                            </div>
+                            <div class="mb-5" x-show="selectedNode.data.function_file">
+                                <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">代码位置</h4>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="`${selectedNode.data.function_file || ''}:${selectedNode.data.function_line || 0}`">
+                                </div>
                             </div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">
                                     输入类型 (<span x-text="(selectedNode.data.input_types || []).length"></span>)
                                 </h4>
                                 <ul class="space-y-1">
-                                    <template x-for="inputType in (selectedNode.data.input_types || [])" :key="inputType">
-                                        <li 
-                                            @click="showDependencyGraph(inputType, 'type')"
+                                    <template x-for="inputType in (selectedNode.data.input_types || [])"
+                                        :key="inputType">
+                                        <li @click="showDependencyGraph(inputType, 'type')"
                                             class="px-3 py-2 bg-gray-100 rounded text-xs break-all cursor-pointer hover:bg-primary-100 transition"
-                                            x-text="inputType"
-                                        ></li>
+                                            x-text="inputType"></li>
                                     </template>
                                 </ul>
                             </div>
-                            <button 
-                                @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
-                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
-                            >
+                            <template x-if="getRuntimeStatForProvider(selectedNode.data)">
+                                <div class="mb-5">
+                                    <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">启动耗时</h4>
+                                    <div class="space-y-1 text-xs bg-gray-50 border border-gray-200 rounded-lg p-3">
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">总耗时</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(selectedNode.data).total_duration)"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">平均耗时</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(selectedNode.data).average_duration)"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">最后一次</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(selectedNode.data).last_duration)"></span>
+                                        </div>
+                                        <div class="flex items-center justify-between">
+                                            <span class="text-gray-500">调用次数</span>
+                                            <span class="font-semibold text-gray-700"
+                                                x-text="getRuntimeStatForProvider(selectedNode.data).call_count"></span>
+                                        </div>
+                                        <div class="flex items-start justify-between"
+                                            x-show="getRuntimeStatForProvider(selectedNode.data).last_error">
+                                            <span class="text-gray-500">最近错误</span>
+                                            <span class="font-semibold text-red-600 text-right max-w-[70%] break-all"
+                                                x-text="getRuntimeStatForProvider(selectedNode.data).last_error"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <button @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
+                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🔍</span> 查看依赖关系图
+                            </button>
+                            <button @click="openProviderDetailModal(selectedNode)"
+                                class="w-full mt-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2">
+                                <span>🪟</span> 弹窗查看完整详情
                             </button>
                         </div>
                     </template>
@@ -455,16 +489,16 @@
                         <div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">类型</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.fullType"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.fullType"></div>
                             </div>
                             <div class="mb-5" x-show="selectedNode.data.packagePath">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包路径</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.packagePath"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.packagePath"></div>
                             </div>
-                            <button 
-                                @click="showDependencyGraph(selectedNode.data.fullType, 'type')"
-                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
-                            >
+                            <button @click="showDependencyGraph(selectedNode.data.fullType, 'type')"
+                                class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🔍</span> 查看依赖关系
                             </button>
                         </div>
@@ -474,24 +508,23 @@
                         <div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">分组</h4>
-                                <div class="text-sm text-gray-700 break-all leading-relaxed" x-text="selectedNode.data.group"></div>
+                                <div class="text-sm text-gray-700 break-all leading-relaxed"
+                                    x-text="selectedNode.data.group"></div>
                             </div>
-                            <button
-                                @click="showGroupGraph(selectedNode.data.group)"
-                                class="w-full px-4 py-2 mb-4 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2"
-                            >
+                            <button @click="showGroupGraph(selectedNode.data.group)"
+                                class="w-full px-4 py-2 mb-4 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🧩</span> 查看组内依赖图
                             </button>
-                            <button
-                                @click="toggleGroupExpand(selectedNode.data.group)"
+                            <button @click="toggleGroupExpand(selectedNode.data.group)"
                                 class="w-full px-4 py-2 mb-4 border border-gray-300 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2"
-                                x-text="isGroupExpanded(selectedNode.data.group) ? '收起到分组节点' : '展开组内节点'"
-                            ></button>
+                                x-text="isGroupExpanded(selectedNode.data.group) ? '收起到分组节点' : '展开组内节点'"></button>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">包含节点</h4>
-                                <div class="text-xs text-gray-500 mb-2" x-text="(groupMembers[selectedNode.data.group] || []).length + ' 个'"></div>
+                                <div class="text-xs text-gray-500 mb-2"
+                                    x-text="(groupMembers[selectedNode.data.group] || []).length + ' 个'"></div>
                                 <ul class="space-y-1 max-h-64 overflow-y-auto">
-                                    <template x-for="item in (groupMembers[selectedNode.data.group] || [])" :key="item.id">
+                                    <template x-for="item in (groupMembers[selectedNode.data.group] || [])"
+                                        :key="item.id">
                                         <li class="px-3 py-2 bg-gray-100 rounded text-xs break-all">
                                             <div class="text-gray-700" x-text="item.id"></div>
                                             <div class="text-gray-400" x-text="item.packagePath"></div>
@@ -502,6 +535,7 @@
                         </div>
                     </template>
                 </div>
+
                 <!-- Legend -->
                 <div class="p-4 border-t border-gray-200 bg-gray-50">
                     <h4 class="text-xs font-semibold text-gray-400 uppercase mb-3">图例</h4>
@@ -522,45 +556,648 @@
                             <div class="w-4 h-4 rounded bg-blue-400"></div>
                             <span>类型节点</span>
                         </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded bg-red-200 border border-red-600"></div>
+                            <span>超时 Provider（Providers 视图）</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-4 h-4 rounded bg-red-100 border border-red-700"></div>
+                            <span>错误 Provider（Providers 视图）</span>
+                        </div>
                     </div>
                 </div>
             </aside>
         </div>
-        <!-- Mermaid Modal -->
-        <div
-            x-show="mermaidOpen"
-            x-cloak
+
+        <!-- Floating Trace Entry -->
+        <button @click="openDiagnosticModal('trace')"
+            class="fixed bottom-5 right-5 z-40 px-4 py-2.5 rounded-full bg-primary-600 text-white text-sm font-medium shadow-lg hover:bg-primary-700 transition flex items-center gap-2">
+            <span>🧵</span>
+            <span>Trace 诊断入口</span>
+        </button>
+
+        <!-- Provider Detail Modal -->
+        <div x-show="providerDetailModalOpen" x-cloak
+            class="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
+            @keydown.escape.window="providerDetailModalOpen = false">
+            <div
+                class="bg-white text-gray-900 w-[92vw] max-w-4xl h-[84vh] rounded-xl shadow-2xl flex flex-col border border-gray-300">
+                <div class="px-4 py-3 border-b border-gray-300 bg-gray-50 flex items-center justify-between">
+                    <div class="font-semibold text-gray-900">🪟 Provider 详细信息</div>
+                    <button @click="providerDetailModalOpen = false"
+                        class="px-2 py-1 text-xs text-gray-700 border border-gray-400 rounded-md hover:bg-white">
+                        关闭
+                    </button>
+                </div>
+
+                <template x-if="providerModalNode && providerModalNode.data">
+                    <div class="flex-1 overflow-auto p-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="border border-gray-300 rounded-lg p-3 bg-white">
+                                <div class="text-xs font-semibold text-gray-700 uppercase mb-2">节点信息</div>
+                                <div class="text-sm text-gray-900 break-all"
+                                    x-text="providerModalNode.data.function_name || ''"></div>
+                                <div class="text-xs text-gray-700 mt-1 break-all"
+                                    x-text="providerModalNode.data.output_type || ''"></div>
+                                <div class="text-xs text-gray-700 mt-1 break-all"
+                                    x-show="providerModalNode.data.function_pkg"
+                                    x-text="`函数包: ${providerModalNode.data.function_pkg}`"></div>
+                                <div class="text-xs text-gray-700 mt-1 break-all"
+                                    x-show="providerModalNode.data.function_file"
+                                    x-text="`位置: ${providerModalNode.data.function_file}:${providerModalNode.data.function_line || 0}`">
+                                </div>
+                                <div class="mt-2" x-show="(providerModalNode.data.input_types || []).length">
+                                    <div class="text-xs text-gray-700 mb-1">输入类型</div>
+                                    <ul class="space-y-1 max-h-44 overflow-y-auto">
+                                        <template x-for="(it, idx) in (providerModalNode.data.input_types || [])"
+                                            :key="`modal-in-${idx}-${it}`">
+                                            <li class="px-2 py-1 text-xs bg-gray-100 text-gray-900 rounded break-all"
+                                                x-text="it"></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </div>
+
+                            <div class="border border-gray-300 rounded-lg p-3 bg-white">
+                                <div class="text-xs font-semibold text-gray-700 uppercase mb-2">运行时状态</div>
+                                <template x-if="getRuntimeStatForProvider(providerModalNode.data)">
+                                    <div class="space-y-1 text-xs text-gray-800">
+                                        <div>总耗时：<span class="font-semibold"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).total_duration)"></span>
+                                        </div>
+                                        <div>平均耗时：<span class="font-semibold"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).average_duration)"></span>
+                                        </div>
+                                        <div>最后一次：<span class="font-semibold"
+                                                x-text="formatDurationNs(getRuntimeStatForProvider(providerModalNode.data).last_duration)"></span>
+                                        </div>
+                                        <div>调用次数：<span class="font-semibold"
+                                                x-text="getRuntimeStatForProvider(providerModalNode.data).call_count"></span>
+                                        </div>
+                                        <div x-show="getRuntimeStatForProvider(providerModalNode.data).last_error"
+                                            class="text-red-700 break-all font-medium">
+                                            最近错误：<span
+                                                x-text="getRuntimeStatForProvider(providerModalNode.data).last_error"></span>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template x-if="!getRuntimeStatForProvider(providerModalNode.data)">
+                                    <div class="text-xs text-gray-500">暂无运行时数据</div>
+                                </template>
+                            </div>
+                        </div>
+
+                        <div class="mt-4 border rounded-lg p-3"
+                            :class="providerModalError() ? 'border-red-300 bg-red-50' : 'border-gray-300 bg-white'">
+                            <div class="text-xs font-semibold text-gray-700 uppercase mb-2">错误信息</div>
+                            <template x-if="providerModalError()">
+                                <div>
+                                    <div class="text-sm text-red-800 font-semibold break-all"
+                                        x-text="providerModalError().message || '未知错误'"></div>
+                                    <div class="mt-2 space-y-1 text-xs text-gray-800">
+                                        <div x-show="providerModalError().error_type"
+                                            x-text="`类型: ${providerModalError().error_type}`"></div>
+                                        <div x-show="providerModalError().stage"
+                                            x-text="`阶段: ${providerModalError().stage}`"></div>
+                                        <div x-show="providerModalError().operation"
+                                            x-text="`操作: ${providerModalError().operation}`"></div>
+                                        <div x-show="providerModalError().root_cause"
+                                            x-text="`根因: ${providerModalError().root_cause}`"></div>
+                                        <div x-show="providerModalError().hint" class="text-blue-800"
+                                            x-text="`Hint: ${providerModalError().hint}`"></div>
+                                        <div x-show="providerModalError().occurred_at_unix_nano"
+                                            x-text="`时间: ${formatErrorTime(providerModalError().occurred_at_unix_nano)}`">
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template x-if="!providerModalError()">
+                                <div class="text-xs text-gray-500">该 Provider 暂无最近错误事件</div>
+                            </template>
+                        </div>
+
+                        <details class="mt-4">
+                            <summary class="text-xs text-gray-700 cursor-pointer">展开原始节点数据（JSON）</summary>
+                            <pre class="mt-2 p-2 text-[11px] leading-relaxed bg-gray-50 text-gray-900 border border-gray-300 rounded whitespace-pre-wrap break-all"
+                                x-text="providerPrettyJson(providerModalNode)"></pre>
+                        </details>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- Diagnostics Modal -->
+        <div x-show="diagnosticModalOpen" x-cloak
             class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
-            @keydown.escape.window="mermaidOpen = false"
-        >
+            @keydown.escape.window="closeDiagnosticModal()">
+            <div x-ref="diagnosticPanel" class="bg-white shadow-xl flex flex-col"
+                :class="diagnosticModalType === 'trace' ? 'w-screen h-screen max-w-none rounded-none' : 'w-[94vw] h-[88vh] rounded-xl'">
+                <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                    <div class="font-semibold text-gray-700" x-text="diagnosticModalType === 'runtime'
+                            ? '⏱ Provider 启动耗时（大视图）'
+                            : (diagnosticModalType === 'errors'
+                                ? '🚨 最近注入错误（大视图）'
+                                : (diagnosticModalType === 'trace' ? '🧵 调用链 Trace（全局大视图）' : '🧭 错误类型说明（大视图）')) ">
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button x-show="diagnosticModalType === 'trace'" @click="toggleTraceFullscreen()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                            x-text="traceFullscreen ? '退出全屏' : '全屏'"></button>
+                        <button @click="closeDiagnosticModal()"
+                            class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                            关闭
+                        </button>
+                    </div>
+                </div>
+                <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center gap-2">
+                    <input type="text" x-model="diagnosticSearch"
+                        :placeholder="diagnosticModalType === 'runtime'
+                            ? '搜索函数名/输出类型/错误信息'
+                            : (diagnosticModalType === 'errors'
+                                ? '搜索操作/错误类型/阶段/组件/函数/类型/根因/Hint/错误信息'
+                                : (diagnosticModalType === 'trace' ? '搜索 trace_id/span/event/operation/provider/component' : '搜索错误类型/说明/定位建议'))"
+                        class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none">
+                    <button x-show="diagnosticModalType === 'runtime'" @click="loadRuntimeStats()"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                        :disabled="runtimeStatsLoading">
+                        <span x-text="runtimeStatsLoading ? '刷新中...' : '刷新耗时'"></span>
+                    </button>
+                    <button x-show="diagnosticModalType === 'errors'" @click="loadRecentErrors()"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                        :disabled="recentErrorsLoading">
+                        <span x-text="recentErrorsLoading ? '刷新中...' : '刷新错误'"></span>
+                    </button>
+                    <button x-show="diagnosticModalType === 'trace'" @click="refreshTraceFromModal()"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
+                        :disabled="traceLoading">
+                        <span x-text="traceLoading ? '刷新中...' : '刷新 Trace'"></span>
+                    </button>
+                    <button x-show="diagnosticModalType === 'error-guide'" @click="diagnosticSearch = ''"
+                        class="px-3 py-2 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
+                        清空搜索
+                    </button>
+                </div>
+                <div class="flex-1 overflow-auto" :class="diagnosticModalType === 'trace' ? 'p-2' : 'p-4'">
+                    <template x-if="diagnosticModalType === 'runtime'">
+                        <div class="space-y-2">
+                            <div class="text-xs text-gray-500" x-text="`共 ${filteredModalRuntimeStats.length} 条`"></div>
+                            <template x-if="filteredModalRuntimeStats.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的启动耗时数据
+                                </div>
+                            </template>
+                            <template x-for="(item, idx) in filteredModalRuntimeStats"
+                                :key="`modal-runtime-${runtimeStatKey(item, idx)}`">
+                                <div class="border border-gray-200 rounded-lg p-3">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div class="min-w-0">
+                                            <div class="text-sm font-medium text-gray-800 break-all"
+                                                x-text="item.function_name || '(unknown)'"></div>
+                                            <div class="text-xs text-gray-500 break-all mt-1"
+                                                x-text="item.output_type || ''"></div>
+                                        </div>
+                                        <div class="text-right shrink-0">
+                                            <div class="text-sm font-semibold"
+                                                :class="isTimeoutRuntimeStat(item) ? 'text-red-700' : 'text-gray-700'"
+                                                x-text="formatDurationNs(item.total_duration)"></div>
+                                            <div class="text-xs text-gray-400" x-text="`${item.call_count} 次`"></div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                                        <div>平均耗时：<span class="font-medium"
+                                                x-text="formatDurationNs(item.average_duration)"></span></div>
+                                        <div>最后一次：<span class="font-medium"
+                                                x-text="formatDurationNs(item.last_duration)"></span></div>
+                                        <div class="col-span-2" x-show="item.last_error">
+                                            最近错误：<span class="text-red-600 break-all" x-text="item.last_error"></span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="diagnosticModalType === 'errors'">
+                        <div class="space-y-2">
+                            <div class="border border-purple-200 bg-purple-50/40 rounded-lg p-3">
+                                <div class="text-xs font-semibold text-purple-700">🧭 错误类型速查（大窗）</div>
+                                <div class="text-[11px] text-gray-500 mt-1">点击类型可直接作为搜索关键词</div>
+                                <div class="mt-2 flex flex-wrap gap-1.5">
+                                    <template x-for="item in errorTypeGuide" :key="`modal-guide-${item.code}`">
+                                        <button @click="diagnosticSearch = item.code"
+                                            class="px-2 py-0.5 rounded bg-white border border-purple-200 text-purple-700 text-[11px] hover:bg-purple-100 transition"
+                                            x-text="item.code"></button>
+                                    </template>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500" x-text="`共 ${filteredModalRecentErrors.length} 条`"></div>
+                            <template x-if="filteredModalRecentErrors.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的错误记录</div>
+                            </template>
+                            <template x-for="(item, idx) in filteredModalRecentErrors"
+                                :key="`modal-error-${item.occurred_at_unix_nano || idx}`">
+                                <div class="border border-red-100 bg-red-50/30 rounded-lg p-3">
+                                    <div class="flex items-center justify-between gap-3 mb-2">
+                                        <div class="flex items-center gap-2 min-w-0">
+                                            <span
+                                                class="px-2 py-0.5 rounded bg-red-100 text-red-700 text-xs font-semibold"
+                                                x-text="item.operation || 'inject'"></span>
+                                            <span x-show="item.error_type"
+                                                class="px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-medium break-all"
+                                                x-text="item.error_type"></span>
+                                            <span x-show="item.stage"
+                                                class="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium"
+                                                x-text="item.stage"></span>
+                                            <span x-show="item.timed_out"
+                                                class="px-2 py-0.5 rounded bg-orange-100 text-orange-700 text-xs font-medium">timeout</span>
+                                        </div>
+                                        <span class="text-xs text-gray-500"
+                                            x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                    </div>
+                                    <div class="text-xs text-gray-600 break-all mb-1"
+                                        x-text="item.provider_function || item.component || ''">
+                                    </div>
+                                    <div class="text-xs text-purple-700 break-all mb-1" x-show="item.error_type"
+                                        x-text="`错误类型: ${item.error_type}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1" x-show="item.output_type"
+                                        x-text="`输出类型: ${item.output_type}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1" x-show="item.input_type"
+                                        x-text="`失败输入: ${item.input_type}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1"
+                                        x-show="item.input_types && item.input_types.length"
+                                        x-text="`输入列表: ${item.input_types.join(', ')}`"></div>
+                                    <div class="text-xs text-gray-600 break-all mb-1"
+                                        x-show="item.duration || item.timeout"
+                                        x-text="`耗时/超时: ${formatDurationNs(item.duration || 0)} / ${formatDurationNs(item.timeout || 0)}`">
+                                    </div>
+                                    <div class="text-sm text-red-700 break-all" x-text="item.message || ''"></div>
+                                    <div class="text-xs text-gray-700 break-all mt-2" x-show="item.root_cause"
+                                        x-text="`根因: ${item.root_cause}`"></div>
+                                    <div class="text-xs text-blue-700 break-all mt-1" x-show="item.hint"
+                                        x-text="`Hint: ${item.hint}`"></div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="diagnosticModalType === 'error-guide'">
+                        <div class="space-y-2">
+                            <div class="text-xs text-gray-500" x-text="`共 ${filteredModalErrorTypeGuide.length} 条`">
+                            </div>
+                            <template x-if="filteredModalErrorTypeGuide.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配的错误类型说明
+                                </div>
+                            </template>
+                            <template x-for="item in filteredModalErrorTypeGuide" :key="`modal-guide-${item.code}`">
+                                <div class="border border-purple-200 bg-purple-50/30 rounded-lg p-3">
+                                    <div class="inline-flex px-2 py-0.5 rounded bg-purple-100 text-purple-700 text-xs font-semibold"
+                                        x-text="item.code"></div>
+                                    <div class="text-sm text-gray-700 mt-2" x-text="item.summary"></div>
+                                    <div class="text-xs text-blue-700 mt-2 break-all" x-text="`定位建议: ${item.action}`">
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <template x-if="diagnosticModalType === 'trace'">
+                        <div class="space-y-2" :class="isSingleTraceView() ? 'h-full flex flex-col min-h-0' : ''">
+                            <div
+                                class="flex flex-wrap items-center gap-1.5 rounded-md border border-gray-200 bg-gray-50 p-2">
+                                <select x-model="traceViewMode"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="span">Span</option>
+                                    <option value="event">Event</option>
+                                </select>
+                                <select x-model="traceOperation"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">Operation</option>
+                                    <option value="inject">inject</option>
+                                    <option value="inject.cycle_check">inject.cycle_check</option>
+                                    <option value="resolve.value">resolve.value</option>
+                                    <option value="resolve.provider">resolve.provider</option>
+                                    <option value="resolve.type">resolve.type</option>
+                                    <option value="provider.execute">provider.execute</option>
+                                    <option value="provider.call">provider.call</option>
+                                </select>
+                                <select x-model="traceStatus"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="">状态</option>
+                                    <option value="start">start</option>
+                                    <option value="ok">ok</option>
+                                    <option value="error">error</option>
+                                </select>
+                                <input type="text" x-model="traceEvent" placeholder="event 过滤"
+                                    class="min-w-[120px] flex-1 px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                <label class="flex items-center gap-1 text-[11px] text-gray-600 shrink-0">
+                                    <input type="checkbox" x-model="traceTreeMode" class="rounded border-gray-300">
+                                    树形
+                                </label>
+                                <select x-show="traceTreeMode" x-model="traceIndentMode"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="log">缩进：对数</option>
+                                    <option value="linear">缩进：线性</option>
+                                </select>
+                                <label class="flex items-center gap-1 text-[11px] text-gray-600 shrink-0">
+                                    <input type="checkbox" x-model="traceOnlyErrorSpan" class="rounded border-gray-300">
+                                    仅错误
+                                </label>
+                                <span class="text-[11px] text-gray-500 shrink-0">深度</span>
+                                <select x-model="traceDepth"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                                    <option value="0">全部</option>
+                                    <option value="1">1 级</option>
+                                    <option value="2">2 级</option>
+                                    <option value="3">3 级</option>
+                                    <option value="5">5 级</option>
+                                    <option value="10">10 级</option>
+                                    <option value="20">20 级</option>
+                                </select>
+                                <button @click="collapseAllTraceGroups()"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md bg-white hover:bg-gray-100">
+                                    折叠全部
+                                </button>
+                                <button @click="expandAllTraceGroups()"
+                                    class="px-2 py-1 text-[11px] border border-gray-300 rounded-md bg-white hover:bg-gray-100">
+                                    展开全部
+                                </button>
+                                <button @click="refreshTraceFromModal()"
+                                    class="px-2.5 py-1 text-[11px] border border-gray-300 rounded-md bg-white hover:bg-gray-100"
+                                    :disabled="traceLoading">刷新</button>
+                            </div>
+
+                            <div class="text-[11px] text-gray-500"
+                                x-text="traceViewMode === 'span'
+                                    ? `事件 ${traceRecords.length} · Span ${traceSpanTotal} · 链路 ${traceGroups.length}`
+                                    : `总 ${traceRecords.length} · 过滤 ${filteredModalTraceRecords.length} · 链路 ${traceGroups.length}`">
+                            </div>
+                            <div class="text-xs text-red-500" x-show="traceError" x-text="traceError"></div>
+
+                            <template x-if="filteredModalTraceRecords.length === 0">
+                                <div class="p-4 text-sm text-gray-400 border border-gray-200 rounded-lg">暂无匹配 Trace 记录
+                                </div>
+                            </template>
+
+                            <div :class="isSingleTraceView() ? 'flex-1 min-h-0' : 'space-y-2'">
+                                <template x-for="(group, gIdx) in traceGroups"
+                                    :key="`trace-group-${group.traceId || gIdx}`">
+                                    <div class="border rounded-lg p-3" :class="{
+                                        'border-red-200 bg-red-50/20': group.hasSpanError,
+                                        'border-gray-200 bg-white': !group.hasSpanError,
+                                        'flex-1 min-h-0 flex flex-col': isSingleTraceView(),
+                                    }">
+                                        <div class="flex items-center justify-between gap-2 mb-2">
+                                            <div class="min-w-0">
+                                                <div class="text-[11px] text-gray-500">trace_id</div>
+                                                <div class="flex items-center gap-2 min-w-0">
+                                                    <div class="text-xs font-semibold text-gray-800 break-all"
+                                                        x-text="group.traceId || '(missing-trace-id)'"></div>
+                                                    <span x-show="group.hasSpanError"
+                                                        class="shrink-0 px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[10px] font-semibold">span-error</span>
+                                                </div>
+                                                <div class="mt-0.5 text-[10px] text-gray-600 break-all"
+                                                    x-show="group.injectFunction"
+                                                    x-text="`inject: ${group.injectFunction}`"></div>
+                                            </div>
+                                            <div class="text-right text-[11px] text-gray-500 shrink-0">
+                                                <button @click="toggleTraceGroupCollapse(group.traceId)"
+                                                    class="mb-1 px-1.5 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                    :title="isTraceGroupCollapsed(group.traceId) ? '展开该 trace' : '折叠该 trace'"
+                                                    x-text="isTraceGroupCollapsed(group.traceId) ? '▸ 展开' : '▾ 折叠'"></button>
+                                                <button @click="focusSingleTrace(group.traceId)"
+                                                    class="mb-1 ml-1 px-1.5 py-0.5 rounded border border-blue-300 bg-blue-50 text-[10px] text-blue-700 hover:bg-blue-100"
+                                                    title="仅查看当前 trace（自动过滤并全屏）">
+                                                    仅看此条
+                                                </button>
+                                                <div x-text="`events ${group.total}`"></div>
+                                                <div x-text="`errors ${group.errorCount}`"></div>
+                                                <div x-show="group.hasSpanError" class="text-red-600"
+                                                    x-text="`span ${group.spanErrorCount}`"></div>
+                                            </div>
+                                        </div>
+
+                                        <div x-show="!isTraceGroupCollapsed(group.traceId)"
+                                            :class="isSingleTraceView() ? 'flex-1 min-h-0 space-y-1.5 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50/50' : 'space-y-1.5 max-h-72 overflow-y-auto border border-gray-100 rounded-md p-2 bg-gray-50/50'">
+                                            <template x-if="traceViewMode === 'span'">
+                                                <div class="space-y-1.5">
+                                                    <template
+                                                        x-for="(item, idx) in (traceTreeMode ? group.visibleSpanRows : group.spanRows)"
+                                                        :key="`trace-span-${group.traceId}-${item.span_id || idx}-${idx}`">
+                                                        <div class="text-xs border rounded p-2"
+                                                            :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
+                                                            :style="traceTreeMode ? traceIndentStyle(item) : ''">
+                                                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                                <button x-show="traceTreeMode && item._canToggle"
+                                                                    @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
+                                                                    class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                                    :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
+                                                                    x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
+                                                                <span x-show="traceTreeMode"
+                                                                    class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                                                                    x-text="`L${item._depth || 0}`"></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
+                                                                    x-text="item.operation || '-' "></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                                    :class="item.status === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'"
+                                                                    x-text="item.status || 'ok'"></span>
+                                                                <span class="text-[10px] text-gray-500"
+                                                                    x-text="`events:${item.event_count || 0}`"></span>
+                                                                <span class="text-[10px] text-gray-400"
+                                                                    x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all">
+                                                                <span class="text-gray-500">span:</span>
+                                                                <span x-text="item.span_id || '-' "></span>
+                                                                <span class="text-gray-500 ml-2">parent:</span>
+                                                                <span x-text="item.parent_span_id || '-' "></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all"
+                                                                x-show="traceProviderLabel(item)">
+                                                                <span x-text="traceProviderLabel(item)"></span>
+                                                            </div>
+                                                            <details class="mt-1"
+                                                                x-show="traceProviderFunctions(item).length > 1">
+                                                                <summary
+                                                                    class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                                                    全部 provider
+                                                                </summary>
+                                                                <ul class="mt-1 space-y-0.5">
+                                                                    <template
+                                                                        x-for="(fn, fidx) in traceProviderFunctions(item)"
+                                                                        :key="`trace-span-provider-${item.span_id || 'x'}-${fidx}`">
+                                                                        <li class="text-[10px] text-gray-600 break-all"
+                                                                            x-text="fn"></li>
+                                                                    </template>
+                                                                </ul>
+                                                            </details>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceOutputType(item)"
+                                                                x-text="`output: ${traceOutputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceInputType(item)"
+                                                                x-text="`input: ${traceInputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceTypeMeta(item)"
+                                                                x-text="traceTypeMeta(item)">
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="item.duration_ns"
+                                                                x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
+                                                            </div>
+                                                            <div x-show="traceErrorText(item)"
+                                                                class="mt-1 rounded border border-red-200 bg-red-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                                                                    error
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[11px] text-red-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorMultilineText(item)"></pre>
+                                                            </div>
+                                                            <div x-show="traceErrorContext(item)"
+                                                                class="mt-1 rounded border border-amber-200 bg-amber-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                                                    ctx
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[10px] text-amber-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorContextMultiline(item)"></pre>
+                                                            </div>
+                                                            <div class="text-[10px] text-blue-700 break-all"
+                                                                x-show="tracePackagePathLabel(item)"
+                                                                x-text="`pkg: ${tracePackagePathLabel(item)}`"></div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+
+                                            <template x-if="traceViewMode !== 'span'">
+                                                <div class="space-y-1.5">
+                                                    <template
+                                                        x-for="(item, idx) in (traceTreeMode ? group.visibleTreeRows : group.records)"
+                                                        :key="`trace-item-${group.traceId}-${item.id || idx}-${idx}`">
+                                                        <div class="text-xs border rounded p-2"
+                                                            :class="item.status === 'error' ? 'border-red-200 bg-red-50/40' : 'border-gray-200 bg-white'"
+                                                            :style="traceTreeMode ? traceIndentStyle(item) : ''">
+                                                            <div class="flex items-center gap-2 flex-wrap mb-1">
+                                                                <button x-show="traceTreeMode && item._canToggle"
+                                                                    @click.stop="toggleTraceSpanCollapse(group.traceId, item.span_id)"
+                                                                    class="px-1 py-0.5 rounded border border-gray-300 bg-white text-[10px] text-gray-600 hover:bg-gray-50"
+                                                                    :title="isTraceSpanCollapsed(group.traceId, item.span_id) ? '展开子链路' : '折叠子链路'"
+                                                                    x-text="isTraceSpanCollapsed(group.traceId, item.span_id) ? '▸' : '▾'"></button>
+                                                                <span x-show="traceTreeMode"
+                                                                    class="px-1 py-0.5 rounded bg-slate-100 text-slate-600 text-[10px]"
+                                                                    x-text="`L${item._depth || 0}`"></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium"
+                                                                    x-text="item.operation || '-' "></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded text-[10px] font-semibold"
+                                                                    :class="item.status === 'error' ? 'bg-red-100 text-red-700' : (item.status === 'start' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700')"
+                                                                    x-text="item.status || 'ok'"></span>
+                                                                <span
+                                                                    class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[10px]"
+                                                                    x-text="item.event || '-' "></span>
+                                                                <span class="text-[10px] text-gray-400"
+                                                                    x-text="formatErrorTime(item.occurred_at_unix_nano)"></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all">
+                                                                <span class="text-gray-500">span:</span>
+                                                                <span x-text="item.span_id || '-' "></span>
+                                                                <span class="text-gray-500 ml-2">parent:</span>
+                                                                <span x-text="item.parent_span_id || '-' "></span>
+                                                            </div>
+                                                            <div class="text-[11px] text-gray-700 break-all"
+                                                                x-show="traceProviderLabel(item)">
+                                                                <span x-text="traceProviderLabel(item)"></span>
+                                                            </div>
+                                                            <details class="mt-1"
+                                                                x-show="traceProviderFunctions(item).length > 1">
+                                                                <summary
+                                                                    class="text-[10px] text-gray-500 cursor-pointer hover:text-gray-700">
+                                                                    全部 provider
+                                                                </summary>
+                                                                <ul class="mt-1 space-y-0.5">
+                                                                    <template
+                                                                        x-for="(fn, fidx) in traceProviderFunctions(item)"
+                                                                        :key="`trace-event-provider-${item.span_id || 'x'}-${fidx}`">
+                                                                        <li class="text-[10px] text-gray-600 break-all"
+                                                                            x-text="fn"></li>
+                                                                    </template>
+                                                                </ul>
+                                                            </details>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceOutputType(item)"
+                                                                x-text="`output: ${traceOutputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceInputType(item)"
+                                                                x-text="`input: ${traceInputType(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="traceTypeMeta(item)"
+                                                                x-text="traceTypeMeta(item)">
+                                                            </div>
+                                                            <div x-show="traceErrorText(item)"
+                                                                class="mt-1 rounded border border-red-200 bg-red-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-red-600">
+                                                                    error
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[11px] text-red-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorMultilineText(item)"></pre>
+                                                            </div>
+                                                            <div x-show="traceErrorContext(item)"
+                                                                class="mt-1 rounded border border-amber-200 bg-amber-50/60 p-2">
+                                                                <div
+                                                                    class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">
+                                                                    ctx
+                                                                </div>
+                                                                <pre class="mt-0.5 text-[10px] text-amber-700 whitespace-pre-wrap break-all leading-relaxed"
+                                                                    x-text="traceErrorContextMultiline(item)"></pre>
+                                                            </div>
+                                                            <div class="text-[10px] text-blue-700 break-all"
+                                                                x-show="tracePackagePathLabel(item)"
+                                                                x-text="`pkg: ${tracePackagePathLabel(item)}`"></div>
+                                                            <div class="text-[11px] text-gray-600 break-all"
+                                                                x-show="item.duration_ns"
+                                                                x-text="`duration: ${formatDurationNs(item.duration_ns)}`">
+                                                            </div>
+                                                        </div>
+                                                    </template>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mermaid Modal -->
+        <div x-show="mermaidOpen" x-cloak class="fixed inset-0 bg-black/40 flex items-center justify-center z-50"
+            @keydown.escape.window="mermaidOpen = false">
             <div class="bg-white w-[90vw] h-[85vh] rounded-xl shadow-xl flex flex-col">
                 <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
                     <div class="font-semibold text-gray-700">🧩 Mermaid 预览</div>
-                    <button
-                        @click="mermaidOpen = false"
-                        class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                    >
+                    <button @click="mermaidOpen = false"
+                        class="px-2 py-1 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                         关闭
                     </button>
                 </div>
                 <div class="flex-1 grid grid-cols-2 gap-4 p-4 overflow-hidden">
                     <div class="flex flex-col h-full">
                         <div class="text-xs text-gray-500 mb-2">Mermaid 源码</div>
-                        <textarea
-                            x-model="mermaidSource"
-                            class="flex-1 w-full text-xs font-mono border border-gray-200 rounded-lg p-2 resize-none"
-                        ></textarea>
+                        <textarea x-model="mermaidSource"
+                            class="flex-1 w-full text-xs font-mono border border-gray-200 rounded-lg p-2 resize-none"></textarea>
                         <div class="mt-2 flex items-center gap-2">
-                            <button
-                                @click="copyMermaidSource()"
-                                class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50"
-                            >
+                            <button @click="copyMermaidSource()"
+                                class="px-3 py-1.5 text-xs border border-gray-300 rounded-md hover:bg-gray-50">
                                 复制源码
                             </button>
-                            <button
-                                @click="renderMermaid()"
-                                class="px-3 py-1.5 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600"
-                            >
+                            <button @click="renderMermaid()"
+                                class="px-3 py-1.5 text-xs bg-primary-500 text-white rounded-md hover:bg-primary-600">
                                 重新渲染
                             </button>
                             <div x-show="mermaidError" class="text-xs text-red-500" x-text="mermaidError"></div>
@@ -568,7 +1205,8 @@
                     </div>
                     <div class="flex flex-col h-full">
                         <div class="text-xs text-gray-500 mb-2">预览</div>
-                        <div class="flex-1 border border-gray-200 rounded-lg p-3 overflow-auto mermaid-preview" x-html="mermaidSvg"></div>
+                        <div class="flex-1 border border-gray-200 rounded-lg p-3 overflow-auto mermaid-preview"
+                            x-html="mermaidSvg"></div>
                     </div>
                 </div>
             </div>
@@ -586,6 +1224,7 @@
                 sidebarCollapsed: false,
                 stats: { provider_count: 0, object_count: 0, package_count: 0, edge_count: 0 },
                 packages: [],
+                uiVersion: 'trace-entry-v5-20260323',
                 packageSearch: '',
                 globalSearch: '',
                 searchResults: [],
@@ -613,6 +1252,87 @@
                 mermaidError: '',
                 lastGraphData: null,
                 expandedGroups: [],
+                runtimeStats: [],
+                runtimeStatsLoading: false,
+                runtimeStatsError: '',
+                runtimeStatsSearch: '',
+                runtimeStatsUpdatedAt: '',
+                runtimeStatsOnlyExecuted: false,
+                runtimeStatsCollapsed: true,
+                recentErrors: [],
+                recentErrorsLoading: false,
+                recentErrorsError: '',
+                recentErrorsUpdatedAt: '',
+                recentErrorsCollapsed: true,
+                traceRecords: [],
+                traceLoading: false,
+                traceError: '',
+                traceUpdatedAt: '',
+                traceLimit: 500,
+                traceOperation: '',
+                traceStatus: '',
+                traceEvent: '',
+                traceTreeMode: true,
+                traceIndentMode: 'log',
+                traceViewMode: 'span',
+                traceOnlyErrorSpan: false,
+                traceDepth: '0',
+                traceCollapsedSpanKeys: {},
+                traceCollapsedGroupKeys: {},
+                traceFullscreen: false,
+                errorTypeGuideCollapsed: true,
+                errorTypeGuide: [
+                    {
+                        code: 'provider_registration_invalid',
+                        summary: 'Provider 注册参数非法（如 nil、非函数、返回值不合法）。',
+                        action: '检查 Provide/TryProvide 的入参签名与返回值数量。',
+                    },
+                    {
+                        code: 'inject_dependency_missing',
+                        summary: '注入阶段缺失依赖，当前类型没有可用 provider。',
+                        action: '确认依赖已注册、类型精确匹配，并检查导入顺序。',
+                    },
+                    {
+                        code: 'provider_input_unresolved',
+                        summary: 'Provider 的输入参数无法解析（上游依赖缺失或不匹配）。',
+                        action: '根据 input_type/input_types 逐级回溯缺失节点。',
+                    },
+                    {
+                        code: 'provider_return_error',
+                        summary: 'Provider 正常执行但返回了业务错误。',
+                        action: '优先排查外部资源（DB/缓存/HTTP）与配置有效性。',
+                    },
+                    {
+                        code: 'provider_panic',
+                        summary: 'Provider 执行中发生 panic。',
+                        action: '建议 provider 内捕获并返回 error，必要时开启 debug 栈。',
+                    },
+                    {
+                        code: 'provider_timeout',
+                        summary: 'Provider 执行超时。',
+                        action: '优化初始化路径，或临时调大 WithProviderTimeout。',
+                    },
+                    {
+                        code: 'inject_callback_error',
+                        summary: 'Inject/TryInject 的回调函数主动返回了 error。',
+                        action: '检查回调里的参数校验和业务逻辑分支。',
+                    },
+                    {
+                        code: 'dependency_cycle',
+                        summary: '检测到循环依赖。',
+                        action: '拆分互相引用组件，改为接口或延迟注入解环。',
+                    },
+                    {
+                        code: 'inject_failed',
+                        summary: '注入失败兜底分类（需要结合 stage/message 细看）。',
+                        action: '结合 root_cause + hint + provider_function 做链路定位。',
+                    },
+                ],
+                diagnosticModalOpen: false,
+                diagnosticModalType: 'runtime',
+                diagnosticSearch: '',
+                providerDetailModalOpen: false,
+                providerModalNode: null,
 
                 // Computed
                 get filteredPackages() {
@@ -630,6 +1350,389 @@
                     return this.getPackagePrefixSuggestions();
                 },
 
+                get filteredRuntimeStats() {
+                    const q = (this.runtimeStatsSearch || '').toLowerCase().trim();
+                    return (this.runtimeStats || []).filter(s => {
+                        if (this.runtimeStatsOnlyExecuted && Number(s.call_count || 0) <= 0) {
+                            return false;
+                        }
+                        if (!q) {
+                            return true;
+                        }
+                        const fn = String(s.function_name || '').toLowerCase();
+                        const out = String(s.output_type || '').toLowerCase();
+                        return fn.includes(q) || out.includes(q);
+                    });
+                },
+
+                get filteredModalRuntimeStats() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.runtimeStats || []).filter(s => {
+                        if (this.runtimeStatsOnlyExecuted && Number(s.call_count || 0) <= 0) {
+                            return false;
+                        }
+                        if (!q) {
+                            return true;
+                        }
+                        const fn = String(s.function_name || '').toLowerCase();
+                        const out = String(s.output_type || '').toLowerCase();
+                        const err = String(s.last_error || '').toLowerCase();
+                        return fn.includes(q) || out.includes(q) || err.includes(q);
+                    });
+                },
+
+                get filteredModalRecentErrors() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.recentErrors || []).filter(e => {
+                        if (!q) {
+                            return true;
+                        }
+                        const op = String(e.operation || '').toLowerCase();
+                        const errType = String(e.error_type || '').toLowerCase();
+                        const stage = String(e.stage || '').toLowerCase();
+                        const comp = String(e.component || '').toLowerCase();
+                        const providerFn = String(e.provider_function || '').toLowerCase();
+                        const outType = String(e.output_type || '').toLowerCase();
+                        const inputType = String(e.input_type || '').toLowerCase();
+                        const root = String(e.root_cause || '').toLowerCase();
+                        const hint = String(e.hint || '').toLowerCase();
+                        const msg = String(e.message || '').toLowerCase();
+                        return op.includes(q) || errType.includes(q) || stage.includes(q) || comp.includes(q) || providerFn.includes(q) || outType.includes(q) || inputType.includes(q) || root.includes(q) || hint.includes(q) || msg.includes(q);
+                    });
+                },
+
+                get filteredModalErrorTypeGuide() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.errorTypeGuide || []).filter(item => {
+                        if (!q) {
+                            return true;
+                        }
+                        const code = String(item.code || '').toLowerCase();
+                        const summary = String(item.summary || '').toLowerCase();
+                        const action = String(item.action || '').toLowerCase();
+                        return code.includes(q) || summary.includes(q) || action.includes(q);
+                    });
+                },
+
+                get filteredModalTraceRecords() {
+                    const q = (this.diagnosticSearch || '').toLowerCase().trim();
+                    return (this.traceRecords || []).filter(item => {
+                        if (!q) {
+                            return true;
+                        }
+                        const traceId = String(item.trace_id || '').toLowerCase();
+                        const spanId = String(item.span_id || '').toLowerCase();
+                        const parent = String(item.parent_span_id || '').toLowerCase();
+                        const op = String(item.operation || '').toLowerCase();
+                        const ev = String(item.event || '').toLowerCase();
+                        const status = String(item.status || '').toLowerCase();
+                        const comp = String(item.component || '').toLowerCase();
+                        const provider = String(item.provider_function || '').toLowerCase();
+                        const output = String(item.output_type || '').toLowerCase();
+                        const input = String(item.input_type || '').toLowerCase();
+                        const err = String(item.error || '').toLowerCase();
+                        return traceId.includes(q) || spanId.includes(q) || parent.includes(q) || op.includes(q) || ev.includes(q) || status.includes(q) || comp.includes(q) || provider.includes(q) || output.includes(q) || input.includes(q) || err.includes(q);
+                    });
+                },
+
+                get traceGroups() {
+                    const map = new Map();
+                    (this.filteredModalTraceRecords || []).forEach(item => {
+                        const traceId = item.trace_id || '';
+                        if (!map.has(traceId)) {
+                            map.set(traceId, {
+                                traceId,
+                                total: 0,
+                                errorCount: 0,
+                                records: [],
+                            });
+                        }
+                        const g = map.get(traceId);
+                        g.total++;
+                        if (String(item.status || '').toLowerCase() === 'error') {
+                            g.errorCount++;
+                        }
+                        g.records.push(item);
+                    });
+
+                    const groups = Array.from(map.values());
+                    groups.forEach(g => {
+                        g.records.sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
+
+                        const injectStart = g.records.find((rec) => String(rec.operation || '') === 'inject' && String(rec.event || '') === 'span.start');
+                        g.injectFunction = '';
+                        if (!g.injectFunction && injectStart) {
+                            g.injectFunction = String(injectStart.component || '').trim();
+                        }
+
+                        // 构建 span 代表记录（优先 span.start）用于深度计算
+                        const spanRep = new Map();
+                        g.records.forEach((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            if (!sid) return;
+
+                            const prev = spanRep.get(sid);
+                            if (!prev) {
+                                spanRep.set(sid, rec);
+                                return;
+                            }
+
+                            const curIsStart = String(rec.event || '') === 'span.start';
+                            const prevIsStart = String(prev.event || '') === 'span.start';
+                            if (curIsStart && !prevIsStart) {
+                                spanRep.set(sid, rec);
+                            }
+                        });
+
+                        const memo = new Map();
+                        const computing = new Set();
+                        const spanParent = new Map();
+                        const spanOp = new Map();
+                        const spanChildCount = new Map();
+                        const spanEventCount = new Map();
+                        const spanEnd = new Map();
+                        const spanError = new Map();
+
+                        spanRep.forEach((rec, sid) => {
+                            spanOp.set(sid, String(rec.operation || '').trim());
+                            const p = String(rec.parent_span_id || '').trim();
+                            if (p) {
+                                spanParent.set(sid, p);
+                                spanChildCount.set(p, (spanChildCount.get(p) || 0) + 1);
+                            }
+                        });
+
+                        const displayParentForSpan = (sid) => {
+                            const parentSid = spanParent.get(sid) || '';
+                            return parentSid;
+                        };
+
+                        g.records.forEach((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            if (!sid) {
+                                return;
+                            }
+                            spanEventCount.set(sid, (spanEventCount.get(sid) || 0) + 1);
+                            if (String(rec.event || '') === 'span.end') {
+                                spanEnd.set(sid, rec);
+                            }
+                            if (String(rec.status || '').toLowerCase() === 'error' || String(rec.error || '').trim()) {
+                                if (!spanError.has(sid)) {
+                                    spanError.set(sid, rec);
+                                }
+                            }
+                        });
+
+                        const depthForSpan = (sid) => {
+                            sid = String(sid || '').trim();
+                            if (!sid) return 0;
+                            if (memo.has(sid)) return memo.get(sid);
+                            if (computing.has(sid)) return 0;
+
+                            const cur = spanRep.get(sid);
+                            if (!cur) {
+                                memo.set(sid, 0);
+                                return 0;
+                            }
+
+                            computing.add(sid);
+                            const parentSid = displayParentForSpan(sid);
+                            let d = 0;
+                            if (parentSid) {
+                                d = depthForSpan(parentSid) + 1;
+                            }
+                            computing.delete(sid);
+                            memo.set(sid, d);
+                            return d;
+                        };
+
+                        g.treeRows = g.records.map((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            const parentSid = String(rec.parent_span_id || '').trim();
+                            let depth = 0;
+                            if (sid) {
+                                depth = depthForSpan(sid);
+                            } else if (parentSid) {
+                                depth = depthForSpan(parentSid) + 1;
+                            }
+                            return {
+                                ...rec,
+                                _depth: depth,
+                                _canToggle: String(rec.event || '') === 'span.start' && !!sid && (spanChildCount.get(sid) || 0) > 0,
+                            };
+                        });
+
+                        // 汇总 span 视图（一个 span 一行，默认更易读）
+                        const allSpanRows = Array.from(spanRep.entries()).map(([sid, startRec]) => {
+                            const endRec = spanEnd.get(sid);
+                            const errRec = spanError.get(sid);
+                            const status = (endRec && endRec.status) || (errRec ? 'error' : 'ok');
+                            const parentSid = displayParentForSpan(sid);
+                            const depth = depthForSpan(sid);
+
+                            let durationNs = 0;
+                            if (endRec && Number(endRec.duration_ns || 0) > 0) {
+                                durationNs = Number(endRec.duration_ns || 0);
+                            } else {
+                                const st = Number(startRec.occurred_at_unix_nano || 0);
+                                const et = endRec ? Number(endRec.occurred_at_unix_nano || 0) : 0;
+                                if (st > 0 && et > st) {
+                                    durationNs = et - st;
+                                }
+                            }
+
+                            return {
+                                trace_id: g.traceId,
+                                span_id: sid,
+                                parent_span_id: parentSid,
+                                operation: startRec.operation || '',
+                                component: startRec.component || '',
+                                provider_function: startRec.provider_function || (startRec.attrs && (startRec.attrs.provider_function || startRec.attrs.provider_candidates || startRec.attrs.provider)) || '',
+                                output_type: startRec.output_type || '',
+                                input_type: startRec.input_type || '',
+                                status: String(status || '').toLowerCase() || 'ok',
+                                error: (errRec && (errRec.error || errRec.message)) || '',
+                                duration_ns: durationNs,
+                                occurred_at_unix_nano: Number(startRec.occurred_at_unix_nano || 0),
+                                event_count: spanEventCount.get(sid) || 0,
+                                _depth: depth,
+                                _canToggle: (spanChildCount.get(sid) || 0) > 0,
+                            };
+                        });
+
+                        g.spanErrorCount = allSpanRows.filter((row) => String(row.status || '').toLowerCase() === 'error' || String(row.error || '').trim()).length;
+                        g.hasSpanError = g.spanErrorCount > 0;
+                        let effectiveSpanRows = allSpanRows;
+                        if (this.traceOnlyErrorSpan) {
+                            effectiveSpanRows = effectiveSpanRows.filter((row) => row.status === 'error');
+                        }
+
+                        // 非树形：按时间排序
+                        g.spanRows = [...effectiveSpanRows].sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
+
+                        // 树形：按父子关系前序遍历，保证展示顺序是“树状”而不是“时间流”
+                        const rowBySpanID = new Map();
+                        effectiveSpanRows.forEach((row) => {
+                            const sid = String(row.span_id || '').trim();
+                            if (!sid) return;
+                            rowBySpanID.set(sid, row);
+                        });
+
+                        const childrenByParent = new Map();
+                        const roots = [];
+                        effectiveSpanRows.forEach((row) => {
+                            const sid = String(row.span_id || '').trim();
+                            if (!sid) return;
+
+                            const parentSid = String(row.parent_span_id || '').trim();
+                            if (parentSid && rowBySpanID.has(parentSid)) {
+                                if (!childrenByParent.has(parentSid)) {
+                                    childrenByParent.set(parentSid, []);
+                                }
+                                childrenByParent.get(parentSid).push(row);
+                            } else {
+                                roots.push(row);
+                            }
+                        });
+
+                        const byOccurredAt = (a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0);
+                        roots.sort(byOccurredAt);
+                        for (const list of childrenByParent.values()) {
+                            list.sort(byOccurredAt);
+                        }
+
+                        const treeOrdered = [];
+                        const visited = new Set();
+                        const walk = (node) => {
+                            const sid = String((node && node.span_id) || '').trim();
+                            if (!sid || visited.has(sid)) {
+                                return;
+                            }
+                            visited.add(sid);
+                            treeOrdered.push(node);
+                            const children = childrenByParent.get(sid) || [];
+                            children.forEach(walk);
+                        };
+                        roots.forEach(walk);
+                        // 兜底：处理异常数据导致的孤立节点
+                        effectiveSpanRows.forEach((row) => {
+                            const sid = String(row.span_id || '').trim();
+                            if (sid && !visited.has(sid)) {
+                                walk(row);
+                            }
+                        });
+                        g.spanRowsTreeOrdered = treeOrdered;
+
+                        const isCollapsed = (traceId, sid) => !!this.traceCollapsedSpanKeys[this.traceSpanKey(traceId, sid)];
+                        const hasCollapsedAncestor = (traceId, sid, includeSelf) => {
+                            let cur = String(sid || '').trim();
+                            if (!cur) return false;
+                            if (!includeSelf) {
+                                cur = displayParentForSpan(cur);
+                            }
+                            const guard = new Set();
+                            while (cur && !guard.has(cur)) {
+                                guard.add(cur);
+                                if (isCollapsed(traceId, cur)) {
+                                    return true;
+                                }
+                                cur = displayParentForSpan(cur);
+                            }
+                            return false;
+                        };
+
+                        g.visibleTreeRows = g.treeRows.filter((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            const parentSid = String(rec.parent_span_id || '').trim();
+                            if (sid) {
+                                return !hasCollapsedAncestor(g.traceId, sid, false);
+                            }
+                            if (parentSid) {
+                                return !hasCollapsedAncestor(g.traceId, parentSid, true);
+                            }
+                            return true;
+                        });
+
+                        g.visibleSpanRows = g.spanRowsTreeOrdered.filter((rec) => {
+                            const sid = String(rec.span_id || '').trim();
+                            const parentSid = String(rec.parent_span_id || '').trim();
+                            if (sid) {
+                                return !hasCollapsedAncestor(g.traceId, sid, false);
+                            }
+                            if (parentSid) {
+                                return !hasCollapsedAncestor(g.traceId, parentSid, true);
+                            }
+                            return true;
+                        });
+
+                        const depthLimit = this.parseTraceDepthValue();
+                        if (depthLimit > 0) {
+                            g.treeRows = g.treeRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.visibleTreeRows = g.visibleTreeRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.spanRows = g.spanRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.spanRowsTreeOrdered = g.spanRowsTreeOrdered.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.visibleSpanRows = g.visibleSpanRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.records = g.treeRows;
+                        }
+                    });
+                    // 按每条 trace 的 span 数量倒序；数量相同再按最近时间倒序
+                    groups.sort((a, b) => {
+                        const as = Array.isArray(a.spanRows) ? a.spanRows.length : 0;
+                        const bs = Array.isArray(b.spanRows) ? b.spanRows.length : 0;
+                        if (as !== bs) {
+                            return bs - as;
+                        }
+                        const at = a.records.length ? Number(a.records[a.records.length - 1].occurred_at_unix_nano || 0) : 0;
+                        const bt = b.records.length ? Number(b.records[b.records.length - 1].occurred_at_unix_nano || 0) : 0;
+                        return bt - at;
+                    });
+                    return groups;
+                },
+
+                get traceSpanTotal() {
+                    return (this.traceGroups || []).reduce((sum, g) => sum + (Array.isArray(g.spanRows) ? g.spanRows.length : 0), 0);
+                },
+
                 // Methods
                 async init() {
                     this.loadLocalState();
@@ -637,9 +1740,13 @@
                     await this.loadStats();
                     await this.loadPackages();
                     await this.loadDependencies();
+                    await this.loadRuntimeStats();
+                    await this.loadRecentErrors();
+                    await this.loadTraceRecords();
                     if (window.mermaid && window.mermaid.initialize) {
                         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
                     }
+                    document.addEventListener('fullscreenchange', () => this.handleFullscreenChange());
                 },
 
                 async loadGroupRules() {
@@ -677,6 +1784,496 @@
                         this.packages = await res.json();
                     } catch (e) {
                         console.error('加载包列表失败:', e);
+                    }
+                },
+
+                async loadRuntimeStats() {
+                    this.runtimeStatsLoading = true;
+                    this.runtimeStatsError = '';
+                    try {
+                        const res = await fetch(apiUrl('/api/runtime-stats'));
+                        if (!res.ok) {
+                            throw new Error('HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.runtimeStats = Array.isArray(data) ? data : [];
+                        this.runtimeStatsUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                        if (this.network) {
+                            this.rerenderCurrentGraph();
+                        }
+                    } catch (e) {
+                        this.runtimeStatsError = '加载 provider 启动耗时失败';
+                        console.error('加载 provider 启动耗时失败:', e);
+                    } finally {
+                        this.runtimeStatsLoading = false;
+                    }
+                },
+
+                async loadRecentErrors() {
+                    this.recentErrorsLoading = true;
+                    this.recentErrorsError = '';
+                    try {
+                        const res = await fetch(apiUrl('/api/errors?limit=50'));
+                        if (!res.ok) {
+                            throw new Error('HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.recentErrors = Array.isArray(data) ? data : [];
+                        this.recentErrorsUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                        if (this.network) {
+                            this.rerenderCurrentGraph();
+                        }
+                    } catch (e) {
+                        this.recentErrorsError = '加载最近错误失败';
+                        console.error('加载最近错误失败:', e);
+                    } finally {
+                        this.recentErrorsLoading = false;
+                    }
+                },
+
+                async loadTraceRecords() {
+                    this.traceLoading = true;
+                    this.traceError = '';
+                    try {
+                        const params = new URLSearchParams();
+                        if (this.traceOperation) params.set('operation', this.traceOperation);
+                        if (this.traceStatus) params.set('status', this.traceStatus);
+                        if (this.traceEvent) params.set('event', this.traceEvent);
+                        params.set('limit', String(this.traceLimit || 500));
+
+                        const res = await fetch(apiUrl('/api/trace?' + params.toString()));
+                        if (!res.ok) {
+                            throw new Error('HTTP ' + res.status);
+                        }
+                        const data = await res.json();
+                        this.traceRecords = Array.isArray(data.records) ? data.records : [];
+                        this.traceUpdatedAt = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+                    } catch (e) {
+                        this.traceError = '加载调用链 Trace 失败';
+                        console.error('加载调用链 Trace 失败:', e);
+                    } finally {
+                        this.traceLoading = false;
+                    }
+                },
+
+                openDiagnosticModal(type) {
+                    if (type === 'errors') {
+                        this.diagnosticModalType = 'errors';
+                    } else if (type === 'trace') {
+                        this.diagnosticModalType = 'trace';
+                        this.diagnosticSearch = '';
+                        this.loadTraceRecords();
+                    } else if (type === 'error-guide') {
+                        this.diagnosticModalType = 'error-guide';
+                    } else {
+                        this.diagnosticModalType = 'runtime';
+                    }
+                    if (type !== 'trace') {
+                        this.diagnosticSearch = '';
+                    }
+                    this.diagnosticModalOpen = true;
+                },
+
+                closeDiagnosticModal() {
+                    this.diagnosticModalOpen = false;
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen().catch(() => { });
+                    }
+                    this.traceFullscreen = false;
+                },
+
+                handleFullscreenChange() {
+                    const panel = this.$refs && this.$refs.diagnosticPanel;
+                    this.traceFullscreen = !!(panel && document.fullscreenElement === panel);
+                },
+
+                async toggleTraceFullscreen() {
+                    if (this.diagnosticModalType !== 'trace') {
+                        return;
+                    }
+                    const panel = this.$refs && this.$refs.diagnosticPanel;
+                    if (!panel) {
+                        return;
+                    }
+                    try {
+                        if (document.fullscreenElement === panel) {
+                            await document.exitFullscreen();
+                            this.traceFullscreen = false;
+                        } else {
+                            await panel.requestFullscreen();
+                            this.traceFullscreen = true;
+                        }
+                    } catch (e) {
+                        console.warn('切换 Trace 全屏失败:', e);
+                    }
+                },
+
+                async focusSingleTrace(traceId) {
+                    const id = String(traceId || '').trim();
+                    if (!id || this.diagnosticModalType !== 'trace') {
+                        return;
+                    }
+
+                    this.diagnosticSearch = id;
+                    this.traceCollapsedGroupKeys = {};
+                    this.traceCollapsedSpanKeys = {};
+
+                    if (!this.traceFullscreen) {
+                        await this.toggleTraceFullscreen();
+                    }
+                },
+
+                refreshTraceFromModal() {
+                    this.loadTraceRecords();
+                },
+
+                isSingleTraceView() {
+                    return this.diagnosticModalType === 'trace' && Array.isArray(this.traceGroups) && this.traceGroups.length === 1;
+                },
+
+                parseTraceDepthValue() {
+                    const raw = String(this.traceDepth ?? '').trim();
+                    let depth = Number.parseInt(raw, 10);
+                    if (!Number.isFinite(depth) || depth < 0) {
+                        depth = 0;
+                    }
+                    if (depth > 256) {
+                        depth = 256;
+                    }
+                    return depth;
+                },
+
+                traceProviderLabel(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+
+                    const direct = String(item.provider_function || '').trim();
+                    if (direct) {
+                        return direct;
+                    }
+
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const providerList = Array.isArray(attrs.provider_functions)
+                        ? attrs.provider_functions.map((v) => String(v || '').trim()).filter((v) => v.length > 0)
+                        : [];
+                    if (providerList.length > 1) {
+                        return `${providerList[0]} (+${providerList.length - 1} more)`;
+                    }
+                    if (providerList.length === 1) {
+                        return providerList[0];
+                    }
+
+                    const fromAttrs = [attrs.provider_function, attrs.provider_candidates, attrs.provider]
+                        .map((v) => String(v || '').trim())
+                        .find((v) => v.length > 0);
+                    if (fromAttrs) {
+                        return fromAttrs;
+                    }
+
+                    return String(item.component || '').trim();
+                },
+
+                traceProviderFunctions(item) {
+                    if (!item || typeof item !== 'object') {
+                        return [];
+                    }
+
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const list = Array.isArray(attrs.provider_functions)
+                        ? attrs.provider_functions.map((v) => String(v || '').trim()).filter((v) => v.length > 0)
+                        : [];
+                    if (list.length > 0) {
+                        return list;
+                    }
+
+                    const fromCandidates = String(attrs.provider_candidates || '').trim();
+                    if (fromCandidates) {
+                        return fromCandidates.split(',').map((v) => v.trim()).filter((v) => v.length > 0);
+                    }
+
+                    const single = this.traceProviderLabel(item);
+                    return single ? [single] : [];
+                },
+
+                traceInputType(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    if (String(item.input_type || '').trim()) {
+                        return String(item.input_type || '').trim();
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const declared = String(attrs.input_type || '').trim();
+                    const resolved = String(attrs.resolved_input_type || '').trim();
+                    if (declared) {
+                        return resolved && resolved !== declared ? `${declared} (resolved: ${resolved})` : declared;
+                    }
+                    return '';
+                },
+
+                traceOutputType(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    if (String(item.output_type || '').trim()) {
+                        return String(item.output_type || '').trim();
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    return String(attrs.output_type || '').trim();
+                },
+
+                traceTypeMeta(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const parts = [];
+                    const queryKind = String(attrs.query_kind || '').trim();
+                    if (queryKind) {
+                        parts.push(`query_kind: ${queryKind}`);
+                    }
+                    if (attrs.index !== undefined && attrs.index !== null && String(attrs.index) !== '') {
+                        parts.push(`index: ${attrs.index}`);
+                    }
+                    if (attrs.aggregate_input === true) {
+                        parts.push('aggregate_input: true');
+                    }
+                    return parts.join(' · ');
+                },
+
+                firstNonEmpty(...values) {
+                    for (const v of values) {
+                        const s = String(v ?? '').trim();
+                        if (s) {
+                            return s;
+                        }
+                    }
+                    return '';
+                },
+
+                traceErrorText(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    return this.firstNonEmpty(
+                        item.error,
+                        item.message,
+                        attrs.error,
+                        attrs.message,
+                        attrs.root_cause,
+                        attrs.cause,
+                    );
+                },
+
+                traceErrorContext(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const parts = [];
+
+                    const stage = this.firstNonEmpty(attrs.stage);
+                    if (stage) parts.push(`stage=${stage}`);
+
+                    const queryKind = this.firstNonEmpty(attrs.query_kind);
+                    if (queryKind) parts.push(`query=${queryKind}`);
+
+                    if (attrs.index !== undefined && attrs.index !== null && String(attrs.index).trim() !== '') {
+                        parts.push(`index=${attrs.index}`);
+                    }
+
+                    const resultPath = this.firstNonEmpty(attrs.result_path);
+                    if (resultPath) parts.push(`path=${resultPath}`);
+
+                    const timedOut = attrs.timed_out;
+                    if (timedOut === true || String(timedOut).toLowerCase() === 'true') {
+                        parts.push('timed_out=true');
+                    }
+
+                    const hint = this.firstNonEmpty(attrs.hint);
+                    if (hint) parts.push(`hint=${hint}`);
+
+                    const root = this.firstNonEmpty(attrs.root_cause);
+                    if (root) parts.push(`root=${root}`);
+
+                    return parts.join(' · ');
+                },
+
+                toMultilineText(text) {
+                    const s = String(text || '').trim();
+                    if (!s) {
+                        return '';
+                    }
+                    return s
+                        .replace(/\s*\|\s*/g, '\n')
+                        .replace(/\s*·\s*/g, '\n')
+                        .replace(/\s*;\s*/g, '\n')
+                        .replace(/\s+,\s+(?=(stage|query|index|path|hint|root|timed_out)=)/gi, '\n')
+                        .replace(/\s+caused by:\s+/gi, '\ncaused by: ')
+                        .trim();
+                },
+
+                traceErrorMultilineText(item) {
+                    return this.toMultilineText(this.traceErrorText(item));
+                },
+
+                traceErrorContextMultiline(item) {
+                    return this.toMultilineText(this.traceErrorContext(item));
+                },
+
+                extractPkgPathFromSymbol(symbol) {
+                    const s = String(symbol || '').trim();
+                    if (!s) {
+                        return '';
+                    }
+
+                    const lastDot = s.lastIndexOf('.');
+                    if (lastDot > 0) {
+                        const pkg = s.slice(0, lastDot).trim();
+                        if (pkg.includes('/')) {
+                            return pkg;
+                        }
+                        if (pkg.includes('.') && !pkg.includes('(')) {
+                            return pkg;
+                        }
+                    }
+
+                    if (s.includes('/')) {
+                        return s;
+                    }
+
+                    return '';
+                },
+
+                tracePackagePathLabel(item) {
+                    if (!item || typeof item !== 'object') {
+                        return '';
+                    }
+
+                    const attrs = item.attrs && typeof item.attrs === 'object' ? item.attrs : {};
+                    const candidates = [];
+
+                    candidates.push(item.component);
+                    candidates.push(item.provider_function);
+                    candidates.push(this.traceProviderLabel(item));
+                    candidates.push(this.traceInputType(item));
+                    candidates.push(this.traceOutputType(item));
+                    candidates.push(attrs.provider);
+                    candidates.push(attrs.provider_function);
+                    candidates.push(attrs.provider_candidates);
+
+                    const providerFns = this.traceProviderFunctions(item);
+                    for (const fn of providerFns) {
+                        candidates.push(fn);
+                    }
+
+                    const seen = new Set();
+                    const pkgList = [];
+                    for (const c of candidates) {
+                        const pkg = this.extractPkgPathFromSymbol(c);
+                        if (!pkg || seen.has(pkg)) {
+                            continue;
+                        }
+                        seen.add(pkg);
+                        pkgList.push(pkg);
+                    }
+
+                    return pkgList.join(' | ');
+                },
+
+                traceIndentStyle(item) {
+                    const depth = Math.max(0, Number((item && item._depth) || 0));
+                    const mode = String(this.traceIndentMode || 'log');
+
+                    // 线性模式：保留传统层级感
+                    if (mode === 'linear') {
+                        const px = Math.min(depth, 64) * 16;
+                        return `margin-left:${px}px`;
+                    }
+
+                    // 对数模式：深链路不会横向爆炸，适合大型项目
+                    const px = Math.round(Math.log2(depth + 1) * 42);
+                    return `margin-left:${px}px`;
+                },
+
+                traceSpanKey(traceId, spanId) {
+                    return `${String(traceId || '')}::${String(spanId || '')}`;
+                },
+
+                traceGroupKey(traceId) {
+                    return String(traceId || '');
+                },
+
+                isTraceGroupCollapsed(traceId) {
+                    return !!this.traceCollapsedGroupKeys[this.traceGroupKey(traceId)];
+                },
+
+                toggleTraceGroupCollapse(traceId) {
+                    const key = this.traceGroupKey(traceId);
+                    const next = { ...(this.traceCollapsedGroupKeys || {}) };
+                    if (next[key]) {
+                        delete next[key];
+                    } else {
+                        next[key] = true;
+                    }
+                    this.traceCollapsedGroupKeys = next;
+                },
+
+                collapseAllTraceGroups() {
+                    const next = {};
+                    (this.traceGroups || []).forEach((g) => {
+                        next[this.traceGroupKey(g.traceId)] = true;
+                    });
+                    this.traceCollapsedGroupKeys = next;
+                },
+
+                expandAllTraceGroups() {
+                    this.traceCollapsedGroupKeys = {};
+                },
+
+                isTraceSpanCollapsed(traceId, spanId) {
+                    if (!traceId || !spanId) {
+                        return false;
+                    }
+                    return !!this.traceCollapsedSpanKeys[this.traceSpanKey(traceId, spanId)];
+                },
+
+                toggleTraceSpanCollapse(traceId, spanId) {
+                    if (!traceId || !spanId) {
+                        return;
+                    }
+                    const key = this.traceSpanKey(traceId, spanId);
+                    const next = { ...(this.traceCollapsedSpanKeys || {}) };
+                    if (next[key]) {
+                        delete next[key];
+                    } else {
+                        next[key] = true;
+                    }
+                    this.traceCollapsedSpanKeys = next;
+                },
+
+                openProviderDetailModal(node) {
+                    if (!node || !node.data || node.data.type !== 'provider') {
+                        return;
+                    }
+                    this.providerModalNode = node;
+                    this.providerDetailModalOpen = true;
+                },
+
+                providerModalError() {
+                    if (!this.providerModalNode || !this.providerModalNode.data) {
+                        return null;
+                    }
+                    return this.getProviderErrorFor(this.providerModalNode.data);
+                },
+
+                providerPrettyJson(node) {
+                    try {
+                        return JSON.stringify(node || {}, null, 2);
+                    } catch (e) {
+                        return String(node || '');
                     }
                 },
 
@@ -723,6 +2320,7 @@
                 },
 
                 onDepthChange() {
+                    this.normalizeCurrentDepth(2);
                     if (this.focusedType) {
                         if (this.focusedGraph === 'dependency') {
                             this.showDependencyGraph(this.focusedType, 'type');
@@ -738,6 +2336,25 @@
                         return;
                     }
                     this.renderGraph();
+                },
+
+                parseDepthValue(defaultDepth = 2) {
+                    const raw = String(this.currentDepth ?? '').trim();
+                    let depth = Number.parseInt(raw, 10);
+                    if (!Number.isFinite(depth) || depth < 0) {
+                        depth = defaultDepth;
+                    }
+                    // 防止极端值导致页面卡顿
+                    if (depth > 128) {
+                        depth = 128;
+                    }
+                    return depth;
+                },
+
+                normalizeCurrentDepth(defaultDepth = 2) {
+                    const depth = this.parseDepthValue(defaultDepth);
+                    this.currentDepth = String(depth);
+                    return depth;
                 },
 
                 rerenderCurrentGraph() {
@@ -787,7 +2404,7 @@
                     this.allData.providers.forEach(provider => {
                         const fnName = provider.function_name || '';
                         const outputType = provider.output_type || '';
-                        
+
                         if (fnName.toLowerCase().includes(query) || outputType.toLowerCase().includes(query)) {
                             if (!seen.has(provider.id)) {
                                 seen.add(provider.id);
@@ -836,7 +2453,7 @@
                 selectSearchResult(result) {
                     this.globalSearch = '';
                     this.searchResults = [];
-                    
+
                     if (result.type === 'type') {
                         // 类型：显示依赖关系图
                         this.showDependencyGraph(result.fullName, 'type');
@@ -861,7 +2478,7 @@
                     this.focusedGraph = 'dependency';
                     this.focusedGroup = null;
 
-                    const depth = parseInt(this.currentDepth) || 2;
+                    const depth = this.parseDepthValue(2);
                     const nodes = [];
                     const edges = [];
                     const nodeMap = new Map();
@@ -870,7 +2487,7 @@
                     // 构建类型到 Provider 的映射
                     const typeToProviders = new Map(); // outputType -> providers
                     const typeToConsumers = new Map(); // inputType -> providers that use it
-                    
+
                     this.allData.providers.forEach(provider => {
                         const outputType = provider.output_type;
                         if (outputType) {
@@ -879,7 +2496,7 @@
                             }
                             typeToProviders.get(outputType).push(provider);
                         }
-                        
+
                         (provider.input_types || []).forEach(inputType => {
                             if (!typeToConsumers.has(inputType)) {
                                 typeToConsumers.set(inputType, []);
@@ -951,7 +2568,7 @@
                         if (!nodeMap.has(type)) {
                             const isTarget = type === targetType;
                             let bgColor, borderColor;
-                            
+
                             if (isTarget) {
                                 bgColor = '#fde68a'; borderColor = '#f59e0b'; // 目标：黄色
                             } else if (direction === 'dependency') {
@@ -1015,7 +2632,7 @@
                         try {
                             this.network.selectNodes([targetType]);
                             this.network.focus(targetType, { scale: 1, animation: true });
-                        } catch (e) {}
+                        } catch (e) { }
                     }, 100);
 
                     this.network.on('click', params => {
@@ -1023,6 +2640,9 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
 
@@ -1057,7 +2677,7 @@
                     if (this.currentView === 'providers') {
                         this.allData.providers.forEach((provider) => {
                             const providerNodeId = provider.id;
-                            const fnName = this.formatFunctionName(provider.function_name);
+                            const fnName = this.providerNodeLabel(provider);
                             const outputType = this.formatTypeName(provider.output_type);
 
                             // Provider node
@@ -1066,7 +2686,7 @@
                                     id: providerNodeId,
                                     label: fnName,
                                     title: this.buildProviderTooltip(provider),
-                                    color: { background: '#bbf7d0', border: '#22c55e' },
+                                    color: this.getProviderNodeColor(provider),
                                     shape: 'box',
                                     font: { size: 11 },
                                     data: { ...provider, type: 'provider', packagePath: provider.function_pkg || '' }
@@ -1181,6 +2801,9 @@
                             const nodeId = params.nodes[0];
                             const node = data.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
 
@@ -1254,7 +2877,7 @@
                     this.focusedGraph = 'type';
                     this.focusedGroup = null;
                     try {
-                        const depth = parseInt(this.currentDepth) || 0;
+                        const depth = this.parseDepthValue(0);
                         const url = apiUrl(`/api/type/${encodeURIComponent(typeName)}?depth=${depth}`);
                         const res = await fetch(url);
                         const data = await res.json();
@@ -1318,6 +2941,9 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
 
@@ -1339,7 +2965,7 @@
                     const memberList = this.groupMembers[groupName] || [];
                     if (memberList.length === 0) return;
 
-                    const depth = parseInt(this.currentDepth) || 0;
+                    const depth = this.parseDepthValue(0);
                     const depthLimit = depth > 0 ? depth : Number.POSITIVE_INFINITY;
 
                     const memberIds = new Set(memberList.map(m => m.id));
@@ -1354,9 +2980,9 @@
                         if (!nodeMap.has(providerNodeId)) {
                             nodes.push({
                                 id: providerNodeId,
-                                label: this.formatFunctionName(provider.function_name),
+                                label: this.providerNodeLabel(provider),
                                 title: this.buildProviderTooltip(provider),
-                                color: { background: '#bbf7d0', border: '#22c55e' },
+                                color: this.getProviderNodeColor(provider),
                                 shape: 'box',
                                 font: { size: 11 },
                                 data: { ...provider, type: 'provider', packagePath: provider.function_pkg || '' }
@@ -1451,6 +3077,9 @@
                             const nodeId = params.nodes[0];
                             const node = graphData.nodes.get(nodeId);
                             this.selectedNode = node;
+                            if (node && node.data && node.data.type === 'provider') {
+                                this.openProviderDetailModal(node);
+                            }
                         }
                     });
                 },
@@ -1489,6 +3118,176 @@
                     return name;
                 },
 
+                formatDurationNs(v) {
+                    const ns = Number(v || 0);
+                    if (!Number.isFinite(ns) || ns <= 0) return '0 ms';
+                    if (ns < 1000) return `${Math.round(ns)} ns`;
+                    if (ns < 1000000) return `${(ns / 1000).toFixed(2)} µs`;
+                    if (ns < 1000000000) return `${(ns / 1000000).toFixed(2)} ms`;
+                    return `${(ns / 1000000000).toFixed(3)} s`;
+                },
+
+                formatErrorTime(unixNano) {
+                    const ns = Number(unixNano || 0);
+                    if (!Number.isFinite(ns) || ns <= 0) return '-';
+                    return new Date(Math.floor(ns / 1000000)).toLocaleString('zh-CN', { hour12: false });
+                },
+
+                runtimeStatKey(item, idx) {
+                    return `${item.function_name || 'unknown'}|${item.output_type || ''}|${idx}`;
+                },
+
+                getRuntimeStatForProvider(provider) {
+                    if (!provider || !this.runtimeStats || this.runtimeStats.length === 0) {
+                        return null;
+                    }
+                    const exact = this.runtimeStats.find(s =>
+                        s.function_name === provider.function_name && s.output_type === provider.output_type
+                    );
+                    if (exact) return exact;
+                    return this.runtimeStats.find(s => s.function_name === provider.function_name) || null;
+                },
+
+                isTimeoutRuntimeStat(stat) {
+                    if (!stat) {
+                        return false;
+                    }
+                    const err = String(stat.last_error || '').toLowerCase();
+                    return err.includes('timeout') || err.includes('deadline exceeded');
+                },
+
+                isProviderTimedOut(provider) {
+                    return this.isTimeoutRuntimeStat(this.getRuntimeStatForProvider(provider));
+                },
+
+                normalizeProviderKey(v) {
+                    return String(v || '').trim().toLowerCase();
+                },
+
+                getProviderErrorFor(provider) {
+                    if (!provider || !this.recentErrors || this.recentErrors.length === 0) {
+                        return null;
+                    }
+                    const fn = this.normalizeProviderKey(provider.function_name);
+                    const out = this.normalizeProviderKey(provider.output_type);
+                    if (!fn && !out) {
+                        return null;
+                    }
+
+                    for (const err of this.recentErrors) {
+                        if (!err) continue;
+                        const errFn = this.normalizeProviderKey(err.provider_function);
+                        const errOut = this.normalizeProviderKey(err.output_type);
+                        if (fn && errFn && fn === errFn) {
+                            return err;
+                        }
+                        if (fn && out && errFn && errOut && fn === errFn && out === errOut) {
+                            return err;
+                        }
+                    }
+                    return null;
+                },
+
+                isProviderErrored(provider) {
+                    return !!this.getProviderErrorFor(provider);
+                },
+
+                providerNodeLabel(provider) {
+                    const base = this.formatFunctionName(provider.function_name);
+                    if (this.isProviderErrored(provider)) {
+                        return `🚨 ${base}`;
+                    }
+                    return base;
+                },
+
+                providerErrorSummary(provider) {
+                    const err = this.getProviderErrorFor(provider);
+                    if (!err) {
+                        return '';
+                    }
+                    const msg = String(err.message || '').trim();
+                    const stage = String(err.stage || '').trim();
+                    if (msg && stage) {
+                        return `最近错误（${stage}）：${msg}`;
+                    }
+                    if (msg) {
+                        return `最近错误：${msg}`;
+                    }
+                    return '最近有错误事件';
+                },
+
+                getProviderNodeColor(provider) {
+                    if (this.isProviderErrored(provider)) {
+                        return { background: '#fee2e2', border: '#b91c1c' };
+                    }
+                    if (this.isProviderTimedOut(provider)) {
+                        return { background: '#fecaca', border: '#dc2626' };
+                    }
+                    return { background: '#bbf7d0', border: '#22c55e' };
+                },
+
+                findProviderByRuntimeStat(stat) {
+                    return (this.allData?.providers || []).find(p =>
+                        p.function_name === stat.function_name && p.output_type === stat.output_type
+                    ) || (this.allData?.providers || []).find(p => p.function_name === stat.function_name) || null;
+                },
+
+                async focusProviderByRuntime(stat) {
+                    if (!stat || !this.allData) return;
+
+                    let provider = this.findProviderByRuntimeStat(stat);
+
+                    // 如果当前按包过滤导致 provider 不在当前图里，自动切回“全部”再定位。
+                    if (!provider && this.currentPackage) {
+                        this.currentPackage = null;
+                        await this.loadDependencies();
+                        provider = this.findProviderByRuntimeStat(stat);
+                    }
+
+                    if (!provider) {
+                        this.runtimeStatsError = '当前图中未找到该 provider，请清除过滤后重试';
+                        this.selectedNode = {
+                            data: {
+                                type: 'provider',
+                                function_name: stat.function_name,
+                                output_type: stat.output_type,
+                                input_types: []
+                            }
+                        };
+                        return;
+                    }
+
+                    // 先展示详情，避免后续聚焦失败时右侧空白。
+                    this.selectedNode = { id: provider.id, data: { ...provider, type: 'provider' } };
+
+                    this.currentView = 'providers';
+                    this.focusedType = null;
+                    this.focusedGraph = null;
+                    this.focusedGroup = null;
+                    this.renderGraph();
+
+                    setTimeout(() => {
+                        if (!this.network || !this.network.body || !this.network.body.data || !this.network.body.data.nodes) {
+                            return;
+                        }
+
+                        const targetNode = this.network.body.data.nodes.get(provider.id);
+                        if (!targetNode) {
+                            // 可能被分组聚合隐藏，降级到类型依赖视图，帮助用户定位。
+                            this.showDependencyGraph(provider.output_type, 'type');
+                            return;
+                        }
+
+                        try {
+                            this.network.selectNodes([provider.id]);
+                            this.network.focus(provider.id, { scale: 1.15, animation: true });
+                            this.selectedNode = targetNode;
+                        } catch (e) {
+                            // ignore focus errors
+                        }
+                    }, 120);
+                },
+
                 buildProviderTooltip(provider) {
                     let tip = '函数: ' + provider.function_name + '\n';
                     tip += '输出: ' + provider.output_type + '\n';
@@ -1498,6 +3297,26 @@
                             tip += '  ' + (i + 1) + '. ' + t + '\n';
                         });
                     }
+
+                    const runtime = this.getRuntimeStatForProvider(provider);
+                    if (runtime) {
+                        tip += '耗时: ' + this.formatDurationNs(runtime.total_duration) + '\n';
+                        if (this.isTimeoutRuntimeStat(runtime)) {
+                            tip += '⚠ 超时: ' + (runtime.last_error || 'timeout') + '\n';
+                        }
+                    }
+
+                    const err = this.getProviderErrorFor(provider);
+                    if (err) {
+                        tip += '🚨 最近错误: ' + (err.message || '-') + '\n';
+                        if (err.stage) {
+                            tip += '阶段: ' + err.stage + '\n';
+                        }
+                        if (err.error_type) {
+                            tip += '类型: ' + err.error_type + '\n';
+                        }
+                    }
+
                     return tip;
                 },
 
@@ -2006,4 +3825,5 @@
         }
     </script>
 </body>
+
 </html>

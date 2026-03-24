@@ -2,11 +2,16 @@ package dixinternal
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 )
+
+var tracePkgPathCache sync.Map
 
 func makeList(typ reflect.Type, data []reflect.Value) reflect.Value {
 	val := reflect.MakeSlice(reflect.SliceOf(typ), 0, 0)
@@ -242,4 +247,97 @@ func GetFnName(fn reflect.Value) string {
 		return "unknown"
 	}
 	return f.Name()
+}
+
+// GetFnTraceName returns function name for trace logs with best-effort full package path.
+// For normal packages runtime already returns full import path.
+// For `main.*` symbols, this attempts to rebuild a module-qualified path from source file location.
+func GetFnTraceName(fn reflect.Value) string {
+	name := GetFnName(fn)
+	if name == "nil" || name == "unknown" {
+		return name
+	}
+
+	if !strings.HasPrefix(name, "main.") {
+		return name
+	}
+
+	pc := fn.Pointer()
+	f := runtime.FuncForPC(pc)
+	if f == nil {
+		return name
+	}
+
+	file, _ := f.FileLine(pc)
+	pkgPath := inferPkgPathFromFile(file)
+	if pkgPath == "" {
+		return name
+	}
+
+	suffix := strings.TrimPrefix(name, "main.")
+	if suffix == name {
+		return name
+	}
+
+	return pkgPath + "." + suffix
+}
+
+func inferPkgPathFromFile(file string) string {
+	if strings.TrimSpace(file) == "" {
+		return ""
+	}
+
+	fileDir := filepath.Clean(filepath.Dir(file))
+	if cached, ok := tracePkgPathCache.Load(fileDir); ok {
+		if s, ok := cached.(string); ok {
+			return s
+		}
+	}
+
+	searchDir := fileDir
+	for {
+		gomod := filepath.Join(searchDir, "go.mod")
+		if data, err := os.ReadFile(gomod); err == nil {
+			modulePath := parseModulePath(string(data))
+			if modulePath == "" {
+				break
+			}
+
+			rel, err := filepath.Rel(searchDir, fileDir)
+			if err != nil {
+				break
+			}
+
+			rel = filepath.ToSlash(rel)
+			pkgPath := modulePath
+			if rel != "." {
+				pkgPath = modulePath + "/" + rel
+			}
+
+			tracePkgPathCache.Store(fileDir, pkgPath)
+			return pkgPath
+		}
+
+		parent := filepath.Dir(searchDir)
+		if parent == searchDir {
+			break
+		}
+		searchDir = parent
+	}
+
+	tracePkgPathCache.Store(fileDir, "")
+	return ""
+}
+
+func parseModulePath(goModContent string) string {
+	for _, line := range strings.Split(goModContent, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "//") {
+			continue
+		}
+		if strings.HasPrefix(line, "module ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "module "))
+		}
+	}
+	return ""
 }
