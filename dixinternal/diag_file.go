@@ -100,23 +100,6 @@ func toDiagRecord(r diagFileRecord) DiagFileRecord {
 	}
 }
 
-func toInternalRecord(r DiagFileRecord) diagFileRecord {
-	return diagFileRecord{
-		RecordID:    r.RecordID,
-		Source:      r.Source,
-		PID:         r.PID,
-		Process:     r.Process,
-		Hostname:    r.Hostname,
-		TraceDI:     r.TraceDI,
-		LLMDiagMode: r.LLMDiagMode,
-		Kind:        r.Kind,
-		OccurredAt:  r.OccurredAt,
-		Event:       r.Event,
-		Fields:      r.Fields,
-		Payload:     r.Payload,
-	}
-}
-
 func buildDiagRecord(kind, event string, fields map[string]any, payload any, occurredAt int64) diagFileRecord {
 	if occurredAt <= 0 {
 		occurredAt = time.Now().UnixNano()

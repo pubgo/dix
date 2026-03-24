@@ -1943,24 +1943,6 @@
                     return depth;
                 },
 
-                normalizeTraceDepth() {
-                    const depth = this.parseTraceDepthValue();
-                    this.traceDepth = String(depth);
-                    return depth;
-                },
-
-                increaseTraceDepth() {
-                    const depth = this.normalizeTraceDepth();
-                    const next = Math.min(depth + 1, 256);
-                    this.traceDepth = String(next);
-                },
-
-                decreaseTraceDepth() {
-                    const depth = this.normalizeTraceDepth();
-                    const next = Math.max(depth - 1, 0);
-                    this.traceDepth = String(next);
-                },
-
                 traceProviderLabel(item) {
                     if (!item || typeof item !== 'object') {
                         return '';
@@ -2373,20 +2355,6 @@
                     const depth = this.parseDepthValue(defaultDepth);
                     this.currentDepth = String(depth);
                     return depth;
-                },
-
-                increaseDepth() {
-                    const depth = this.normalizeCurrentDepth(2);
-                    const next = Math.min(depth + 1, 128);
-                    this.currentDepth = String(next);
-                    this.onDepthChange();
-                },
-
-                decreaseDepth() {
-                    const depth = this.normalizeCurrentDepth(2);
-                    const next = Math.max(depth - 1, 0);
-                    this.currentDepth = String(next);
-                    this.onDepthChange();
                 },
 
                 rerenderCurrentGraph() {
