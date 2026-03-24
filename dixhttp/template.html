@@ -1602,14 +1602,66 @@
 
                         g.spanErrorCount = allSpanRows.filter((row) => String(row.status || '').toLowerCase() === 'error' || String(row.error || '').trim()).length;
                         g.hasSpanError = g.spanErrorCount > 0;
-                        g.spanRows = allSpanRows;
-
+                        let effectiveSpanRows = allSpanRows;
                         if (this.traceOnlyErrorSpan) {
-                            g.spanRows = g.spanRows.filter((row) => row.status === 'error');
+                            effectiveSpanRows = effectiveSpanRows.filter((row) => row.status === 'error');
                         }
 
-                        // 保持链路内部按发生时间，避免打散树形阅读顺序
-                        g.spanRows.sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
+                        // 非树形：按时间排序
+                        g.spanRows = [...effectiveSpanRows].sort((a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0));
+
+                        // 树形：按父子关系前序遍历，保证展示顺序是“树状”而不是“时间流”
+                        const rowBySpanID = new Map();
+                        effectiveSpanRows.forEach((row) => {
+                            const sid = String(row.span_id || '').trim();
+                            if (!sid) return;
+                            rowBySpanID.set(sid, row);
+                        });
+
+                        const childrenByParent = new Map();
+                        const roots = [];
+                        effectiveSpanRows.forEach((row) => {
+                            const sid = String(row.span_id || '').trim();
+                            if (!sid) return;
+
+                            const parentSid = String(row.parent_span_id || '').trim();
+                            if (parentSid && rowBySpanID.has(parentSid)) {
+                                if (!childrenByParent.has(parentSid)) {
+                                    childrenByParent.set(parentSid, []);
+                                }
+                                childrenByParent.get(parentSid).push(row);
+                            } else {
+                                roots.push(row);
+                            }
+                        });
+
+                        const byOccurredAt = (a, b) => Number(a.occurred_at_unix_nano || 0) - Number(b.occurred_at_unix_nano || 0);
+                        roots.sort(byOccurredAt);
+                        for (const list of childrenByParent.values()) {
+                            list.sort(byOccurredAt);
+                        }
+
+                        const treeOrdered = [];
+                        const visited = new Set();
+                        const walk = (node) => {
+                            const sid = String((node && node.span_id) || '').trim();
+                            if (!sid || visited.has(sid)) {
+                                return;
+                            }
+                            visited.add(sid);
+                            treeOrdered.push(node);
+                            const children = childrenByParent.get(sid) || [];
+                            children.forEach(walk);
+                        };
+                        roots.forEach(walk);
+                        // 兜底：处理异常数据导致的孤立节点
+                        effectiveSpanRows.forEach((row) => {
+                            const sid = String(row.span_id || '').trim();
+                            if (sid && !visited.has(sid)) {
+                                walk(row);
+                            }
+                        });
+                        g.spanRowsTreeOrdered = treeOrdered;
 
                         const isCollapsed = (traceId, sid) => !!this.traceCollapsedSpanKeys[this.traceSpanKey(traceId, sid)];
                         const hasCollapsedAncestor = (traceId, sid, includeSelf) => {
@@ -1641,7 +1693,7 @@
                             return true;
                         });
 
-                        g.visibleSpanRows = g.spanRows.filter((rec) => {
+                        g.visibleSpanRows = g.spanRowsTreeOrdered.filter((rec) => {
                             const sid = String(rec.span_id || '').trim();
                             const parentSid = String(rec.parent_span_id || '').trim();
                             if (sid) {
@@ -1658,6 +1710,7 @@
                             g.treeRows = g.treeRows.filter((row) => Number(row._depth || 0) <= depthLimit);
                             g.visibleTreeRows = g.visibleTreeRows.filter((row) => Number(row._depth || 0) <= depthLimit);
                             g.spanRows = g.spanRows.filter((row) => Number(row._depth || 0) <= depthLimit);
+                            g.spanRowsTreeOrdered = g.spanRowsTreeOrdered.filter((row) => Number(row._depth || 0) <= depthLimit);
                             g.visibleSpanRows = g.visibleSpanRows.filter((row) => Number(row._depth || 0) <= depthLimit);
                             g.records = g.treeRows;
                         }
