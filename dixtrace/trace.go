@@ -15,6 +15,7 @@ import (
 
 const (
 	traceFileEnv = "DIX_TRACE_FILE"
+	diagFileEnv  = "DIX_DIAG_FILE"
 )
 
 // Event 是统一 trace 事件结构。
@@ -308,9 +309,10 @@ func (m *MemorySink) Query(q Query) ReadResult {
 }
 
 type FileSink struct {
-	mu   sync.Mutex
-	path string
-	f    *os.File
+	mu         sync.Mutex
+	path       string
+	appendOnly bool
+	f          *os.File
 }
 
 func NewFileSink(path string) *FileSink {
@@ -319,6 +321,14 @@ func NewFileSink(path string) *FileSink {
 		return nil
 	}
 	return &FileSink{path: path}
+}
+
+func newAppendFileSink(path string) *FileSink {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	return &FileSink{path: path, appendOnly: true}
 }
 
 func (f *FileSink) ensureFile() *os.File {
@@ -332,12 +342,32 @@ func (f *FileSink) ensureFile() *os.File {
 	if dir != "." && dir != "" {
 		_ = os.MkdirAll(dir, 0o755)
 	}
-	fd, err := os.OpenFile(f.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	flags := os.O_CREATE | os.O_WRONLY
+	if f.appendOnly {
+		flags |= os.O_APPEND
+	} else {
+		flags |= os.O_TRUNC
+	}
+	fd, err := os.OpenFile(f.path, flags, 0o644)
 	if err != nil {
 		return nil
 	}
 	f.f = fd
 	return f.f
+}
+
+func resolveTraceFilePathFromEnv() (path string, appendOnly bool) {
+	tracePath := strings.TrimSpace(os.Getenv(traceFileEnv))
+	if tracePath != "" {
+		return tracePath, false
+	}
+
+	diagPath := strings.TrimSpace(os.Getenv(diagFileEnv))
+	if diagPath != "" {
+		return diagPath, true
+	}
+
+	return "", false
 }
 
 func (f *FileSink) Write(e Event) {
@@ -451,7 +481,19 @@ var (
 )
 
 func init() {
-	if fs := NewFileSink(os.Getenv(traceFileEnv)); fs != nil {
+	path, appendOnly := resolveTraceFilePathFromEnv()
+	if path == "" {
+		return
+	}
+
+	var fs *FileSink
+	if appendOnly {
+		fs = newAppendFileSink(path)
+	} else {
+		fs = NewFileSink(path)
+	}
+
+	if fs != nil {
 		defaultTracer.sinks = append(defaultTracer.sinks, fs)
 	}
 }

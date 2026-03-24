@@ -176,9 +176,10 @@ export DIX_TRACE_DI=true
 - 默认：开启（内存环形缓冲）
 - 可选文件落盘环境变量：`DIX_TRACE_FILE`
 - 示例：`export DIX_TRACE_FILE=.local/dix-trace.jsonl`
+- 兼容回退：当未配置 `DIX_TRACE_FILE` 且已配置 `DIX_DIAG_FILE` 时，trace 文件落盘会复用 `DIX_DIAG_FILE`（追加写入模式）。
 
 `/api/trace` 适合在线排障（按 `operation/status/event/component/provider/output_type` 等过滤）。
-如需长期持久化，请同时配置 `DIX_TRACE_FILE`。
+如需独立的 trace 专用文件，请显式配置 `DIX_TRACE_FILE`。
 
 事件速查：
 

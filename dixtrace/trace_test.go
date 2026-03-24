@@ -158,3 +158,51 @@ func TestFileSinkAlwaysTruncatesExistingFile(t *testing.T) {
 		t.Fatalf("expected existing content to be truncated, got: %q", string(b))
 	}
 }
+
+func TestAppendFileSinkKeepsExistingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "diag.jsonl")
+	if err := os.WriteFile(path, []byte("seed\n"), 0o644); err != nil {
+		t.Fatalf("failed to seed diag file: %v", err)
+	}
+
+	sink := newAppendFileSink(path)
+	sink.Write(Event{ID: 1, OccurredAt: 1, Event: "span.start"})
+
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("failed to read diag file: %v", err)
+	}
+	content := string(b)
+	if !strings.Contains(content, "seed\n") {
+		t.Fatalf("expected existing content to be kept, got: %q", content)
+	}
+	if !strings.Contains(content, "\"event\":\"span.start\"") {
+		t.Fatalf("expected appended span event, got: %q", content)
+	}
+}
+
+func TestResolveTraceFilePathFromEnvPreferTrace(t *testing.T) {
+	t.Setenv("DIX_TRACE_FILE", "trace.jsonl")
+	t.Setenv("DIX_DIAG_FILE", "diag.jsonl")
+
+	path, appendOnly := resolveTraceFilePathFromEnv()
+	if path != "trace.jsonl" {
+		t.Fatalf("expected trace path, got %q", path)
+	}
+	if appendOnly {
+		t.Fatalf("expected truncate mode for explicit trace file")
+	}
+}
+
+func TestResolveTraceFilePathFromEnvFallbackDiag(t *testing.T) {
+	t.Setenv("DIX_TRACE_FILE", "")
+	t.Setenv("DIX_DIAG_FILE", "diag.jsonl")
+
+	path, appendOnly := resolveTraceFilePathFromEnv()
+	if path != "diag.jsonl" {
+		t.Fatalf("expected diag fallback path, got %q", path)
+	}
+	if !appendOnly {
+		t.Fatalf("expected append mode for diag fallback")
+	}
+}

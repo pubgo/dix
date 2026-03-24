@@ -17,7 +17,7 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
 - ⏱️ **Startup Runtime Stats** - Show all providers' startup durations (total/avg/last, call count), with executed-only filter (`call_count > 0`)
 - 🗂 **Diagnostic File Query** - When `DIX_DIAG_FILE` is set, UI can query and display `trace/error/llm` JSONL records for troubleshooting
-- 🧵 **Trace Timeline Query** - Query unified in-memory trace events from `dixtrace` via `/api/trace` (with rich filters)
+- 🧵 **Trace Timeline Query** - Query unified in-memory trace events from `dixtrace` via `/api/trace` (with rich filters); for file persistence, `DIX_TRACE_FILE` is preferred, and falls back to `DIX_DIAG_FILE` when unset
 - 📡 **RESTful API** - Provide JSON format dependency data
 - 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
@@ -323,6 +323,11 @@ If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty record
 
 ### GET `/api/trace?operation=provider&status=error&limit=200`
 Returns in-memory unified trace events from `dixtrace`.
+
+File sink behavior:
+
+- Prefer `DIX_TRACE_FILE` when configured.
+- If `DIX_TRACE_FILE` is unset and `DIX_DIAG_FILE` is set, trace file sink reuses `DIX_DIAG_FILE` in append mode (single-file troubleshooting setup).
 
 Supported filters:
 

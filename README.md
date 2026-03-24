@@ -176,9 +176,10 @@ Starting from this version, dix also emits unified trace events into an in-memor
 - Default: enabled (in-memory ring buffer)
 - Optional file sink env var: `DIX_TRACE_FILE`
 - Example: `export DIX_TRACE_FILE=.local/dix-trace.jsonl`
+- Compatibility fallback: when `DIX_TRACE_FILE` is not set and `DIX_DIAG_FILE` is set, trace file sink will reuse `DIX_DIAG_FILE` in append mode.
 
 `/api/trace` is optimized for online troubleshooting (filter by `operation/status/event/component/provider/output_type`).
-If you need long-term persistence, combine it with `DIX_TRACE_FILE`.
+If you need separate trace-only file persistence, set `DIX_TRACE_FILE` explicitly.
 
 Quick event dictionary:
 

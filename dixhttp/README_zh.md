@@ -16,7 +16,7 @@
 - 🔎 **前缀过滤** - 只显示匹配前缀的节点/Provider
 - 🧭 **组内子图** - 查看组内及上下游依赖
 - 🗂 **诊断文件查询** - 配置 `DIX_DIAG_FILE` 后，页面可查询并展示 `trace/error/llm` JSONL 记录
-- 🧵 **Trace 时间线查询** - 通过 `/api/trace` 查询 `dixtrace` 内存统一事件（支持多维过滤）
+- 🧵 **Trace 时间线查询** - 通过 `/api/trace` 查询 `dixtrace` 内存统一事件（支持多维过滤）；文件持久化优先使用 `DIX_TRACE_FILE`，未配置时回退复用 `DIX_DIAG_FILE`
 - 📡 **RESTful API** - 提供 JSON 格式的依赖关系数据
 - 🧩 **Mermaid 预览/导出** - 将当前图生成 Mermaid 流程图（支持分组/过滤）
 
@@ -338,6 +338,11 @@ dixhttp.RegisterGroupRules(
 
 ### GET `/api/trace?operation=provider&status=error&limit=200`
 返回来自 `dixtrace` 的内存统一 trace 事件。
+
+文件落盘行为：
+
+- 优先使用 `DIX_TRACE_FILE`（若已配置）。
+- 当未配置 `DIX_TRACE_FILE` 且已配置 `DIX_DIAG_FILE` 时，trace 文件落盘会以追加模式复用 `DIX_DIAG_FILE`（单文件排查配置）。
 
 支持过滤参数：
 
