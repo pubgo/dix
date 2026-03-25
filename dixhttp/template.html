@@ -413,9 +413,14 @@
                             </div>
                             <div class="mb-5">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">输出类型</h4>
-                                <div @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
-                                    class="text-sm text-primary-600 break-all leading-relaxed cursor-pointer hover:underline"
-                                    x-text="selectedNode.data.output_type"></div>
+                                <div class="space-y-1">
+                                    <template x-for="outType in providerOutputTypes(selectedNode.data)"
+                                        :key="`detail-out-${outType}`">
+                                        <div @click="showDependencyGraph(outType, 'type')"
+                                            class="text-sm text-primary-600 break-all leading-relaxed cursor-pointer hover:underline"
+                                            x-text="outType"></div>
+                                    </template>
+                                </div>
                             </div>
                             <div class="mb-5" x-show="selectedNode.data.function_pkg">
                                 <h4 class="text-xs font-semibold text-gray-400 uppercase mb-2">函数包路径</h4>
@@ -474,7 +479,7 @@
                                     </div>
                                 </div>
                             </template>
-                            <button @click="showDependencyGraph(selectedNode.data.output_type, 'type')"
+                            <button @click="showDependencyGraph(primaryOutputType(selectedNode.data), 'type')"
                                 class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>🔍</span> 查看依赖关系图
                             </button>
@@ -597,8 +602,12 @@
                                 <div class="text-xs font-semibold text-gray-700 uppercase mb-2">节点信息</div>
                                 <div class="text-sm text-gray-900 break-all"
                                     x-text="providerModalNode.data.function_name || ''"></div>
-                                <div class="text-xs text-gray-700 mt-1 break-all"
-                                    x-text="providerModalNode.data.output_type || ''"></div>
+                                <div class="mt-1 space-y-1">
+                                    <template x-for="(outType, outIdx) in providerOutputTypes(providerModalNode.data)"
+                                        :key="`modal-out-${outIdx}-${outType}`">
+                                        <div class="text-xs text-gray-700 break-all" x-text="outType"></div>
+                                    </template>
+                                </div>
                                 <div class="text-xs text-gray-700 mt-1 break-all"
                                     x-show="providerModalNode.data.function_pkg"
                                     x-text="`函数包: ${providerModalNode.data.function_pkg}`"></div>
@@ -2403,9 +2412,11 @@
                     // Search in providers
                     this.allData.providers.forEach(provider => {
                         const fnName = provider.function_name || '';
-                        const outputType = provider.output_type || '';
+                        const outputTypes = this.providerOutputTypes(provider);
+                        const outputType = outputTypes[0] || '';
+                        const outputsText = outputTypes.join(' | ');
 
-                        if (fnName.toLowerCase().includes(query) || outputType.toLowerCase().includes(query)) {
+                        if (fnName.toLowerCase().includes(query) || outputsText.toLowerCase().includes(query)) {
                             if (!seen.has(provider.id)) {
                                 seen.add(provider.id);
                                 results.push({
@@ -2433,17 +2444,20 @@
                             }
                         });
 
-                        // Search output type
-                        if (outputType.toLowerCase().includes(query) && !seen.has(outputType)) {
-                            seen.add(outputType);
+                        // Search output types
+                        outputTypes.forEach(outType => {
+                            if (!outType || !outType.toLowerCase().includes(query) || seen.has(outType)) {
+                                return;
+                            }
+                            seen.add(outType);
                             results.push({
-                                id: outputType,
+                                id: outType,
                                 type: 'type',
-                                label: this.formatTypeName(outputType),
-                                fullName: outputType,
-                                data: { type: 'type', fullType: outputType }
+                                label: this.formatTypeName(outType),
+                                fullName: outType,
+                                data: { type: 'type', fullType: outType }
                             });
-                        }
+                        });
                     });
 
                     // Limit results
@@ -2459,7 +2473,10 @@
                         this.showDependencyGraph(result.fullName, 'type');
                     } else if (result.type === 'provider') {
                         // Provider：以其输出类型为中心显示依赖图
-                        this.showDependencyGraph(result.outputType, 'type');
+                        const outputType = this.primaryOutputType(result.data || {}) || result.outputType;
+                        if (outputType) {
+                            this.showDependencyGraph(outputType, 'type');
+                        }
                         this.selectedNode = { data: result.data };
                     }
                 },
@@ -2489,13 +2506,13 @@
                     const typeToConsumers = new Map(); // inputType -> providers that use it
 
                     this.allData.providers.forEach(provider => {
-                        const outputType = provider.output_type;
-                        if (outputType) {
+                        const outputTypes = this.providerOutputTypes(provider);
+                        outputTypes.forEach(outputType => {
                             if (!typeToProviders.has(outputType)) {
                                 typeToProviders.set(outputType, []);
                             }
                             typeToProviders.get(outputType).push(provider);
-                        }
+                        });
 
                         (provider.input_types || []).forEach(inputType => {
                             if (!typeToConsumers.has(inputType)) {
@@ -2549,10 +2566,11 @@
                             // 找到使用这个类型作为输入的 providers，获取它们的输出类型
                             const consumers = typeToConsumers.get(type) || [];
                             consumers.forEach(p => {
-                                const outputType = p.output_type;
-                                if (outputType && !visited.has(outputType)) {
-                                    queue.push({ type: outputType, level: level + 1 });
-                                }
+                                this.providerOutputTypes(p).forEach(outputType => {
+                                    if (outputType && !visited.has(outputType)) {
+                                        queue.push({ type: outputType, level: level + 1 });
+                                    }
+                                });
                             });
                         }
                         return result;
@@ -2678,7 +2696,7 @@
                         this.allData.providers.forEach((provider) => {
                             const providerNodeId = provider.id;
                             const fnName = this.providerNodeLabel(provider);
-                            const outputType = this.formatTypeName(provider.output_type);
+                            const outputTypes = this.providerOutputTypes(provider);
 
                             // Provider node
                             if (!nodeMap.has(providerNodeId)) {
@@ -2694,26 +2712,27 @@
                                 nodeMap.set(providerNodeId, true);
                             }
 
-                            // Output type node
-                            if (!nodeMap.has(provider.output_type)) {
-                                nodes.push({
-                                    id: provider.output_type,
-                                    label: outputType,
-                                    title: '类型: ' + provider.output_type,
-                                    color: { background: '#bfdbfe', border: '#3b82f6' },
-                                    shape: 'ellipse',
-                                    font: { size: 10 },
-                                    data: { type: 'type', fullType: provider.output_type, packagePath: typePkgMap.get(provider.output_type) || provider.output_pkg || '' }
-                                });
-                                nodeMap.set(provider.output_type, true);
-                            }
+                            // Output type nodes + Provider -> Output edges
+                            outputTypes.forEach((outType) => {
+                                if (!nodeMap.has(outType)) {
+                                    nodes.push({
+                                        id: outType,
+                                        label: this.formatTypeName(outType),
+                                        title: '类型: ' + outType,
+                                        color: { background: '#bfdbfe', border: '#3b82f6' },
+                                        shape: 'ellipse',
+                                        font: { size: 10 },
+                                        data: { type: 'type', fullType: outType, packagePath: typePkgMap.get(outType) || provider.output_pkg || '' }
+                                    });
+                                    nodeMap.set(outType, true);
+                                }
 
-                            // Provider -> Output edge
-                            edges.push({
-                                from: providerNodeId,
-                                to: provider.output_type,
-                                arrows: 'to',
-                                color: { color: '#22c55e' }
+                                edges.push({
+                                    from: providerNodeId,
+                                    to: outType,
+                                    arrows: 'to',
+                                    color: { color: '#22c55e' }
+                                });
                             });
 
                             // Input types
@@ -2990,25 +3009,26 @@
                             nodeMap.set(providerNodeId, true);
                         }
 
-                        const outputType = provider.output_type;
-                        if (!nodeMap.has(outputType)) {
-                            nodes.push({
-                                id: outputType,
-                                label: this.formatTypeName(outputType),
-                                title: '类型: ' + outputType,
-                                color: { background: '#bfdbfe', border: '#3b82f6' },
-                                shape: 'ellipse',
-                                font: { size: 10 },
-                                data: { type: 'type', fullType: outputType, packagePath: typePkgMap.get(outputType) || provider.output_pkg || '' }
-                            });
-                            nodeMap.set(outputType, true);
-                        }
+                        this.providerOutputTypes(provider).forEach((outType) => {
+                            if (!nodeMap.has(outType)) {
+                                nodes.push({
+                                    id: outType,
+                                    label: this.formatTypeName(outType),
+                                    title: '类型: ' + outType,
+                                    color: { background: '#bfdbfe', border: '#3b82f6' },
+                                    shape: 'ellipse',
+                                    font: { size: 10 },
+                                    data: { type: 'type', fullType: outType, packagePath: typePkgMap.get(outType) || provider.output_pkg || '' }
+                                });
+                                nodeMap.set(outType, true);
+                            }
 
-                        edges.push({
-                            from: providerNodeId,
-                            to: outputType,
-                            arrows: 'to',
-                            color: { color: '#22c55e' }
+                            edges.push({
+                                from: providerNodeId,
+                                to: outType,
+                                arrows: 'to',
+                                color: { color: '#22c55e' }
+                            });
                         });
 
                         (provider.input_types || []).forEach(inputType => {
@@ -3116,6 +3136,25 @@
                         name = '...' + name.slice(-32);
                     }
                     return name;
+                },
+
+                providerOutputTypes(provider) {
+                    if (!provider || typeof provider !== 'object') {
+                        return [];
+                    }
+                    const fromList = Array.isArray(provider.output_types)
+                        ? provider.output_types.map(v => String(v || '').trim()).filter(v => v.length > 0)
+                        : [];
+                    if (fromList.length > 0) {
+                        return fromList;
+                    }
+                    const fallback = String(provider.output_type || '').trim();
+                    return fallback ? [fallback] : [];
+                },
+
+                primaryOutputType(provider) {
+                    const list = this.providerOutputTypes(provider);
+                    return list.length > 0 ? list[0] : '';
                 },
 
                 formatDurationNs(v) {
@@ -3229,6 +3268,8 @@
                 findProviderByRuntimeStat(stat) {
                     return (this.allData?.providers || []).find(p =>
                         p.function_name === stat.function_name && p.output_type === stat.output_type
+                    ) || (this.allData?.providers || []).find(p =>
+                        p.function_name === stat.function_name && this.providerOutputTypes(p).includes(stat.output_type)
                     ) || (this.allData?.providers || []).find(p => p.function_name === stat.function_name) || null;
                 },
 
@@ -3290,7 +3331,15 @@
 
                 buildProviderTooltip(provider) {
                     let tip = '函数: ' + provider.function_name + '\n';
-                    tip += '输出: ' + provider.output_type + '\n';
+                    const outputTypes = this.providerOutputTypes(provider);
+                    if (outputTypes.length <= 1) {
+                        tip += '输出: ' + (outputTypes[0] || '-') + '\n';
+                    } else {
+                        tip += `输出(${outputTypes.length}):\n`;
+                        outputTypes.forEach((t, i) => {
+                            tip += '  ' + (i + 1) + '. ' + t + '\n';
+                        });
+                    }
                     if (provider.input_types && provider.input_types.length > 0) {
                         tip += '输入:\n';
                         provider.input_types.forEach((t, i) => {

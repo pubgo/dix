@@ -12,10 +12,12 @@ import (
 	"github.com/pubgo/dix/v2/dixinternal"
 )
 
-type runtimeStatsDep struct{}
-type basePathTypeDep interface {
-	Name() string
-}
+type (
+	runtimeStatsDep struct{}
+	basePathTypeDep interface {
+		Name() string
+	}
+)
 
 type basePathTypeDepImpl struct{}
 
@@ -279,5 +281,55 @@ func TestWriteJSONEncodeFailureReturns500(t *testing.T) {
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Fatalf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+}
+
+func TestHandleDependenciesAggregatesProviderOutputs(t *testing.T) {
+	type depA struct{}
+	type depB struct{}
+	type depOut struct {
+		A *depA
+		B *depB
+	}
+
+	di := dixinternal.New()
+	di.Provide(func() depOut {
+		return depOut{A: &depA{}, B: &depB{}}
+	})
+
+	server := NewServer(di)
+	req := httptest.NewRequest(http.MethodGet, "/api/dependencies", nil)
+	rr := httptest.NewRecorder()
+
+	server.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp DependencyData
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	var target *ProviderInfo
+	for i := range resp.Providers {
+		p := &resp.Providers[i]
+		if len(p.OutputTypes) >= 2 {
+			target = p
+			break
+		}
+	}
+
+	if target == nil {
+		t.Fatalf("expected aggregated provider with >=2 output types, got %+v", resp.Providers)
+	}
+
+	if len(target.OutputTypes) != 2 {
+		t.Fatalf("expected 2 output types from aggregated provider, got %+v", target.OutputTypes)
+	}
+
+	if target.FunctionName == "" {
+		t.Fatalf("expected function_name on aggregated provider, got %+v", target)
 	}
 }

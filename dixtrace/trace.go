@@ -149,7 +149,6 @@ func (s *Span) End(err error, args ...any) {
 		OccurredAt:   time.Now().UnixNano(),
 		Attrs:        attrs,
 	})
-
 }
 
 func nextTraceID() string {

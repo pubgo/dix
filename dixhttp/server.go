@@ -534,48 +534,23 @@ func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyD
 		Edges:     []EdgeInfo{},
 	}
 
-	// Extract provider information using the public API
 	providerDetails := s.dix.GetProviderDetails()
+	data.Providers = aggregateProviderInfos(providerDetails, pkgFilter, limit)
 
-	count := 0
-	for i, detail := range providerDetails {
-		// Apply package filter if specified
-		if pkgFilter != "" {
-			pkg := extractPackage(detail.OutputType)
-			if pkg != pkgFilter {
-				continue
+	for _, provider := range data.Providers {
+		outputTypes := provider.OutputTypes
+		if len(outputTypes) == 0 && provider.OutputType != "" {
+			outputTypes = []string{provider.OutputType}
+		}
+		for _, outputType := range outputTypes {
+			for _, inputTypeStr := range provider.InputTypes {
+				data.Edges = append(data.Edges, EdgeInfo{
+					From: inputTypeStr,
+					To:   outputType,
+					Type: "provider",
+				})
 			}
 		}
-
-		// Apply limit
-		if limit > 0 && count >= limit {
-			break
-		}
-		count++
-
-		providerID := fmt.Sprintf("provider_%s_%d", detail.OutputType, i)
-		providerInfo := ProviderInfo{
-			ID:           providerID,
-			OutputType:   detail.OutputType,
-			OutputPkg:    detail.OutputPkg,
-			FunctionName: detail.FunctionName,
-			FunctionPkg:  detail.FunctionPkg,
-			FunctionFile: detail.FunctionFile,
-			FunctionLine: detail.FunctionLine,
-			InputTypes:   detail.InputTypes,
-			InputPkgs:    detail.InputPkgs,
-		}
-
-		// Add edges from input types to provider output
-		for _, inputTypeStr := range detail.InputTypes {
-			data.Edges = append(data.Edges, EdgeInfo{
-				From: inputTypeStr,
-				To:   detail.OutputType,
-				Type: "provider",
-			})
-		}
-
-		data.Providers = append(data.Providers, providerInfo)
 	}
 
 	// Extract object information using the public API
@@ -614,6 +589,96 @@ func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyD
 	}
 
 	return data
+}
+
+func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter string, limit int) []ProviderInfo {
+	type providerBucket struct {
+		provider   ProviderInfo
+		outputSeen map[string]bool
+		inputSeen  map[string]bool
+	}
+
+	buckets := make(map[string]*providerBucket)
+	order := make([]string, 0, len(details))
+
+	for _, detail := range details {
+		if pkgFilter != "" {
+			pkg := extractPackage(detail.OutputType)
+			if pkg != pkgFilter {
+				continue
+			}
+		}
+
+		key := providerAggregateKey(detail)
+		bucket, exists := buckets[key]
+		if !exists {
+			bucket = &providerBucket{
+				provider: ProviderInfo{
+					ID:           "provider_" + key,
+					OutputType:   detail.OutputType,
+					OutputPkg:    detail.OutputPkg,
+					FunctionName: detail.FunctionName,
+					FunctionPkg:  detail.FunctionPkg,
+					FunctionFile: detail.FunctionFile,
+					FunctionLine: detail.FunctionLine,
+					OutputTypes:  make([]string, 0, 4),
+					InputTypes:   make([]string, 0, 8),
+					InputPkgs:    make([]string, 0, 8),
+				},
+				outputSeen: make(map[string]bool),
+				inputSeen:  make(map[string]bool),
+			}
+			buckets[key] = bucket
+			order = append(order, key)
+		}
+
+		if out := strings.TrimSpace(detail.OutputType); out != "" && !bucket.outputSeen[out] {
+			bucket.outputSeen[out] = true
+			bucket.provider.OutputTypes = append(bucket.provider.OutputTypes, out)
+			if bucket.provider.OutputType == "" {
+				bucket.provider.OutputType = out
+			}
+		}
+
+		for i, in := range detail.InputTypes {
+			in = strings.TrimSpace(in)
+			if in == "" || bucket.inputSeen[in] {
+				continue
+			}
+			bucket.inputSeen[in] = true
+			bucket.provider.InputTypes = append(bucket.provider.InputTypes, in)
+
+			pkg := ""
+			if i < len(detail.InputPkgs) {
+				pkg = strings.TrimSpace(detail.InputPkgs[i])
+			}
+			bucket.provider.InputPkgs = append(bucket.provider.InputPkgs, pkg)
+		}
+	}
+
+	providers := make([]ProviderInfo, 0, len(order))
+	for _, key := range order {
+		providers = append(providers, buckets[key].provider)
+	}
+
+	if limit > 0 && len(providers) > limit {
+		providers = providers[:limit]
+	}
+
+	return providers
+}
+
+func providerAggregateKey(detail dixinternal.ProviderDetails) string {
+	if detail.FunctionFile != "" && detail.FunctionLine > 0 {
+		return fmt.Sprintf("%s:%d", detail.FunctionFile, detail.FunctionLine)
+	}
+	if detail.FunctionName != "" {
+		return detail.FunctionName
+	}
+	if detail.OutputType != "" {
+		return detail.OutputType
+	}
+	return "unknown"
 }
 
 // Data types
@@ -667,6 +732,7 @@ type DependencyData struct {
 type ProviderInfo struct {
 	ID           string   `json:"id"`
 	OutputType   string   `json:"output_type"`
+	OutputTypes  []string `json:"output_types,omitempty"`
 	OutputPkg    string   `json:"output_pkg"`
 	FunctionName string   `json:"function_name"`
 	FunctionPkg  string   `json:"function_pkg"`

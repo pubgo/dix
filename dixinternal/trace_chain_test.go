@@ -541,7 +541,7 @@ func TestResolveProviderSpanContainsProviderFunctionSignature(t *testing.T) {
 func TestResolveProviderSpanContainsProviderFunctionListForMultiProviders(t *testing.T) {
 	dixtrace.ResetForTest()
 
-	type multiProviderSvc interface{}
+	type multiProviderSvc any
 	type implA struct{}
 	type implB struct{}
 
