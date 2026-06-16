@@ -117,6 +117,7 @@ if err := dix.TryInject(di, Run); err != nil {
 | `Inject(di, target)` | yes | Inject into a function or struct |
 | `TryInject(di, target)` | no | Inject, returns `error` |
 | `InjectT[T](di)` | yes | Allocate a struct and inject exported fields |
+| `InjectTContext[T](ctx, di)` | yes | Allocate a struct and inject with trace context |
 | `InjectContext` / `TryInjectContext` | yes / no | Inject with trace context propagation |
 | `Version()` | — | Return embedded version string |
 

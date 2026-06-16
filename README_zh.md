@@ -117,6 +117,7 @@ if err := dix.TryInject(di, Run); err != nil {
 | `Inject(di, target)` | 是 | 向函数或结构体注入依赖 |
 | `TryInject(di, target)` | 否 | 注入依赖，返回 `error` |
 | `InjectT[T](di)` | 是 | 分配结构体并注入字段 |
+| `InjectTContext[T](ctx, di)` | 是 | 分配结构体并进行带 trace 上下文注入 |
 | `InjectContext` / `TryInjectContext` | 是 / 否 | 带 trace 上下文传播注入 |
 | `Version()` | — | 返回内嵌版本号 |
 

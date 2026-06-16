@@ -22,12 +22,20 @@ func TestProvideAndInject(t *testing.T) {
 }
 
 func TestInjectT(t *testing.T) {
-	type app struct {
-		Dep *testGlobalDep
+	type injectTDep struct {
+		Value string
 	}
 
+	type app struct {
+		Dep *injectTDep
+	}
+
+	Provide(func() *injectTDep {
+		return &injectTDep{Value: "ok"}
+	})
+
 	got := InjectT[app]()
-	if got.Dep == nil {
+	if got.Dep == nil || got.Dep.Value != "ok" {
 		t.Fatal("InjectT should populate struct fields")
 	}
 }
