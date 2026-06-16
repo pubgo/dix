@@ -1,59 +1,52 @@
+// Struct injection: fill struct fields (including nested structs).
+//
+// Run:
+//
+//	cd example/struct-in && go run .
 package main
 
 import (
 	"fmt"
 
 	"github.com/pubgo/dix/v2"
-	"github.com/pubgo/dix/v2/dixglobal"
 )
 
-type a struct {
-	b
-	B b
+type Config struct {
+	DSN string
 }
 
-type b struct {
-	C *c
+type Database struct {
+	Config *Config
 }
 
-type c struct {
-	C string
+type Metadata struct {
+	Version string
+}
+
+type App struct {
+	DB       *Database
+	Metadata *Metadata
 }
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New()
 
-	dixglobal.Provide(func() *c {
-		return &c{C: "hello"}
+	dix.Provide(di, func() *Config {
+		return &Config{DSN: "postgres://localhost/app"}
 	})
 
-	arg := dixglobal.Inject(new(a))
-	if arg.C.C != "hello" {
-		panic("not match")
-	}
-	fmt.Println(arg.C.C)
-	fmt.Println(arg.B.C.C)
-
-	dixglobal.Provide(func(a a1, di *dix.Dix, dd map[string][]*dix.Dix) *a2 {
-		fmt.Println(dd)
-		return &a2{Hello: "a2", di: di}
+	dix.Provide(di, func(cfg *Config) *Database {
+		return &Database{Config: cfg}
 	})
 
-	dixglobal.Inject(func(a *a2) {
-		fmt.Println(a.Hello)
-		fmt.Println(a.di.Option())
+	dix.Provide(di, func() *Metadata {
+		return &Metadata{Version: "v1"}
 	})
-}
 
-type a1 struct {
-	b
-}
+	// Inject into a struct pointer: nested pointer fields are resolved recursively.
+	app := &App{}
+	dix.Inject(di, app)
 
-type a2 struct {
-	Hello string
-	di    *dix.Dix
+	fmt.Println("app.DB.Config.DSN =", app.DB.Config.DSN)
+	fmt.Println("app.Metadata.Version =", app.Metadata.Version)
 }

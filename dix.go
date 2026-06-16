@@ -78,3 +78,13 @@ func InjectTContext[T any](ctx context.Context, di *Dix, opts ...Option) T {
 }
 
 func Provide(di *Dix, data any) { di.Provide(data) }
+
+func TryProvide(di *Dix, data any) error { return di.TryProvide(data) }
+
+func TryInject(di *Dix, data any, opts ...Option) error {
+	return di.TryInject(data, opts...)
+}
+
+func TryInjectContext(ctx context.Context, di *Dix, data any, opts ...Option) error {
+	return di.TryInjectContext(ctx, data, opts...)
+}

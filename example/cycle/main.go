@@ -1,36 +1,36 @@
+// Cycle detection: dix rejects circular dependencies before injection.
+//
+// Run:
+//
+//	cd example/cycle && go run .
 package main
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
+)
+
+type (
+	ServiceA struct{}
+	ServiceB struct{}
+	ServiceC struct{}
 )
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New()
 
-	type (
-		A struct{}
+	// A -> B -> C -> A (cycle)
+	dix.Provide(di, func(*ServiceB) *ServiceA { return &ServiceA{} })
+	dix.Provide(di, func(*ServiceC) *ServiceB { return &ServiceB{} })
+	dix.Provide(di, func(*ServiceA) *ServiceC { return &ServiceC{} })
 
-		B struct{}
+	// Prefer TryInject in production to avoid panic.
+	if err := dix.TryInject(di, func(*ServiceC) {}); err != nil {
+		log.Println("cycle detected:", err)
+		return
+	}
 
-		C struct{}
-	)
-
-	dixglobal.Provide(func(*B) *A {
-		return new(A)
-	})
-
-	dixglobal.Provide(func(*C) *B {
-		return new(B)
-	})
-
-	dixglobal.Provide(func(*A) *C {
-		return new(C)
-	})
-	dixglobal.Inject(func(*C) {})
+	fmt.Println("unexpected: cycle was not detected")
 }

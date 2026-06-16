@@ -9,6 +9,28 @@ Inspired by [uber-go/dig](https://github.com/uber-go/dig), with support for adva
 
 [中文文档](./README_zh.md)
 
+## Table of Contents
+
+- [When to use dix](#when-to-use-dix)
+- [Features](#-features)
+- [Installation](#-installation)
+- [Quick Start](#-quick-start)
+- [Core API](#-core-api)
+- [Injection Patterns](#-injection-patterns)
+- [Modules](#-modules)
+- [Diagnostics](#-diagnostics)
+- [Development](#️-development)
+- [Examples](#-examples)
+- [Documentation](#-documentation)
+
+## When to use dix
+
+- You need **runtime** dependency registration (plugins, dynamic modules, conditional wiring).
+- You want **built-in diagnostics**: structured trace logs, JSONL export, and an HTTP dependency graph.
+- You prefer a **dig-like API** with safe `Try*` variants, map/list grouping, and method injection.
+
+For compile-time wiring with minimal runtime overhead, see [google/wire](https://github.com/google/wire). For Uber's fx ecosystem, see [uber-go/dig](https://github.com/uber-go/dig).
+
 ## ✨ Features
 
 | Feature                  | Description                              |
@@ -74,7 +96,38 @@ func main() {
 }
 ```
 
+For production startup, prefer `TryProvide` / `TryInject` to avoid panics and keep the process alive for diagnostics:
+
+```go
+if err := dix.TryProvide(di, NewDatabase); err != nil {
+    log.Fatal(err)
+}
+if err := dix.TryInject(di, Run); err != nil {
+    log.Fatal(err)
+}
+```
+
 ## 📖 Core API
+
+| API | Panics on error | Description |
+| --- | --- | --- |
+| `New(...Option)` | — | Create a container |
+| `Provide(di, fn)` | yes | Register a provider |
+| `TryProvide(di, fn)` | no | Register a provider, returns `error` |
+| `Inject(di, target)` | yes | Inject into a function or struct |
+| `TryInject(di, target)` | no | Inject, returns `error` |
+| `InjectT[T](di)` | yes | Allocate a struct and inject exported fields |
+| `InjectTContext[T](ctx, di)` | yes | Allocate a struct and inject with trace context |
+| `InjectContext` / `TryInjectContext` | yes / no | Inject with trace context propagation |
+| `Version()` | — | Return embedded version string |
+
+Container options:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `WithValuesNull()` | enabled | Allow nil provider results |
+| `WithProviderTimeout(d)` | `15s` | Per-provider execution timeout (`0` = disabled) |
+| `WithSlowProviderThreshold(d)` | `2s` | Warn when provider is slow (`0` = disabled) |
 
 ### Provide / TryProvide
 
@@ -115,98 +168,37 @@ err := dix.TryInject(di, func(svc *Service) {
 })
 ```
 
-### Startup Timeout / Slow Provider Warning
+### Generic Helpers
 
-Control long-running providers during startup:
+```go
+// Inject into a new struct value
+app := dix.InjectT[App](di)
 
-- Default provider timeout: `15s`
-- Disable provider timeout explicitly: `dix.WithProviderTimeout(0)`
-- Default slow provider warning threshold: `2s`
-- Disable slow provider warning: `dix.WithSlowProviderThreshold(0)`
+// Inject with request-scoped trace context
+err := dix.TryInjectContext(ctx, di, func(svc *Service) {
+    svc.DoSomething()
+})
+```
+
+### Thread Safety
+
+`Dix` containers are **not thread-safe**. Do not call `Provide` / `Inject` (or their `Try*` variants) concurrently on the same container instance.
+
+Recommended usage:
+
+- Register all providers during application startup (single goroutine).
+- After startup, only read resolved dependencies, or continue injection from a single goroutine.
+- Use separate `Dix` instances per goroutine if you need isolated containers.
+- For a process-wide singleton, prefer `dixglobal` only when startup is single-threaded.
+
+### Startup Options
 
 ```go
 di := dix.New(
-    // Default `ProviderTimeout` is `15s`
-    // Use `dix.WithProviderTimeout(0)` to disable provider timeout
-    // Default `SlowProviderThreshold` is `2s`
-    // Use `dix.WithSlowProviderThreshold(0)` to disable slow-provider warnings
-    dix.WithProviderTimeout(2*time.Second),        // override default (default: 15s, 0 = disabled)
-    dix.WithSlowProviderThreshold(300*time.Millisecond), // override default (default: 2s, 0 = disabled)
+    dix.WithProviderTimeout(2*time.Second),              // default: 15s; 0 disables
+    dix.WithSlowProviderThreshold(300*time.Millisecond), // default: 2s; 0 disables
 )
 ```
-
-### DI Trace Logging (Optional)
-
-Enable step-by-step dependency resolution/injection/provider execution logs:
-
-- Env var: `DIX_TRACE_DI`
-- Default: disabled
-- Enable values: `1`, `true`, `on`, `yes`, `enable`, `trace`, `debug`
-
-```bash
-export DIX_TRACE_DI=true
-```
-
-When enabled, dix prints `di_trace ...` events with structured key-values (provider, input/output types, query kind, parent chain, timeout, etc.).
-
-> Note: if `DIX_LLM_DIAG_MODE=machine`, human-readable text logs are suppressed by design, including `di_trace` lines.
-
-### Diagnostic File Collection (Optional)
-
-You can collect detailed diagnostics into a searchable JSONL file:
-
-- Env var: `DIX_DIAG_FILE`
-- Example: `export DIX_DIAG_FILE=.local/dix-diag.jsonl`
-
-Behavior rules:
-
-- If `DIX_DIAG_FILE` is **not configured**, dix keeps the original behavior (no diagnostic file output).
-- If `DIX_DIAG_FILE` is configured, dix appends diagnostic records to file (`trace` / `error` / `llm`).
-- Console verbosity still follows existing controls (`DIX_TRACE_DI`, `DIX_LLM_DIAG_MODE`).
-
-Tip:
-
-- Keep console output concise for users.
-- Keep detailed records in file for search/LLM/offline troubleshooting.
-
-### In-Memory Trace Query (`dixtrace`, Optional)
-
-Starting from this version, dix also emits unified trace events into an in-memory trace store (`dixtrace`), which can be queried via HTTP API (`/api/trace`).
-
-- Default: enabled (in-memory ring buffer)
-- Optional file sink env var: `DIX_TRACE_FILE`
-- Example: `export DIX_TRACE_FILE=.local/dix-trace.jsonl`
-- Compatibility fallback: when `DIX_TRACE_FILE` is not set and `DIX_DIAG_FILE` is set, trace file sink will reuse `DIX_DIAG_FILE` in append mode.
-
-`/api/trace` is optimized for online troubleshooting (filter by `operation/status/event/component/provider/output_type`).
-If you need separate trace-only file persistence, set `DIX_TRACE_FILE` explicitly.
-
-Quick event dictionary:
-
-| Event                                          | Meaning                                                                    |
-| ---------------------------------------------- | -------------------------------------------------------------------------- |
-| `di_trace inject.start`                        | Begin an injection request (`component`, `param_type`)                     |
-| `di_trace inject.route`                        | Injection route selected (`function` or `struct`)                          |
-| `di_trace provide.start`                       | Begin a provider registration request (`component`)                        |
-| `di_trace provide.signature`                   | Provider function signature analyzed (`input_count`, `output_count`)       |
-| `di_trace provide.register.output.done`        | Provider output type registered successfully                               |
-| `di_trace provide.register.failed`             | Provider registration failed (`reason` or `error`)                         |
-| `di_trace resolve.value.search_provider.start` | Start searching providers for a dependency type                            |
-| `di_trace resolve.value.found`                 | Dependency value resolved successfully                                     |
-| `di_trace resolve.value.not_found`             | Dependency resolution failed (`reason` included)                           |
-| `di_trace provider.execute.dispatch`           | Provider selected for execution (`provider`, `output_type`, `input_types`) |
-| `di_trace provider.input.resolve.start`        | Resolve one provider input type                                            |
-| `di_trace provider.input.resolve.found`        | Provider input resolved                                                    |
-| `di_trace provider.input.resolve.failed`       | Provider input resolution failed                                           |
-| `di_trace provider.call.start`                 | Start executing provider (`timeout`)                                       |
-| `di_trace provider.call.done`                  | Provider execution completed                                               |
-| `di_trace provider.call.failed`                | Provider execution failed (`timed_out`, `error`)                           |
-| `di_trace provider.call.return_error`          | Provider returned non-nil `error`                                          |
-| `di_trace inject.func.resolve_input.start`     | Resolve function injection argument                                        |
-| `di_trace inject.func.resolve_input.failed`    | Function argument resolution failed                                        |
-| `di_trace inject.struct.field.resolve.start`   | Resolve one struct field injection                                         |
-| `di_trace inject.struct.field.resolve.done`    | Struct field injected successfully                                         |
-| `di_trace inject.struct.field.resolve.failed`  | Struct field injection failed                                              |
 
 ## 🎯 Injection Patterns
 
@@ -293,11 +285,14 @@ ctx := dixcontext.Create(context.Background(), di)
 
 // Retrieve and use
 container := dixcontext.Get(ctx)
+
+// Non-panicking lookup
+container = dixcontext.GetOrNil(ctx)
 ```
 
-### dixhttp - Dependency Visualization 🆕
+### dixhttp - Dependency Visualization
 
-Web interface for visualizing dependency graph, **designed for large projects**:
+Web interface for visualizing dependency graphs, **designed for large projects**:
 
 ```go
 import (
@@ -309,7 +304,9 @@ server := dixhttp.NewServer((*dixinternal.Dix)(di))
 server.ListenAndServe(":8080")
 ```
 
-Visit `http://localhost:8080` to view dependency graph.
+Visit `http://localhost:8080` to view the dependency graph.
+
+> **Security**: exposes dependency graphs, provider source locations, runtime errors, and trace data. Use on **localhost or private networks** only. Do not expose publicly without authentication.
 
 **Highlights**:
 - 🔍 **Fuzzy Search** - Quickly locate types or functions
@@ -318,20 +315,45 @@ Visit `http://localhost:8080` to view dependency graph.
 - 📏 **Depth Control** - Limit display levels (1-5 or all)
 - 🎨 **Modern UI** - Tailwind CSS + Alpine.js
 
-See [dixhttp/README.md](./dixhttp/README.md) for details.
+See [dixhttp/README.md](./dixhttp/README.md) for API routes, event dictionary, and UI details.
+
+## 🔍 Diagnostics
+
+Optional observability for startup and injection troubleshooting. All file/console outputs are disabled unless configured.
+
+| Env var | Default | Purpose |
+| --- | --- | --- |
+| `DIX_TRACE_DI` | off | Console step-by-step DI trace (`di_trace ...`) |
+| `DIX_DIAG_FILE` | off | Append `trace` / `error` / `llm` records to JSONL |
+| `DIX_TRACE_FILE` | off | Append trace-only JSONL (falls back to `DIX_DIAG_FILE`) |
+| `DIX_LLM_DIAG_MODE` | `human` | Log mode: `human` / `machine` / `dual` |
+
+```bash
+export DIX_TRACE_DI=true
+export DIX_DIAG_FILE=.local/dix-diag.jsonl
+```
+
+In-memory trace events (`dixtrace`) are enabled by default and queryable through `dixhttp` at `/api/trace`.
+
+For the full `di_trace` event dictionary, HTTP APIs, and UI troubleshooting workflow, see [dixhttp/README.md](./dixhttp/README.md).
 
 ## 🛠️ Development
 
 ```bash
-# Run tests
+# Run all tests with coverage report
 task test
 
-# Lint
+# Lint and format
 task lint
 
-# Build
-task build
+# go vet
+task vet
+
+# HTTP visualization demo
+task web-demo
 ```
+
+GitHub Actions runs `go test ./... -race` and `golangci-lint` on push/PR.
 
 ## 📚 Examples
 

@@ -1,41 +1,32 @@
+// List nil/empty handling: inject slice fields even when no provider exists.
+//
+// Run:
+//
+//	cd example/list-nil && go run .
 package main
 
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
+type Handler func() string
+
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New(dix.WithValuesNull())
 
-	type handler func() string
-
-	dixglobal.Inject(func(handlers []handler) {
-		fmt.Printf("handlers: %d\n", len(handlers))
-		for i := range handlers {
-			fmt.Println("fn:", handlers[i]())
-		}
-	})
-
-	type param struct {
-		H []handler
+	type App struct {
+		Handlers []Handler
 	}
 
-	hh := dixglobal.Inject(new(param))
-	fmt.Printf("handlers: %d\n", len(hh.H))
-	for i := range hh.H {
-		fmt.Println("struct:", hh.H[i]())
-	}
+	app := &App{}
+	dix.Inject(di, app)
 
-	dixglobal.Inject(func(p param) {
-		fmt.Printf("handlers: %d\n", len(p.H))
-		for i := range p.H {
-			fmt.Println("struct struct:", p.H[i]())
-		}
+	fmt.Printf("Handlers is nil: %v\n", app.Handlers == nil)
+	fmt.Printf("Handlers length: %d\n", len(app.Handlers))
+
+	dix.Inject(di, func(handlers []Handler) {
+		fmt.Printf("function inject length: %d\n", len(handlers))
 	})
 }

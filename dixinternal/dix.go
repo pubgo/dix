@@ -1026,8 +1026,8 @@ func (dix *Dix) injectStruct(ctx context.Context, structVal reflect.Value, opt O
 	return nil
 }
 
-// inject is the entry point for dependency injection
-// NOTE: This method is NOT thread-safe by itself. Use Inject() or TryInject() which handle locking.
+// inject is the internal entry point for dependency injection.
+// NOTE: The Dix container is not thread-safe; do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) inject(ctx context.Context, param any, opts ...Option) (err error) {
 	paramType := "<nil>"
 	component := describeComponent(param)
@@ -1239,8 +1239,8 @@ func parseInputType(typ reflect.Type) []*providerInputType {
 	return input
 }
 
-// provide registers a constructor function
-// NOTE: This method is NOT thread-safe by itself. Use Provide() or TryProvide() which handle locking.
+// provide registers a constructor function.
+// NOTE: The Dix container is not thread-safe; do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) provide(param any) {
 	component := describeComponent(param)
 	logDITrace("provide.start", "component", component)

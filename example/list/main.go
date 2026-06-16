@@ -1,67 +1,43 @@
+// List injection: aggregate multiple providers of the same type into a slice.
+//
+// Run:
+//
+//	cd example/list && go run .
 package main
 
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
+type Middleware func(string) string
+
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New()
 
-	type handler func() string
-	type handlers []handler
-	dixglobal.Provide(func() handlers {
-		return handlers{
-			func() string {
-				return "hello"
-			},
+	dix.Provide(di, func() []Middleware {
+		return []Middleware{
+			func(s string) string { return "[auth] " + s },
 		}
 	})
 
-	dixglobal.Provide(func() handlers {
-		return handlers{
-			func() string {
-				return "world"
-			},
+	dix.Provide(di, func() []Middleware {
+		return []Middleware{
+			func(s string) string { return "[log] " + s },
 		}
 	})
 
-	dixglobal.Provide(func() handler {
-		return func() string {
-			return "world next"
-		}
+	// Single value injection uses the latest registered provider.
+	dix.Provide(di, func() Middleware {
+		return func(s string) string { return "[trace] " + s }
 	})
 
-	dixglobal.Inject(func(handlers handlers, h handler) {
-		// h为默认的, 最后一个注册的
-		fmt.Println("the last: default: ", h())
-		for i := range handlers {
-			fmt.Println("fn:", handlers[i]())
-		}
-	})
-
-	type param struct {
-		H handlers
-		M map[string]handler
-	}
-
-	hh := dixglobal.Inject(new(param))
-	//  default是最后一个
-	fmt.Println("default: ", hh.M["default"]())
-	for i := range hh.H {
-		fmt.Println("struct:", hh.H[i]())
-	}
-
-	dixglobal.Inject(func(p param) {
-		//  default是最后一个
-		fmt.Println("default struct: ", hh.M["default"]())
-		for i := range hh.H {
-			fmt.Println("struct struct:", hh.H[i]())
+	dix.Inject(di, func(latest Middleware, chain []Middleware) {
+		fmt.Println("latest:", latest("request"))
+		fmt.Println("chain size:", len(chain))
+		for i, mw := range chain {
+			fmt.Printf("  middleware[%d]: %s\n", i, mw("request"))
 		}
 	})
 }

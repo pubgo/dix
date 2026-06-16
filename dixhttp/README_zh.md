@@ -72,6 +72,31 @@ server := dixhttp.NewServerWithOptions(
 // 访问 http://localhost:8080/dix/
 ```
 
+### 反向代理鉴权示例（推荐）
+
+`dixhttp` 本身不内置鉴权中间件。生产环境建议放在反向代理后，并开启鉴权与网络访问限制。
+
+示例（Nginx + Basic Auth）：
+
+```nginx
+location /dix/ {
+    auth_basic "Restricted Dix";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    proxy_pass http://127.0.0.1:8080/dix/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+实用安全清单：
+
+- dixhttp 服务仅监听本机或内网地址。
+- 放在鉴权层之后（Basic Auth / SSO / 网关 Token）。
+- 尽量按来源 IP/CIDR 做白名单限制。
+- 不要将 `/api/errors`、`/api/diagnostics`、`/api/trace` 暴露到公网。
+
 ## 界面布局
 
 ```

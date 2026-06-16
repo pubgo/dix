@@ -73,6 +73,32 @@ server := dixhttp.NewServerWithOptions(
 // Visit http://localhost:8080/dix/
 ```
 
+### Reverse Proxy Auth Example (Recommended)
+
+`dixhttp` itself does not include auth middleware. For production, place it behind a reverse proxy
+with authentication and network restrictions.
+
+Example (Nginx + Basic Auth):
+
+```nginx
+location /dix/ {
+    auth_basic "Restricted Dix";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    proxy_pass http://127.0.0.1:8080/dix/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Practical security checklist:
+
+- Bind the dixhttp server to loopback/internal interface only.
+- Keep access behind auth (Basic Auth / SSO / gateway token).
+- Restrict by source IP/CIDR where possible.
+- Avoid exposing diagnosis endpoints (`/api/errors`, `/api/diagnostics`, `/api/trace`) to public internet.
+
 ## UI Layout
 
 ```

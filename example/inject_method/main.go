@@ -1,43 +1,37 @@
+// Method injection: call DixInject* methods after struct creation.
+//
+// Run:
+//
+//	cd example/inject_method && go run .
 package main
 
 import (
 	"errors"
 	"fmt"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
-type handler struct{}
+type Worker struct{}
 
-func (h *handler) DixInjectA(err error) {
-	fmt.Println("A: ", err.Error())
+// Methods prefixed with DixInject receive dependencies after Worker is created.
+func (w *Worker) DixInjectLogger(err error) {
+	fmt.Println("logger dependency:", err.Error())
 }
 
-func (h *handler) DixInjectD(p struct {
-	Err error
-},
-) {
-	fmt.Println("D: ", p.Err.Error())
-}
-
-func (h *handler) DixInjectC(errs []error) {
+func (w *Worker) DixInjectTags(errs []error) {
+	fmt.Print("tag dependencies:")
 	for i, e := range errs {
-		fmt.Printf("C[%d]: %s\n", i, e.Error())
+		fmt.Printf(" [%d]=%s", i, e.Error())
 	}
-}
-
-func (h *handler) DixInjectB(err error, errs []error) {
-	fmt.Println("B: ", err.Error(), errs)
+	fmt.Println()
 }
 
 func main() {
-	dixglobal.Provide(func() error {
-		return errors.New("<ok>")
-	})
+	di := dix.New()
 
-	dixglobal.Provide(func() error {
-		return errors.New("<ok 1>")
-	})
+	dix.Provide(di, func() error { return errors.New("primary") })
+	dix.Provide(di, func() error { return errors.New("secondary") })
 
-	dixglobal.Inject(&handler{})
+	dix.Inject(di, &Worker{})
 }
