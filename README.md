@@ -115,6 +115,17 @@ err := dix.TryInject(di, func(svc *Service) {
 })
 ```
 
+### Thread Safety
+
+`Dix` containers are **not thread-safe**. Do not call `Provide` / `Inject` (or their `Try*` variants) concurrently on the same container instance.
+
+Recommended usage:
+
+- Register all providers during application startup (single goroutine).
+- After startup, only read resolved dependencies, or continue injection from a single goroutine.
+- Use separate `Dix` instances per goroutine if you need isolated containers.
+- For a process-wide singleton, prefer `dixglobal` only when startup is single-threaded.
+
 ### Startup Timeout / Slow Provider Warning
 
 Control long-running providers during startup:

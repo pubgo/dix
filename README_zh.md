@@ -115,6 +115,17 @@ err := dix.TryInject(di, func(svc *Service) {
 })
 ```
 
+### 线程安全
+
+`Dix` 容器**不是线程安全的**。请勿在同一容器实例上并发调用 `Provide` / `Inject`（及其 `Try*` 变体）。
+
+推荐用法：
+
+- 在应用启动阶段（单 goroutine）完成全部 provider 注册。
+- 启动完成后仅读取已解析的依赖，或继续在单 goroutine 中注入。
+- 若需要隔离容器，请为每个 goroutine 使用独立的 `Dix` 实例。
+- 进程级单例请使用 `dixglobal`，且仅在启动阶段单线程注册。
+
 ### 启动超时 / 慢 Provider 告警
 
 可在启动阶段限制 provider 执行时间，并对慢调用输出告警：
