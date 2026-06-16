@@ -1,3 +1,18 @@
+// HTTP visualization demo for dixhttp.
+//
+// This is a large end-to-end sample (interfaces, map/list, struct output, diagnostics).
+// For learning basics, start with simpler examples under example/func and example/struct-in.
+//
+// Run:
+//
+//	cd example/http && go run .
+//	# or: task web-demo
+//
+// Optional env:
+//
+//	DIX_HTTP_ADDR=:8080
+//	DIX_TRACE_DI=true
+//	DIX_DIAG_FILE=.local/dix-diag.jsonl
 package main
 
 import (
@@ -20,7 +35,7 @@ import (
 // Database 数据库接口
 type Database interface {
 	Connect() error
-	Query(sql string) ([]map[string]interface{}, error)
+	Query(sql string) ([]map[string]any, error)
 }
 
 // Cache 缓存接口
@@ -61,9 +76,9 @@ func (m *MySQLDatabase) Connect() error {
 	return nil
 }
 
-func (m *MySQLDatabase) Query(sql string) ([]map[string]interface{}, error) {
+func (m *MySQLDatabase) Query(sql string) ([]map[string]any, error) {
 	m.Logger.Info("Executing query: " + sql)
-	return []map[string]interface{}{}, nil
+	return []map[string]any{}, nil
 }
 
 // RedisCache Redis缓存实现

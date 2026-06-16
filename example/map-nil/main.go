@@ -1,24 +1,31 @@
+// Map nil/empty handling: inject map fields even when no provider exists.
+//
+// Run:
+//
+//	cd example/map-nil && go run .
 package main
 
 import (
 	"fmt"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	// WithValuesNull allows nil/empty collections instead of failing hard.
+	di := dix.New(dix.WithValuesNull())
 
-	dixglobal.Inject(func(errs map[string]error) {
-		fmt.Println(errs)
-	})
-
-	type param struct {
-		ErrMap map[string]error
+	type App struct {
+		Errors map[string]error
 	}
-	fmt.Println(dixglobal.Inject(new(param)).ErrMap)
+
+	app := &App{}
+	dix.Inject(di, app)
+
+	fmt.Printf("Errors is nil: %v\n", app.Errors == nil)
+	fmt.Printf("Errors length: %d\n", len(app.Errors))
+
+	dix.Inject(di, func(errs map[string]error) {
+		fmt.Printf("function inject length: %d\n", len(errs))
+	})
 }

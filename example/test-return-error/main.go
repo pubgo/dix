@@ -1,97 +1,57 @@
+// Error handling: use TryProvide/TryInject instead of panic/recover.
+//
+// Run:
+//
+//	cd example/test-return-error && go run .
 package main
 
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/pubgo/dix/v2"
 )
 
-func testok() {
-	di := dix.New(dix.WithValuesNull())
-	di.Provide(func() (*log.Logger, error) {
-		log.Println("provider ok")
-		return new(log.Logger), nil
-	})
+func main() {
+	runSuccess()
+	runProviderError()
+	runInjectError()
+}
 
-	di.Inject(func(l *log.Logger) error {
-		log.Println("inject ok")
+func runSuccess() {
+	di := dix.New()
+	if err := dix.TryProvide(di, func() (*log.Logger, error) {
+		return log.Default(), nil
+	}); err != nil {
+		log.Fatalf("provide failed: %v", err)
+	}
+
+	if err := dix.TryInject(di, func(l *log.Logger) error {
+		l.Println("inject ok")
 		return nil
-	})
-}
-
-func testInjectErr() {
-	di := dix.New(dix.WithValuesNull())
-	var injectErr error
-	func() { // Use a closure to capture panic as error
-		defer func() {
-			if r := recover(); r != nil {
-				if err, ok := r.(error); ok {
-					injectErr = err
-				} else {
-					injectErr = fmt.Errorf("panic: %v", r)
-				}
-			}
-		}()
-		di.Inject(func(l *log.Logger) error {
-			return fmt.Errorf("inject_err")
-		})
-	}()
-
-	if injectErr != nil {
-		log.Printf("inject error occurred, inject_err: %v\n", injectErr)
-	}
-
-	if injectErr != nil && strings.Contains(injectErr.Error(), "inject_err") {
-		return
-	} else if injectErr != nil {
-		panic(injectErr)
+	}); err != nil {
+		log.Fatalf("inject failed: %v", err)
 	}
 }
 
-func testProviderErr() {
-	di := dix.New(dix.WithValuesNull())
-	di.Provide(func() (*log.Logger, error) {
+func runProviderError() {
+	di := dix.New()
+	_ = dix.TryProvide(di, func() (*log.Logger, error) {
 		return nil, fmt.Errorf("provider_err")
 	})
 
-	var provideErr error
-	func() { // Use a closure to capture panic as error
-		defer func() {
-			if r := recover(); r != nil {
-				if err, ok := r.(error); ok {
-					provideErr = err
-				} else {
-					provideErr = fmt.Errorf("panic: %v", r)
-				}
-			}
-		}()
-		di.Inject(func(l *log.Logger) error {
-			log.Println("inject ok")
-			return nil
-		})
-	}()
-
-	if provideErr != nil {
-		log.Printf("provider error occurred, provider_err: %v\n", provideErr)
-	}
-
-	if provideErr != nil && strings.Contains(provideErr.Error(), "provider_err") {
-		return
-	} else if provideErr != nil {
-		panic(provideErr)
-	}
+	err := dix.TryInject(di, func(l *log.Logger) error {
+		return nil
+	})
+	fmt.Println("provider error:", err)
 }
 
-func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+func runInjectError() {
+	di := dix.New()
+	_ = dix.TryProvide(di, func() *log.Logger { return log.Default() })
 
-	testok()
-	testProviderErr()
-	testInjectErr()
+	err := dix.TryInject(di, func(l *log.Logger) error {
+		return fmt.Errorf("inject_err")
+	})
+	fmt.Println("inject error:", err)
 }

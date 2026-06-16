@@ -1,42 +1,40 @@
+// Map injection (namespace): group dependencies by map key.
+//
+// Run:
+//
+//	cd example/map && go run .
 package main
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
+type Database struct {
+	DSN string
+}
+
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New()
 
-	dixglobal.Provide(func() map[string]error {
-		return map[string]error{
-			"":      errors.New("default msg"),
-			"hello": errors.New("hello"),
+	// Multiple providers can contribute to the same map[string]*T.
+	dix.Provide(di, func() map[string]*Database {
+		return map[string]*Database{
+			"master": {DSN: "postgres://master/db"},
+			"slave":  {DSN: "postgres://slave/db"},
 		}
 	})
 
-	dixglobal.Provide(func() map[string]error {
-		return map[string]error{
-			"hello": errors.New("hello1"),
+	dix.Provide(di, func() map[string]*Database {
+		return map[string]*Database{
+			"analytics": {DSN: "postgres://analytics/db"},
 		}
 	})
 
-	dixglobal.Inject(func(err error, errs map[string]error, errMapList map[string][]error) {
-		fmt.Println(err.Error())
-		fmt.Println(errs)
-		fmt.Println(errMapList)
+	dix.Inject(di, func(dbs map[string]*Database) {
+		fmt.Println("master:", dbs["master"].DSN)
+		fmt.Println("slave:", dbs["slave"].DSN)
+		fmt.Println("analytics:", dbs["analytics"].DSN)
 	})
-
-	type param struct {
-		ErrMap     map[string]error
-		ErrMapList map[string][]error
-	}
-	fmt.Println(dixglobal.Inject(new(param)).ErrMap)
-	fmt.Println(dixglobal.Inject(new(param)).ErrMapList)
 }

@@ -1,35 +1,46 @@
+// Lazy resolution: providers run only when their output is first needed.
+//
+// Run:
+//
+//	cd example/lazy && go run .
 package main
 
 import (
-	"errors"
 	"fmt"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
+type Service struct {
+	Name string
+}
+
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New()
+	order := make([]string, 0, 2)
 
-	type handler struct{}
-	dixglobal.Provide(func() *handler {
-		fmt.Println("1")
-		return new(handler)
+	dix.Provide(di, func() *Service {
+		order = append(order, "provider-A")
+		fmt.Println("provider A executed")
+		return &Service{Name: "A"}
 	})
 
-	dixglobal.Provide(func() *handler {
-		fmt.Println("2")
-		return new(handler)
+	dix.Provide(di, func() *Service {
+		order = append(order, "provider-B")
+		fmt.Println("provider B executed")
+		return &Service{Name: "B"}
 	})
 
-	dixglobal.Provide(func(_ *handler) error {
-		return errors.New("ok")
+	// Provider C depends on *Service. Only one *Service provider chain is used.
+	dix.Provide(di, func(_ *Service) error {
+		order = append(order, "provider-C")
+		fmt.Println("provider C executed")
+		return fmt.Errorf("ready")
 	})
 
-	dixglobal.Inject(func(err error) {
-		fmt.Println(err.Error())
+	dix.Inject(di, func(err error) {
+		fmt.Println("inject got error:", err)
 	})
+
+	fmt.Println("execution order:", order)
 }

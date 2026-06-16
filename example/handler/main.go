@@ -1,3 +1,8 @@
+// Typical wiring pattern: logger + service + handler struct injection.
+//
+// Run:
+//
+//	cd example/handler && go run .
 package main
 
 import (
@@ -5,64 +10,47 @@ import (
 	"log"
 	"os"
 
-	"github.com/pubgo/dix/v2/dixglobal"
+	"github.com/pubgo/dix/v2"
 )
 
 type Redis struct {
-	name string
+	Addr string
 }
 
 type Handler struct {
-	Cli  *Redis
-	Cli1 map[string]*Redis
+	Logger *log.Logger
+	Redis  *Redis
+	All    map[string]*Redis
 }
 
 func main() {
-	defer func() {
-		if r := recover(); r != nil {
-			fmt.Printf("panic: %v\n", r)
-		}
-	}()
+	di := dix.New()
 
-	dixglobal.Provide(func() *log.Logger {
-		return log.New(os.Stderr, "example: ", log.LstdFlags|log.Lshortfile)
+	dix.Provide(di, func() *log.Logger {
+		return log.New(os.Stderr, "app: ", log.LstdFlags)
 	})
 
-	dixglobal.Provide(func(p struct {
-		L *log.Logger
-	},
-	) *Redis {
-		p.L.Println("init redis")
-		return &Redis{name: "hello"}
+	dix.Provide(di, func(l *log.Logger) *Redis {
+		l.Println("init default redis")
+		return &Redis{Addr: "127.0.0.1:6379"}
 	})
 
-	dixglobal.Provide(func(l *log.Logger) map[string]*Redis {
-		l.Println("init redis")
+	dix.Provide(di, func(l *log.Logger) map[string]*Redis {
+		l.Println("init namespaced redis map")
 		return map[string]*Redis{
-			"ns": {name: "hello1"},
+			"cache": {Addr: "127.0.0.1:6380"},
 		}
 	})
 
-	dixglobal.Inject(func(r *Redis, l *log.Logger, rr map[string]*Redis) {
-		l.Println("invoke redis")
-		fmt.Println("invoke:", r.name)
-		fmt.Println("invoke:", rr)
+	// Function injection
+	dix.Inject(di, func(r *Redis, l *log.Logger) {
+		l.Println("invoke default redis:", r.Addr)
 	})
 
-	h := dixglobal.Inject(new(Handler))
-	if h.Cli.name != "hello" {
-		panic("inject error")
-	}
-	if h.Cli1["ns"].name != "hello1" {
-		panic("inject error")
-	}
+	// Struct injection
+	h := &Handler{}
+	dix.Inject(di, h)
 
-	dixglobal.Inject(func(h Handler) {
-		if h.Cli.name != "hello" {
-			panic("inject error")
-		}
-		if h.Cli1["ns"].name != "hello1" {
-			panic("inject error")
-		}
-	})
+	fmt.Println("handler.Redis:", h.Redis.Addr)
+	fmt.Println("handler.All[cache]:", h.All["cache"].Addr)
 }
