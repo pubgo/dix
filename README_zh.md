@@ -9,6 +9,28 @@
 
 [English](./README.md)
 
+## 目录
+
+- [适用场景](#适用场景)
+- [功能特性](#-功能特性)
+- [安装](#-安装)
+- [快速开始](#-快速开始)
+- [核心 API](#-核心-api)
+- [注入模式](#-注入模式)
+- [模块](#-模块)
+- [诊断与排障](#-诊断与排障)
+- [开发](#️-开发)
+- [示例](#-示例)
+- [文档](#-文档)
+
+## 适用场景
+
+- 需要**运行时**注册依赖（插件、动态模块、按条件装配）。
+- 希望内置**诊断能力**：结构化 trace 日志、JSONL 导出、HTTP 依赖图可视化。
+- 偏好 **dig 风格 API**，并需要 `Try*` 安全接口、map/list 分组、方法注入等能力。
+
+若追求编译期装配、最小运行时开销，可参考 [google/wire](https://github.com/google/wire)。若使用 Uber fx 生态，可参考 [uber-go/dig](https://github.com/uber-go/dig)。
+
 ## ✨ 功能特性
 
 | 特性           | 说明                                              |
@@ -74,7 +96,37 @@ func main() {
 }
 ```
 
+生产环境启动建议优先使用 `TryProvide` / `TryInject`，避免 panic 并保留进程用于诊断：
+
+```go
+if err := dix.TryProvide(di, NewDatabase); err != nil {
+    log.Fatal(err)
+}
+if err := dix.TryInject(di, Run); err != nil {
+    log.Fatal(err)
+}
+```
+
 ## 📖 核心 API
+
+| API | 失败是否 panic | 说明 |
+| --- | --- | --- |
+| `New(...Option)` | — | 创建容器 |
+| `Provide(di, fn)` | 是 | 注册 provider |
+| `TryProvide(di, fn)` | 否 | 注册 provider，返回 `error` |
+| `Inject(di, target)` | 是 | 向函数或结构体注入依赖 |
+| `TryInject(di, target)` | 否 | 注入依赖，返回 `error` |
+| `InjectT[T](di)` | 是 | 分配结构体并注入字段 |
+| `InjectContext` / `TryInjectContext` | 是 / 否 | 带 trace 上下文传播注入 |
+| `Version()` | — | 返回内嵌版本号 |
+
+容器选项：
+
+| 选项 | 默认值 | 说明 |
+| --- | --- | --- |
+| `WithValuesNull()` | 开启 | 允许 provider 返回 nil |
+| `WithProviderTimeout(d)` | `15s` | 单次 provider 执行超时（`0` = 关闭） |
+| `WithSlowProviderThreshold(d)` | `2s` | 慢 provider 告警阈值（`0` = 关闭） |
 
 ### Provide / TryProvide
 
@@ -115,6 +167,18 @@ err := dix.TryInject(di, func(svc *Service) {
 })
 ```
 
+### 泛型辅助
+
+```go
+// 创建结构体并注入字段
+app := dix.InjectT[App](di)
+
+// 带请求级 trace 上下文注入
+err := dix.TryInjectContext(ctx, di, func(svc *Service) {
+    svc.DoSomething()
+})
+```
+
 ### 线程安全
 
 `Dix` 容器**不是线程安全的**。请勿在同一容器实例上并发调用 `Provide` / `Inject`（及其 `Try*` 变体）。
@@ -126,98 +190,14 @@ err := dix.TryInject(di, func(svc *Service) {
 - 若需要隔离容器，请为每个 goroutine 使用独立的 `Dix` 实例。
 - 进程级单例请使用 `dixglobal`，且仅在启动阶段单线程注册。
 
-### 启动超时 / 慢 Provider 告警
-
-可在启动阶段限制 provider 执行时间，并对慢调用输出告警：
-
-- 默认 `ProviderTimeout` 为 `15s`
-- 可用 `dix.WithProviderTimeout(0)` 显式关闭 provider 超时
-- 默认 `SlowProviderThreshold` 为 `2s`
-- 可用 `dix.WithSlowProviderThreshold(0)` 显式关闭慢 provider 告警
+### 启动选项
 
 ```go
 di := dix.New(
-    // 默认 `ProviderTimeout` 为 `15s`
-    // 使用 `dix.WithProviderTimeout(0)` 可关闭 provider 超时
-    // 默认 `SlowProviderThreshold` 为 `2s`
-    // 使用 `dix.WithSlowProviderThreshold(0)` 可关闭慢 provider 告警
-    dix.WithProviderTimeout(2*time.Second),               // 覆盖默认值（default: 15s, 0 = 不限制）
-    dix.WithSlowProviderThreshold(300*time.Millisecond),  // 覆盖默认值（default: 2s, 0 = 关闭）
+    dix.WithProviderTimeout(2*time.Second),              // 默认 15s；0 表示关闭
+    dix.WithSlowProviderThreshold(300*time.Millisecond), // 默认 2s；0 表示关闭
 )
 ```
-
-### DI 追踪日志（可选）
-
-可开启“依赖查询 / 注入 / Provider 执行”的全过程日志：
-
-- 环境变量：`DIX_TRACE_DI`
-- 默认：关闭
-- 开启取值：`1`、`true`、`on`、`yes`、`enable`、`trace`、`debug`
-
-```bash
-export DIX_TRACE_DI=true
-```
-
-开启后会输出 `di_trace ...` 事件，包含结构化键值（如 provider、输入输出类型、查询类型、父链路、超时等）。
-
-> 注意：若设置 `DIX_LLM_DIAG_MODE=machine`，会按设计抑制人类文本日志，`di_trace` 也会被抑制。
-
-### 诊断文件采集（可选）
-
-你可以把更完整的诊断信息写入可检索的 JSONL 文件：
-
-- 环境变量：`DIX_DIAG_FILE`
-- 示例：`export DIX_DIAG_FILE=.local/dix-diag.jsonl`
-
-行为规则：
-
-- 如果 **未配置** `DIX_DIAG_FILE`，dix 保持原有方案（不输出诊断文件）。
-- 如果配置了 `DIX_DIAG_FILE`，dix 会追加写入诊断记录（`trace` / `error` / `llm`）。
-- 终端可见日志仍由现有开关控制（`DIX_TRACE_DI`、`DIX_LLM_DIAG_MODE`）。
-
-建议：
-
-- 终端给用户看“少而准”。
-- 文件给排障/LLM看“全而细”。
-
-### 内存 Trace 查询（`dixtrace`，可选）
-
-从这个版本开始，dix 会把统一 trace 事件写入内存 trace 存储（`dixtrace`），可通过 HTTP API（`/api/trace`）在线查询。
-
-- 默认：开启（内存环形缓冲）
-- 可选文件落盘环境变量：`DIX_TRACE_FILE`
-- 示例：`export DIX_TRACE_FILE=.local/dix-trace.jsonl`
-- 兼容回退：当未配置 `DIX_TRACE_FILE` 且已配置 `DIX_DIAG_FILE` 时，trace 文件落盘会复用 `DIX_DIAG_FILE`（追加写入模式）。
-
-`/api/trace` 适合在线排障（按 `operation/status/event/component/provider/output_type` 等过滤）。
-如需独立的 trace 专用文件，请显式配置 `DIX_TRACE_FILE`。
-
-事件速查：
-
-| 事件                                           | 含义                                                                    |
-| ---------------------------------------------- | ----------------------------------------------------------------------- |
-| `di_trace inject.start`                        | 开始一次注入请求（`component`、`param_type`）                           |
-| `di_trace inject.route`                        | 注入路径已确定（`function` 或 `struct`）                                |
-| `di_trace provide.start`                       | 开始一次 provider 注册请求（`component`）                               |
-| `di_trace provide.signature`                   | provider 函数签名分析完成（`input_count`、`output_count`）              |
-| `di_trace provide.register.output.done`        | provider 输出类型注册成功                                               |
-| `di_trace provide.register.failed`             | provider 注册失败（含 `reason` 或 `error`）                             |
-| `di_trace resolve.value.search_provider.start` | 开始为某个依赖类型查找 provider                                         |
-| `di_trace resolve.value.found`                 | 依赖值查找成功                                                          |
-| `di_trace resolve.value.not_found`             | 依赖值查找失败（含 `reason`）                                           |
-| `di_trace provider.execute.dispatch`           | 选择并派发 provider 执行（含 `provider`、`output_type`、`input_types`） |
-| `di_trace provider.input.resolve.start`        | 开始解析 provider 的某个输入                                            |
-| `di_trace provider.input.resolve.found`        | provider 输入解析成功                                                   |
-| `di_trace provider.input.resolve.failed`       | provider 输入解析失败                                                   |
-| `di_trace provider.call.start`                 | 开始执行 provider（含 `timeout`）                                       |
-| `di_trace provider.call.done`                  | provider 执行完成                                                       |
-| `di_trace provider.call.failed`                | provider 执行失败（含 `timed_out`、`error`）                            |
-| `di_trace provider.call.return_error`          | provider 返回了非 nil `error`                                           |
-| `di_trace inject.func.resolve_input.start`     | 开始解析函数注入参数                                                    |
-| `di_trace inject.func.resolve_input.failed`    | 函数注入参数解析失败                                                    |
-| `di_trace inject.struct.field.resolve.start`   | 开始解析结构体字段注入                                                  |
-| `di_trace inject.struct.field.resolve.done`    | 结构体字段注入成功                                                      |
-| `di_trace inject.struct.field.resolve.failed`  | 结构体字段注入失败                                                      |
 
 ## 🎯 注入模式
 
@@ -304,9 +284,12 @@ ctx := dixcontext.Create(context.Background(), di)
 
 // 取出使用
 container := dixcontext.Get(ctx)
+
+// 不 panic 的查询
+container = dixcontext.GetOrNil(ctx)
 ```
 
-### dixhttp - 依赖可视化 🆕
+### dixhttp - 依赖可视化
 
 提供 Web 界面可视化依赖关系图，**专为大型项目设计**：
 
@@ -322,6 +305,8 @@ server.ListenAndServe(":8080")
 
 访问 `http://localhost:8080` 查看依赖图。
 
+> **安全提示**：会暴露依赖图、provider 源码位置、运行时错误和 trace 数据。请仅在**本机或内网**使用，勿在未鉴权情况下公网暴露。
+
 **功能亮点**：
 - 🔍 **模糊搜索** - 快速定位类型或函数
 - 📦 **按包分组** - 可折叠侧边栏浏览
@@ -329,20 +314,45 @@ server.ListenAndServe(":8080")
 - 📏 **深度控制** - 限制展示层级（1-5 或全部）
 - 🎨 **现代 UI** - Tailwind CSS + Alpine.js
 
-详见 [dixhttp/README.md](./dixhttp/README.md)
+详见 [dixhttp/README_zh.md](./dixhttp/README_zh.md)（API 路由、`di_trace` 事件字典与 UI 排障流程）。
+
+## 🔍 诊断与排障
+
+以下为可选观测能力，用于启动与注入排障。未配置时不会输出文件或额外控制台日志。
+
+| 环境变量 | 默认值 | 用途 |
+| --- | --- | --- |
+| `DIX_TRACE_DI` | 关闭 | 控制台逐步 DI trace（`di_trace ...`） |
+| `DIX_DIAG_FILE` | 关闭 | 追加写入 `trace` / `error` / `llm` JSONL |
+| `DIX_TRACE_FILE` | 关闭 | 仅 trace 的 JSONL（未设置时回退到 `DIX_DIAG_FILE`） |
+| `DIX_LLM_DIAG_MODE` | `human` | 日志模式：`human` / `machine` / `dual` |
+
+```bash
+export DIX_TRACE_DI=true
+export DIX_DIAG_FILE=.local/dix-diag.jsonl
+```
+
+内存 trace（`dixtrace`）默认开启，可通过 `dixhttp` 的 `/api/trace` 在线查询。
+
+完整 `di_trace` 事件字典、HTTP API 与 UI 排障流程见 [dixhttp/README_zh.md](./dixhttp/README_zh.md)。
 
 ## 🛠️ 开发
 
 ```bash
-# 运行测试
+# 运行全部测试并生成覆盖率报告
 task test
 
-# 代码检查
+# 代码检查与格式化
 task lint
 
-# 构建
-task build
+# go vet
+task vet
+
+# HTTP 可视化演示
+task web-demo
 ```
+
+GitHub Actions 会在 push/PR 时执行 `go test ./... -race` 与 `golangci-lint`。
 
 ## 📚 示例
 
