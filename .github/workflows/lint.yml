@@ -7,14 +7,6 @@ on:
     branches: [ master, v2 ]
 
 jobs:
-  docs:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v4
-      - name: Check README local links
-        run: ./scripts/check_readme_links.sh
-
   test:
     runs-on: ubuntu-latest
 

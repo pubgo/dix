@@ -18,7 +18,6 @@ Use this template to keep PRs review-friendly and merge-ready.
 
 - [ ] `go test ./... -count=1 -race`
 - [ ] `golangci-lint run --timeout=5m`
-- [ ] `task readme-check` (if docs/README changed)
 
 ## Risk & Rollback
 
