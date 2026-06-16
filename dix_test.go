@@ -1,6 +1,7 @@
 package dix
 
 import (
+	"context"
 	"testing"
 )
 
@@ -47,3 +48,63 @@ func TestTryInject(t *testing.T) {
 }
 
 type missingType struct{}
+
+func TestTryInjectContext(t *testing.T) {
+	di := New()
+
+	type dep struct{ V int }
+	if err := TryProvide(di, func() *dep { return &dep{V: 2} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	called := false
+	err := TryInjectContext(context.Background(), di, func(d *dep) {
+		called = d != nil && d.V == 2
+	})
+	if err != nil {
+		t.Fatalf("TryInjectContext: %v", err)
+	}
+	if !called {
+		t.Fatal("TryInjectContext callback was not invoked correctly")
+	}
+}
+
+func TestInjectContextWithStructValue(t *testing.T) {
+	di := New()
+
+	type dep struct{ Name string }
+	type app struct {
+		Dep *dep
+	}
+
+	if err := TryProvide(di, func() *dep { return &dep{Name: "ctx"} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	got := InjectContext(context.Background(), di, app{})
+	if got.Dep == nil || got.Dep.Name != "ctx" {
+		t.Fatal("InjectContext should inject into struct value")
+	}
+}
+
+func TestInjectTPanicsForNonStruct(t *testing.T) {
+	assertPanics(t, func() {
+		_ = InjectT[int](New())
+	})
+}
+
+func TestInjectTContextPanicsForNonStruct(t *testing.T) {
+	assertPanics(t, func() {
+		_ = InjectTContext[int](context.Background(), New())
+	})
+}
+
+func assertPanics(t *testing.T, fn func()) {
+	t.Helper()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic")
+		}
+	}()
+	fn()
+}

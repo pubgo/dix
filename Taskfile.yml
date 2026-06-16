@@ -17,6 +17,11 @@ tasks:
     cmds:
       - go vet ./...
 
+  readme-check:
+    desc: Validate local links in README files
+    cmds:
+      - ./scripts/check_readme_links.sh
+
   default:
     desc: Run tests
     deps: [test]
