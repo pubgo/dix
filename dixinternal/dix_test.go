@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -2196,6 +2197,48 @@ func TestTimeoutOptionValidate(t *testing.T) {
 	err = opts.Validate()
 	if err == nil {
 		t.Fatal("expected validation error for negative SlowProviderThreshold")
+	}
+}
+
+// TestProviderTimeoutNotRetried ensures a provider whose call timed out is never
+// re-executed by later Inject/TryInject calls: the orphaned call may still be
+// running, and re-running it would duplicate side effects (issue #38).
+func TestProviderTimeoutNotRetried(t *testing.T) {
+	type timeoutOnce struct{}
+
+	var calls int32
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	d := New(WithProviderTimeout(30 * time.Millisecond))
+	d.Provide(func() *timeoutOnce {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			close(started)
+		}
+		<-release
+		return &timeoutOnce{}
+	})
+
+	// First inject times out while the provider call is still running.
+	err := d.TryInject(func(*timeoutOnce) {})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("expected timeout error on first inject, got: %v", err)
+	}
+
+	// Let the orphaned provider call finish on its own.
+	close(release)
+	time.Sleep(50 * time.Millisecond)
+
+	// Later injects must not re-execute the provider.
+	err2 := d.TryInject(func(*timeoutOnce) {})
+	if err2 == nil {
+		t.Fatal("expected second inject to fail after provider timeout, got nil")
+	}
+	if !strings.Contains(err2.Error(), "timed out") {
+		t.Fatalf("expected second inject error to reference the earlier timeout, got: %v", err2)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("expected provider to execute exactly once, got %d", got)
 	}
 }
 

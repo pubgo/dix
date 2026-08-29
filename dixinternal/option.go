@@ -23,6 +23,8 @@ type (
 
 		// ProviderTimeout limits the maximum execution time of one provider call.
 		// Zero means no timeout.
+		// A timed-out call cannot be aborted: the provider is marked as failed and
+		// will not be re-executed by later Inject/TryInject calls.
 		ProviderTimeout time.Duration
 
 		// SlowProviderThreshold emits warning log if provider execution is slower than this threshold.

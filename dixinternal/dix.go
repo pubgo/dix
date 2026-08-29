@@ -44,6 +44,7 @@ func newDix(opts ...Option) (d *Dix) {
 		providers:     make(map[outputType][]*providerFn),
 		objects:       make(map[outputType]map[group][]value),
 		initializer:   make(map[reflect.Value]bool),
+		timedOut:      make(map[reflect.Value]bool),
 		providerStats: make(map[reflect.Value]*providerRuntimeStat),
 		recentErrors:  make([]recentErrorRecord, 0, 16),
 	}
@@ -59,6 +60,7 @@ type Dix struct {
 	providers     map[outputType][]*providerFn
 	objects       map[outputType]map[group][]value
 	initializer   map[reflect.Value]bool
+	timedOut      map[reflect.Value]bool
 	providerStats map[reflect.Value]*providerRuntimeStat
 	recentErrors  []recentErrorRecord
 }
@@ -155,6 +157,14 @@ func (dix *Dix) getOutputTypeValues(ctx context.Context, outTyp outputType, opt 
 		if dix.initializer[provider.fn] {
 			logDITrace("provider.skip.initialized", "provider", providerName, "output_type", outTyp.String())
 			continue
+		}
+
+		// A provider that timed out must not be re-executed: the orphaned call may
+		// still be running, and retrying would duplicate its side effects.
+		if dix.timedOut[provider.fn] {
+			logDITrace("provider.skip.timed_out", "provider", providerName, "output_type", outTyp.String())
+			retErr = fmt.Errorf("provider %s timed out previously and will not be re-executed; increase WithProviderTimeout or recreate the container", providerName)
+			return nil, retErr
 		}
 
 		logDITrace("provider.execute.dispatch",
@@ -316,6 +326,7 @@ func (dix *Dix) executeProvider(ctx context.Context, p *providerFn, outTyp outpu
 			Timeout:          opt.ProviderTimeout,
 		})
 		if timedOut {
+			dix.timedOut[p.fn] = true
 			logger.Error("provider execution timeout",
 				"error_type", buildErrorType("provider_execute", "call", true, wrappedErr.Error()),
 				"provider", fnName,
