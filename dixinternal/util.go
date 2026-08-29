@@ -130,7 +130,7 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 	var dfs func(reflect.Type, map[reflect.Type]bool, []reflect.Type) []reflect.Type
 	dfs = func(t reflect.Type, recursionStack map[reflect.Type]bool, path []reflect.Type) []reflect.Type {
 		if recursionStack[t] {
-			return slices.Clone(path)
+			return trimCyclePath(slices.Clone(path))
 		}
 
 		if visited[t] {
@@ -161,6 +161,21 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 		}
 	}
 	return nil
+}
+
+// trimCyclePath trims the cycle-external prefix from a DFS path so the reported
+// cycle starts at the repeated node: X -> A -> B -> A is reported as A -> B -> A.
+func trimCyclePath(path []reflect.Type) []reflect.Type {
+	if len(path) < 2 {
+		return path
+	}
+	last := path[len(path)-1]
+	for i, t := range path[:len(path)-1] {
+		if t == last {
+			return path[i:]
+		}
+	}
+	return path
 }
 
 func getProvideAllInputs(typ reflect.Type) []*providerInputType {

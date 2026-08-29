@@ -4,11 +4,16 @@ import (
 	"strings"
 )
 
-// isCycle Check whether type circular dependency
+// isCycle Check whether type circular dependency.
+// The dependency graph is cached and rebuilt only after new providers are
+// registered, instead of on every Inject/TryInject call.
 func (dix *Dix) isCycle() (string, bool) {
-	depGraph := buildDependencyGraph(dix.providers)
+	if dix.graphDirty {
+		dix.depGraph = buildDependencyGraph(dix.providers)
+		dix.graphDirty = false
+	}
 
-	cyclePath := detectCycle(depGraph)
+	cyclePath := detectCycle(dix.depGraph)
 	if len(cyclePath) == 0 {
 		return "", false
 	}
