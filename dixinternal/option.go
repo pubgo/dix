@@ -31,19 +31,6 @@ type (
 	}
 )
 
-func (o Options) Merge(opt Options) Options {
-	if o.AllowValuesNull {
-		opt.AllowValuesNull = o.AllowValuesNull
-	}
-	if o.ProviderTimeout > 0 {
-		opt.ProviderTimeout = o.ProviderTimeout
-	}
-	if o.SlowProviderThreshold > 0 {
-		opt.SlowProviderThreshold = o.SlowProviderThreshold
-	}
-	return opt
-}
-
 func (o Options) Validate() error {
 	if o.ProviderTimeout < 0 {
 		return fmt.Errorf("ProviderTimeout must be >= 0, got %s", o.ProviderTimeout)

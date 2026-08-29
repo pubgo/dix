@@ -1061,12 +1061,11 @@ func (dix *Dix) inject(ctx context.Context, param any, opts ...Option) (err erro
 		return errors.New("nil injection parameter")
 	}
 
-	// Merge options
+	// Merge options: caller-provided options take precedence over container defaults.
 	opt := dix.option
 	for _, o := range opts {
 		o(&opt)
 	}
-	opt = dix.option.Merge(opt)
 
 	val := reflect.ValueOf(param)
 	if !val.IsValid() || val.IsNil() {

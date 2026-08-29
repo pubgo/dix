@@ -1606,27 +1606,6 @@ func TestOptionWithValuesNull(t *testing.T) {
 	}
 }
 
-// TestOptionsMerge tests the Options.Merge method
-func TestOptionsMerge(t *testing.T) {
-	// Test merging when the original AllowValuesNull is false
-	opts1 := Options{AllowValuesNull: false}
-	opts2 := Options{AllowValuesNull: true}
-	merged := opts1.Merge(opts2)
-
-	if !merged.AllowValuesNull {
-		t.Fatal("Merge did not preserve AllowValuesNull from the second option when first was false")
-	}
-
-	// Test merging when the original AllowValuesNull is true
-	opts3 := Options{AllowValuesNull: true}
-	opts4 := Options{AllowValuesNull: false}
-	merged2 := opts3.Merge(opts4)
-
-	if !merged2.AllowValuesNull {
-		t.Fatal("Merge did not preserve AllowValuesNull from the first option when it was true")
-	}
-}
-
 // TestOptionsValidate tests the Options.Validate method
 func TestOptionsValidate(t *testing.T) {
 	opts := Options{}
@@ -2217,5 +2196,38 @@ func TestTimeoutOptionValidate(t *testing.T) {
 	err = opts.Validate()
 	if err == nil {
 		t.Fatal("expected validation error for negative SlowProviderThreshold")
+	}
+}
+
+// TestInjectCallerOptionOverridesContainerTimeout ensures caller-level options
+// take precedence over container defaults (issue #39).
+func TestInjectCallerOptionOverridesContainerTimeout(t *testing.T) {
+	type callerOptDep struct{}
+
+	d := New()
+	d.Provide(func() *callerOptDep {
+		time.Sleep(120 * time.Millisecond)
+		return &callerOptDep{}
+	})
+
+	err := d.TryInject(func(*callerOptDep) {}, WithProviderTimeout(20*time.Millisecond))
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("expected caller-level WithProviderTimeout(20ms) to apply, got: %v", err)
+	}
+}
+
+// TestInjectCallerOptionDisablesContainerTimeout ensures caller-level options can
+// disable a container-level timeout (issue #39).
+func TestInjectCallerOptionDisablesContainerTimeout(t *testing.T) {
+	type callerOptDep2 struct{}
+
+	d := New(WithProviderTimeout(20 * time.Millisecond))
+	d.Provide(func() *callerOptDep2 {
+		time.Sleep(120 * time.Millisecond)
+		return &callerOptDep2{}
+	})
+
+	if err := d.TryInject(func(*callerOptDep2) {}, WithProviderTimeout(0)); err != nil {
+		t.Fatalf("expected caller-level WithProviderTimeout(0) to disable container timeout, got: %v", err)
 	}
 }
