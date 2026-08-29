@@ -16,6 +16,7 @@
 
 ## 变更
 
+- 对齐 CI 与 Taskfile：example 模块纳入构建与测试，统一 -race/覆盖率(atomic) 与 lint 超时，忽略 coverage.html (#46)
 - 移除 Options.Merge：其"容器值优先"的覆盖语义是调用级 Option 失效的根因 (#39)
 
 ## 文档
