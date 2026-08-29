@@ -8,6 +8,7 @@ import (
 	"os"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -240,17 +241,21 @@ func TestOverwrite(t *testing.T) {
 	})
 }
 
-func TestInjectUnsupportedType(t *testing.T) {
+func TestProvideUnsupportedType(t *testing.T) {
 	d := New()
 	defer func() {
-		if r := recover(); r == nil {
+		r := recover()
+		if r == nil {
 			t.Fatal("expected a panic when providing an unsupported type, but got none")
+		}
+		if err, ok := r.(error); !ok || !strings.Contains(err.Error(), "unsupported output type") {
+			t.Fatalf("unexpected panic: %v", r)
 		}
 	}()
 
 	// Providing a bare `int` is not supported. It must be a pointer, interface, or func.
+	// The failure must surface at Provide time, not later at Inject time.
 	d.Provide(func() int { return 42 })
-	d.Inject(func(i int) {})
 }
 
 func TestOptionAllowValuesNull(t *testing.T) {
@@ -1606,27 +1611,6 @@ func TestOptionWithValuesNull(t *testing.T) {
 	}
 }
 
-// TestOptionsMerge tests the Options.Merge method
-func TestOptionsMerge(t *testing.T) {
-	// Test merging when the original AllowValuesNull is false
-	opts1 := Options{AllowValuesNull: false}
-	opts2 := Options{AllowValuesNull: true}
-	merged := opts1.Merge(opts2)
-
-	if !merged.AllowValuesNull {
-		t.Fatal("Merge did not preserve AllowValuesNull from the second option when first was false")
-	}
-
-	// Test merging when the original AllowValuesNull is true
-	opts3 := Options{AllowValuesNull: true}
-	opts4 := Options{AllowValuesNull: false}
-	merged2 := opts3.Merge(opts4)
-
-	if !merged2.AllowValuesNull {
-		t.Fatal("Merge did not preserve AllowValuesNull from the first option when it was true")
-	}
-}
-
 // TestOptionsValidate tests the Options.Validate method
 func TestOptionsValidate(t *testing.T) {
 	opts := Options{}
@@ -2217,5 +2201,112 @@ func TestTimeoutOptionValidate(t *testing.T) {
 	err = opts.Validate()
 	if err == nil {
 		t.Fatal("expected validation error for negative SlowProviderThreshold")
+	}
+}
+
+// TestProviderTimeoutNotRetried ensures a provider whose call timed out is never
+// re-executed by later Inject/TryInject calls: the orphaned call may still be
+// running, and re-running it would duplicate side effects (issue #38).
+func TestProviderTimeoutNotRetried(t *testing.T) {
+	type timeoutOnce struct{}
+
+	var calls int32
+	started := make(chan struct{})
+	release := make(chan struct{})
+
+	d := New(WithProviderTimeout(30 * time.Millisecond))
+	d.Provide(func() *timeoutOnce {
+		if atomic.AddInt32(&calls, 1) == 1 {
+			close(started)
+		}
+		<-release
+		return &timeoutOnce{}
+	})
+
+	// First inject times out while the provider call is still running.
+	err := d.TryInject(func(*timeoutOnce) {})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("expected timeout error on first inject, got: %v", err)
+	}
+
+	// Let the orphaned provider call finish on its own.
+	close(release)
+	time.Sleep(50 * time.Millisecond)
+
+	// Later injects must not re-execute the provider.
+	err2 := d.TryInject(func(*timeoutOnce) {})
+	if err2 == nil {
+		t.Fatal("expected second inject to fail after provider timeout, got nil")
+	}
+	if !strings.Contains(err2.Error(), "timed out") {
+		t.Fatalf("expected second inject error to reference the earlier timeout, got: %v", err2)
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("expected provider to execute exactly once, got %d", got)
+	}
+}
+
+// TestTryProvideRejectsUnsupportedOutputType ensures unsupported provider output
+// types fail at registration instead of silently registering and failing later
+// at Inject time (issue #40).
+func TestTryProvideRejectsUnsupportedOutputType(t *testing.T) {
+	d := New()
+
+	err := d.TryProvide(func() int { return 42 })
+	if err == nil {
+		t.Fatal("expected TryProvide to reject unsupported output type, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported output type") {
+		t.Fatalf("expected unsupported output type error, got: %v", err)
+	}
+}
+
+// TestTryProvideRejectsUnsupportedInputType ensures a provider parameter that
+// cannot be parsed into an injectable input fails at registration instead of
+// shrinking the provider arity and panicking later at Inject (issue #40).
+func TestTryProvideRejectsUnsupportedInputType(t *testing.T) {
+	type validDep struct{}
+
+	d := New()
+
+	err := d.TryProvide(func(i int) *validDep { return &validDep{} })
+	if err == nil {
+		t.Fatal("expected TryProvide to reject unsupported input type, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported input type") {
+		t.Fatalf("expected unsupported input type error, got: %v", err)
+	}
+}
+
+// TestInjectCallerOptionOverridesContainerTimeout ensures caller-level options
+// take precedence over container defaults (issue #39).
+func TestInjectCallerOptionOverridesContainerTimeout(t *testing.T) {
+	type callerOptDep struct{}
+
+	d := New()
+	d.Provide(func() *callerOptDep {
+		time.Sleep(120 * time.Millisecond)
+		return &callerOptDep{}
+	})
+
+	err := d.TryInject(func(*callerOptDep) {}, WithProviderTimeout(20*time.Millisecond))
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "timeout") {
+		t.Fatalf("expected caller-level WithProviderTimeout(20ms) to apply, got: %v", err)
+	}
+}
+
+// TestInjectCallerOptionDisablesContainerTimeout ensures caller-level options can
+// disable a container-level timeout (issue #39).
+func TestInjectCallerOptionDisablesContainerTimeout(t *testing.T) {
+	type callerOptDep2 struct{}
+
+	d := New(WithProviderTimeout(20 * time.Millisecond))
+	d.Provide(func() *callerOptDep2 {
+		time.Sleep(120 * time.Millisecond)
+		return &callerOptDep2{}
+	})
+
+	if err := d.TryInject(func(*callerOptDep2) {}, WithProviderTimeout(0)); err != nil {
+		t.Fatalf("expected caller-level WithProviderTimeout(0) to disable container timeout, got: %v", err)
 	}
 }

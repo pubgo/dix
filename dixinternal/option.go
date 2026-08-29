@@ -23,6 +23,8 @@ type (
 
 		// ProviderTimeout limits the maximum execution time of one provider call.
 		// Zero means no timeout.
+		// A timed-out call cannot be aborted: the provider is marked as failed and
+		// will not be re-executed by later Inject/TryInject calls.
 		ProviderTimeout time.Duration
 
 		// SlowProviderThreshold emits warning log if provider execution is slower than this threshold.
@@ -30,19 +32,6 @@ type (
 		SlowProviderThreshold time.Duration
 	}
 )
-
-func (o Options) Merge(opt Options) Options {
-	if o.AllowValuesNull {
-		opt.AllowValuesNull = o.AllowValuesNull
-	}
-	if o.ProviderTimeout > 0 {
-		opt.ProviderTimeout = o.ProviderTimeout
-	}
-	if o.SlowProviderThreshold > 0 {
-		opt.SlowProviderThreshold = o.SlowProviderThreshold
-	}
-	return opt
-}
 
 func (o Options) Validate() error {
 	if o.ProviderTimeout < 0 {
