@@ -125,7 +125,8 @@ Container options:
 
 | Option | Default | Description |
 | --- | --- | --- |
-| `WithValuesNull()` | enabled | Allow nil provider results |
+| `WithValuesNull()` | enabled | Tolerate missing map/list dependencies (resolve as empty collections) |
+| `WithRejectEmptyCollections()` | disabled | Reject missing map/list dependencies instead of resolving them as empty collections |
 | `WithProviderTimeout(d)` | `15s` | Per-provider execution timeout (`0` = disabled) |
 | `WithSlowProviderThreshold(d)` | `2s` | Warn when provider is slow (`0` = disabled) |
 

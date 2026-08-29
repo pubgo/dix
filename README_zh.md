@@ -125,7 +125,8 @@ if err := dix.TryInject(di, Run); err != nil {
 
 | 选项 | 默认值 | 说明 |
 | --- | --- | --- |
-| `WithValuesNull()` | 开启 | 允许 provider 返回 nil |
+| `WithValuesNull()` | 开启 | 容忍缺失的 map/list 依赖（解析为空集合） |
+| `WithRejectEmptyCollections()` | 关闭 | 拒绝缺失的 map/list 依赖，而不是解析为空集合 |
 | `WithProviderTimeout(d)` | `15s` | 单次 provider 执行超时（`0` = 关闭） |
 | `WithSlowProviderThreshold(d)` | `2s` | 慢 provider 告警阈值（`0` = 关闭） |
 
