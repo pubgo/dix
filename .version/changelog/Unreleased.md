@@ -10,6 +10,7 @@
 
 ## 修复
 
+- 修复 dixtrace 在未设置 DIX_TRACE_FILE 时回退写入 DIX_DIAG_FILE 的问题：两套 JSON schema 混入同一文件，trace 现在必须显式设置 DIX_TRACE_FILE 才落盘 (#41)
 - 修复环路径报告包含环外节点的问题：从重复节点处裁剪，如 X->A->B->A 报告为 A->B->A；同时缓存依赖图，仅在 providers 变更后重建，避免每次 Inject 全量建图 (#44)
 - 修复 Inject/TryInject 调用级 Option 被容器默认值覆盖而失效的问题，调用方 Option 现优先于容器默认值 (#39)
 - 修复 provider 调用超时后被静默重复执行的问题：超时的 provider 不再自动重试，后续注入返回明确错误 (#38)

@@ -15,7 +15,6 @@ import (
 
 const (
 	traceFileEnv = "DIX_TRACE_FILE"
-	diagFileEnv  = "DIX_DIAG_FILE"
 )
 
 // Event 是统一 trace 事件结构。
@@ -356,14 +355,12 @@ func (f *FileSink) ensureFile() *os.File {
 }
 
 func resolveTraceFilePathFromEnv() (path string, appendOnly bool) {
+	// Only an explicit DIX_TRACE_FILE enables the file sink. Falling back to
+	// DIX_DIAG_FILE would mix the dixtrace Event schema into the diag file,
+	// which dixinternal reads with its own record schema (issue #41).
 	tracePath := strings.TrimSpace(os.Getenv(traceFileEnv))
 	if tracePath != "" {
 		return tracePath, false
-	}
-
-	diagPath := strings.TrimSpace(os.Getenv(diagFileEnv))
-	if diagPath != "" {
-		return diagPath, true
 	}
 
 	return "", false
