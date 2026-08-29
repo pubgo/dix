@@ -194,15 +194,17 @@ func TestResolveTraceFilePathFromEnvPreferTrace(t *testing.T) {
 	}
 }
 
-func TestResolveTraceFilePathFromEnvFallbackDiag(t *testing.T) {
+func TestResolveTraceFilePathFromEnvNoFallback(t *testing.T) {
 	t.Setenv("DIX_TRACE_FILE", "")
 	t.Setenv("DIX_DIAG_FILE", "diag.jsonl")
 
+	// The trace file sink must not fall back to DIX_DIAG_FILE: the diag file
+	// uses a different JSON schema and is read by dixinternal record readers.
 	path, appendOnly := resolveTraceFilePathFromEnv()
-	if path != "diag.jsonl" {
-		t.Fatalf("expected diag fallback path, got %q", path)
+	if path != "" {
+		t.Fatalf("expected trace sink to be disabled without DIX_TRACE_FILE, got %q", path)
 	}
-	if !appendOnly {
-		t.Fatalf("expected append mode for diag fallback")
+	if appendOnly {
+		t.Fatalf("expected append mode to be irrelevant when disabled")
 	}
 }
