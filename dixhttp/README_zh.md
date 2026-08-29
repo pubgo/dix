@@ -29,7 +29,6 @@ import (
     "log"
     "github.com/pubgo/dix/v2"
     "github.com/pubgo/dix/v2/dixhttp"
-    "github.com/pubgo/dix/v2/dixinternal"
 )
 
 func main() {
@@ -50,7 +49,7 @@ func main() {
     })
     
     // 创建并启动 HTTP 服务器
-    server := dixhttp.NewServer((*dixinternal.Dix)(di))
+    server := dixhttp.NewServer(di)
     log.Println("服务器启动在 http://localhost:8080")
     if err := server.ListenAndServe(":8080"); err != nil {
         log.Fatal(err)
@@ -66,7 +65,7 @@ func main() {
 
 ```go
 server := dixhttp.NewServerWithOptions(
-  (*dixinternal.Dix)(di),
+  di,
   dixhttp.WithBasePath("/dix"),
 )
 // 访问 http://localhost:8080/dix/

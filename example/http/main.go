@@ -27,7 +27,6 @@ import (
 
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixhttp"
-	"github.com/pubgo/dix/v2/dixinternal"
 )
 
 // ==================== 接口定义 ====================
@@ -708,7 +707,7 @@ func main() {
 	// ==================== 启动HTTP服务器 ====================
 
 	// Create HTTP server for visualization
-	server := dixhttp.NewServer((*dixinternal.Dix)(di))
+	server := dixhttp.NewServer(di)
 
 	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
 		log.Fatal("Server error:", err)

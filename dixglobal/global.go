@@ -14,7 +14,7 @@ var _dix = dix.New(dix.WithValuesNull())
 //	dixglobal.Provide(NewDB)                                                  // Database connection
 //	dixglobal.Provide(NewHTTPServer)                                          // Server
 //
-//	dixglobal.Invoke(func(server *http.Server) { // Application startup
+//	dixglobal.Inject(func(server *http.Server) { // Application startup
 //		server.ListenAndServe()
 //	})
 //

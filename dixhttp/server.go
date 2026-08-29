@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixinternal"
 	"github.com/pubgo/dix/v2/dixtrace"
 )
@@ -19,7 +20,7 @@ var htmlTemplate string
 
 // Server provides HTTP endpoints to visualize dependency relationships
 type Server struct {
-	dix *dixinternal.Dix
+	dix *dix.Dix
 	mux *http.ServeMux
 	// basePath is an optional URL prefix (no trailing slash). Example: "/dix"
 	basePath string
@@ -82,8 +83,8 @@ func sanitizeGroupRules(rules []GroupRule) []GroupRule {
 }
 
 // NewServer creates a new HTTP server for dependency visualization
-func NewServer(dix *dixinternal.Dix) *Server {
-	return NewServerWithOptions(dix)
+func NewServer(di *dix.Dix) *Server {
+	return NewServerWithOptions(di)
 }
 
 // ServerOption customizes the HTTP server behavior.
@@ -97,9 +98,9 @@ func WithBasePath(basePath string) ServerOption {
 }
 
 // NewServerWithOptions creates a new HTTP server with options.
-func NewServerWithOptions(dix *dixinternal.Dix, opts ...ServerOption) *Server {
+func NewServerWithOptions(di *dix.Dix, opts ...ServerOption) *Server {
 	s := &Server{
-		dix:      dix,
+		dix:      di,
 		mux:      http.NewServeMux(),
 		basePath: "",
 	}
