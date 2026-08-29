@@ -24,6 +24,8 @@
 
 ## 文档
 
+- 按当前架构刷新 docs/design 与 docs/audit（中英）：补齐 Dix 字段/超时/依赖图缓存/追踪与诊断文件说明，更新全部 HTTP API 列表，审计改为标注日期的时点快照并修正 dig 对比行 (#45)
+- dixhttp 中文 README 补齐 runtime-stats 端点说明 (#45)
 - 修正 AllowValuesNull/WithValuesNull 语义说明：仅影响空 map/list，单值依赖缺失始终报错，同步中英 README (#42)
 - 修正 dixglobal 包注释中的 Invoke 为 Inject (#43)
 - 补充 ProviderTimeout 语义说明：超时调用不可中止，且失败后不会被重新执行 (#38)

@@ -274,6 +274,23 @@ dixhttp.RegisterGroupRules(
 }
 ```
 
+### GET `/api/runtime-stats?limit=20`
+返回 Provider 运行时指标，按总耗时降序排列，用于定位启动慢的组件。
+
+```json
+[
+  {
+    "function_name": "main.NewUserService",
+    "output_type": "*service.UserService",
+    "call_count": 1,
+    "total_duration": 3456789,
+    "average_duration": 3456789,
+    "last_duration": 3456789,
+    "last_run_at_unix_nano": 1700000000000000000
+  }
+]
+```
+
 ### GET `/api/packages`
 返回包列表
 

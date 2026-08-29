@@ -2,6 +2,8 @@
 
 [English](./design.md)
 
+> 最后更新：2026-08-29，基于 `v2` 分支（v2.0.1 之后的 dixinternal）。
+
 ## 1. 概述
 
 `dix` 是一个基于 Go 语言反射机制实现的轻量级依赖注入（DI）框架。参考了 `dig` 的设计理念，旨在通过自动化的依赖解析和生命周期管理，解耦组件间的依赖关系。
@@ -12,11 +14,12 @@
 *   **构造函数注入**：通过 `Provide` 注册构造函数
 *   **结构体/字段注入**：通过 `Inject` 对结构体字段进行填充
 *   **高级类型支持**：支持 `Interface`、`Map`、`Slice` 等集合类型的自动聚合注入
-*   **循环依赖检测**：内置图算法检测循环依赖
+*   **循环依赖检测**：内置图算法，依赖图带缓存
 *   **Web 可视化**：HTTP 模块提供交互式依赖图可视化
 *   **方法注入**：支持通过 `DixInject` 前缀方法进行 Setter 注入
 *   **分组管理**：支持依赖项按命名空间进行分组管理
 *   **安全 API**：`TryProvide`/`TryInject` 返回错误而非 panic
+*   **运行时诊断**：Provider 执行统计、最近错误记录、结构化追踪（`dixtrace`）与 JSONL 诊断文件
 
 ## 2. 核心架构
 
@@ -36,7 +39,7 @@
     *   函数本身是一等公民，可以作为依赖被注入
     *   常用于注入工厂函数、中间件或回调逻辑
 
-*注意：基础类型（如 `int`、`string`、`bool`）不能直接作为依赖项注入，必须封装在上述类型中（通常是结构体字段）。*
+*注意：基础类型（如 `int`、`string`、`bool`）不能直接作为依赖项注入，必须封装在上述类型中（通常是结构体字段）。声明了不支持输入/输出类型的 Provider 会在注册阶段被直接拒绝。*
 
 ### 2.2 数据结构
 
@@ -56,19 +59,32 @@ type Dix struct {
 
     // 初始化状态标记，防止 Provider 重复执行
     initializer map[reflect.Value]bool
+
+    // 调用超时的 Provider 集合，之后不会被重新执行
+    timedOut map[reflect.Value]bool
+
+    // 循环依赖检测用的依赖图缓存，providers 变更后惰性重建
+    depGraph   map[reflect.Type]map[reflect.Type]bool
+    graphDirty bool
+
+    // 每个 Provider 的运行时统计（调用次数、耗时、最近错误）
+    providerStats map[reflect.Value]*providerRuntimeStat
+
+    // 最近注入/Provider 失败记录的环形缓冲，用于诊断
+    recentErrors []recentErrorRecord
 }
 ```
 
 ### 2.3 核心流程
 
-1.  **注册 (Provide)**: 用户注册构造函数 -> 解析函数签名（输入/输出） -> 存入 `providers` 表
-2.  **调用 (Inject)**: 用户请求注入对象 -> 递归查找依赖 -> 执行 Provider 函数 -> 缓存结果 -> 填充目标
+1.  **注册 (Provide)**: 用户注册构造函数 -> 解析函数签名（输入/输出） -> 类型校验（不支持的输入/输出在注册阶段即报错，而非推迟到 Inject） -> 存入 `providers` 表 -> 标记依赖图失效
+2.  **调用 (Inject)**: 用户请求注入对象 -> 基于缓存依赖图的循环检测 -> 递归查找依赖 -> 执行 Provider 函数（带超时控制） -> 缓存结果 -> 填充目标
 
 ## 3. 详细设计
 
 ### 3.1 提供者注册
 
-`Provide` 方法负责将构造函数注册到容器中。
+`Provide` 方法负责将构造函数注册到容器中。`Provide` 在注册非法时 panic，`TryProvide` 则返回错误。
 
 #### 3.1.1 输入参数类型
 Provider 函数的参数声明了该组件的依赖项：
@@ -86,6 +102,8 @@ Provider 函数的参数声明了该组件的依赖项：
     *   **行为**: 声明为聚合依赖（Map）
     *   **解析**: 容器查找所有能提供类型 `T` 的 Provider，利用其返回的 Key（默认为 "default"）汇总成 Map
 
+*无法解析为可注入输入的参数（如 `func(i int)`）会在注册阶段被拒绝——否则 Provider 会在 Inject 时因参数个数不匹配而 panic。*
+
 #### 3.1.2 返回值类型
 Provider 函数的返回值定义了它向容器提供的组件。
 
@@ -100,6 +118,8 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 *   **Slice (`[]T`)**: 注册为类型 `T` 的列表 Provider
 *   **Map (`map[string]T`)**: 注册为类型 `T` 的映射 Provider
 *   **Struct**: **递归自动分解**，导出字段会被分别注册为对应类型的 Provider
+
+*不支持的输出类型（如 `func() int`) 会导致注册失败，而不是被静默忽略。*
 
 ### 3.2 依赖解析与注入
 
@@ -133,24 +153,46 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 3.  **映射依赖 (`map[string]T`)**: 查找**所有分组**，每个分组取**最后一个值**
 4.  **完全映射依赖 (`map[string][]T`)**: 查找**所有分组**，取每个分组的**所有值**
 
-### 3.3 循环依赖检测
+### 3.3 配置选项
 
-为防止无限递归，`dix` 在执行注入前会构建依赖图。
+容器选项通过 `New(opts...)` 设置；每次 `Inject`/`TryInject` 调用还可以传额外选项，且**调用级选项优先于容器默认值**。
+
+| 选项 | 默认值 | 语义 |
+| :--- | :--- | :--- |
+| `AllowValuesNull` / `WithValuesNull()` | `true` | 容忍缺失的 **map/list** 依赖，将其解析为空集合；单值依赖缺失始终报错 |
+| `WithRejectEmptyCollections()` | — | 拒绝缺失的 map/list 依赖，而不是解析为空集合 |
+| `ProviderTimeout` / `WithProviderTimeout(d)` | `15s` | 单次 provider 调用的最大执行时间；`0` 表示关闭超时。超时调用不可中止：该 provider 会被标记为失败，之后的注入**不会重新执行**它 |
+| `SlowProviderThreshold` / `WithSlowProviderThreshold(d)` | `2s` | Provider 调用超过该阈值时告警；`0` 表示关闭告警 |
+
+### 3.4 循环依赖检测
+
+为防止无限递归，`dix` 在执行注入前会对依赖图做循环检测。
 
 *   **算法**: 深度优先搜索 (DFS)
-*   **实现**: `dixinternal/cycle-check.go` 中的 `detectCycle` 函数
-*   **逻辑**: 构建邻接表，遍历图寻找回边，如发现循环立即报错并打印循环路径
+*   **实现**: `dixinternal/cycle-check.go` 与 `dixinternal/util.go` 中的 `isCycle` / `detectCycle`
+*   **逻辑**: 构建邻接表（`map[reflect.Type]map[reflect.Type]bool`），遍历图寻找回边。发现循环时，报告的路径会**裁剪到重复节点处**（如 `X -> A -> B -> A` 报告为 `A -> B -> A`），避免错误信息包含环外节点
+*   **缓存**: 依赖图缓存在容器上，仅在 `Provide` 标记失效后惰性重建——重复注入不会重复建图
 
-### 3.4 错误处理
+### 3.5 错误处理与运行时诊断
 
-使用日志系统进行错误记录。
-*   **上下文丰富**: 错误信息包含堆栈跟踪、Provider 函数名、参数类型等详细信息
+错误会携带丰富上下文（Provider 函数名、输出/输入类型、阶段、根因、提示）记录日志，并写入内存：
+
 *   **Panic 捕获**: 执行用户代码时使用 `defer recover` 机制捕获 Panic
 *   **安全 API**: `TryProvide` 和 `TryInject` 方法返回错误而非 panic
+*   **最近错误**: 容器维护有界的最近失败记录环形缓冲（`GetRecentErrors`），通过 `/api/errors` 暴露
+*   **Provider 统计**: 每个 Provider 的调用次数与耗时（`GetProviderRuntimeStats`），通过 `/api/runtime-stats` 暴露；慢 Provider 会产生告警
+*   **诊断文件**: 设置 `DIX_DIAG_FILE` 后，结构化错误/LLM 记录以 JSONL 追加写入，供事后分析（`ReadDiagFileRecords`）
 
-### 3.5 可视化
+### 3.6 追踪
 
-`dix` 通过 `dixhttp` 模块提供基于 HTTP 的可视化：
+`dixtrace` 对依赖解析与 Provider 调用链路提供 span/trace 埋点（`BeginSpanCtx`、`Emit`）：
+
+*   内存环形缓冲，可通过 `/api/trace` 查询，并支持 JSONL 导出
+*   文件导出**仅**在显式设置 `DIX_TRACE_FILE` 时启用，不回退到 `DIX_DIAG_FILE`——两者使用不同的 JSON schema
+
+### 3.7 可视化
+
+`dix` 通过 `dixhttp` 模块提供基于 HTTP 的可视化（`NewServer(di *dix.Dix)`）：
 
 *   **Web 界面**: 使用 Tailwind CSS + Alpine.js + vis-network 构建的现代 UI
 *   **功能**:
@@ -161,20 +203,29 @@ Provider 函数必须返回 **1 个或 2 个** 值。
     *   交互式图形，支持拖拽、缩放、点击
 *   **RESTful API**: JSON 端点用于程序化访问
     *   `/api/stats` - 统计摘要
+    *   `/api/runtime-stats` - Provider 运行时指标
+    *   `/api/errors` - 最近失败记录
+    *   `/api/diagnostics` - 诊断文件记录查询
+    *   `/api/trace` - 追踪事件查询
     *   `/api/packages` - 包列表
+    *   `/api/package/{name}` - 包详情
     *   `/api/dependencies` - 完整依赖数据
     *   `/api/type/{name}` - 特定类型的依赖链
+    *   `/api/group-rules` - 分组聚合规则
 
-### 3.6 扩展模块
+### 3.8 扩展模块
 
-#### 3.6.1 全局容器
+#### 3.8.1 全局容器
 `dixglobal` 包提供全局容器实例，方便在应用程序的不同部分共享。
 
-#### 3.6.2 Context 支持
+#### 3.8.2 Context 支持
 `dixcontext` 包提供将容器实例存储在 context 中的功能，便于在请求链路中传递。
 
-#### 3.6.3 HTTP 可视化
-`dixhttp` 包提供 HTTP 服务器，用于可视化展示依赖图。详见 [dixhttp/README_zh.md](../dixhttp/README_zh.md)。
+#### 3.8.3 HTTP 可视化
+`dixhttp` 包提供 HTTP 服务器，用于可视化展示依赖图。`NewServer`/`NewServerWithOptions` 直接接受 `*dix.Dix`。详见 [dixhttp/README_zh.md](../dixhttp/README_zh.md)。
+
+#### 3.8.4 追踪
+`dixtrace` 包提供注入与 Provider 调用链路的 span 追踪能力。见 3.6 节。
 
 ## 4. 模块划分
 
@@ -183,14 +234,17 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 | `dix.go` | 公共 API 包装，支持泛型 (`Inject[T]`、`InjectT[T]`、`Provide`) |
 | `dixinternal/api.go` | 核心公共 API (`New`、`Provide`、`TryProvide`、`Inject`、`TryInject`) |
 | `dixinternal/dix.go` | 核心逻辑：`newDix` 初始化、`inject` 递归流程、Provider 注册 |
-| `dixinternal/provider.go` | `providerFn` 结构定义，封装反射调用细节 |
-| `dixinternal/util.go` | 工具函数：反射 Map/Slice 创建、输出类型处理、图构建 |
-| `dixinternal/cycle-check.go` | 循环依赖检测逻辑 |
+| `dixinternal/provider.go` | `providerFn` 结构定义，封装反射调用细节与超时控制 |
+| `dixinternal/option.go` | 配置选项（`WithValuesNull`、`WithRejectEmptyCollections`、`WithProviderTimeout`、`WithSlowProviderThreshold`） |
+| `dixinternal/cycle-check.go` | 基于缓存依赖图的循环依赖检测 |
+| `dixinternal/util.go` | 工具函数：反射 Map/Slice 创建、输出类型处理、图构建、环检测 DFS |
+| `dixinternal/diag_file.go` | JSONL 诊断文件读写（`DIX_DIAG_FILE`） |
 | `dixinternal/logger.go` | 日志系统集成 |
-| `dixinternal/option.go` | 配置选项模式（如 `WithValuesNull`） |
+| `dixtrace/` | span/trace 埋点、内存 sink、可选 JSONL 文件 sink |
 | `dixglobal/` | 全局容器模块 |
 | `dixcontext/` | Context 集成模块 |
 | `dixhttp/` | HTTP 可视化模块 |
+| `example/` | 独立 Go 模块的可运行示例（CI 中编译） |
 
 ## 5. 线程安全性
 
@@ -206,8 +260,11 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 `dix` 是一个功能完备的 Go 依赖注入容器。它通过反射牺牲了一定的运行时性能（但在初始化阶段通常可接受），换取了极大的开发灵活性。
 
 设计亮点：
-*   充分利用 Go 语言特性（多返回值处理 error、结构体字段标签等）
+*   充分利用 Go 语言特性（多返回值处理 error、泛型友好封装）
 *   优雅支持集合类型注入
+*   注册快速失败：非法 Provider 签名在 Provide 阶段即被拒绝
+*   循环检测带缓存，环路径精确裁剪
+*   内置运行时诊断：Provider 统计、最近错误、追踪、诊断文件
 *   丰富的扩展生态（全局容器、context 集成、Web 可视化）
 *   安全 API 变体支持优雅的错误处理
 

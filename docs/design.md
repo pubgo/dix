@@ -2,6 +2,8 @@
 
 [中文文档](./design_zh.md)
 
+> Last updated: 2026-08-29, against `v2` (dixinternal as of v2.0.1+).
+
 ## 1. Overview
 
 `dix` is a lightweight dependency injection (DI) framework for Go, implemented using reflection. Inspired by `dig`, it aims to decouple component dependencies through automated dependency resolution and lifecycle management.
@@ -12,11 +14,12 @@ Core features include:
 *   **Constructor Injection**: Register constructors via `Provide`.
 *   **Struct/Field Injection**: Fill struct fields via `Inject`.
 *   **Advanced Type Support**: Support for `Interface`, `Map`, `Slice` with automatic aggregation.
-*   **Cycle Detection**: Built-in graph algorithm for circular dependency detection.
+*   **Cycle Detection**: Built-in graph algorithm with a cached dependency graph.
 *   **Web Visualization**: HTTP module for interactive dependency graph visualization.
 *   **Method Injection**: Support setter injection via `DixInject` prefix methods.
 *   **Namespace Grouping**: Support grouping dependencies by namespace.
 *   **Safe APIs**: `TryProvide`/`TryInject` variants that return errors instead of panicking.
+*   **Runtime Diagnostics**: Provider execution stats, recent error records, structured tracing (`dixtrace`), and a JSONL diagnostics file.
 
 ## 2. Core Architecture
 
@@ -36,7 +39,7 @@ The core of `dix` is a container struct named `Dix`, which maintains a registry 
     *   Functions are first-class citizens and can be injected as dependencies.
     *   Commonly used for factory functions, middleware, or callbacks.
 
-*Note: Basic types (e.g., `int`, `string`, `bool`) cannot be directly injected as dependencies; they must be wrapped in the above types (usually as struct fields).*
+*Note: Basic types (e.g., `int`, `string`, `bool`) cannot be directly injected as dependencies; they must be wrapped in the above types (usually as struct fields). Providers declaring unsupported input/output types are rejected at registration time.*
 
 ### 2.2 Data Structures
 
@@ -56,19 +59,33 @@ type Dix struct {
 
     // Initialization state flags to prevent duplicate Provider execution
     initializer map[reflect.Value]bool
+
+    // Providers whose call timed out; they are never re-executed
+    timedOut map[reflect.Value]bool
+
+    // Cached dependency graph for cycle detection,
+    // rebuilt lazily after providers change
+    depGraph   map[reflect.Type]map[reflect.Type]bool
+    graphDirty bool
+
+    // Runtime stats per provider (call count, durations, last error)
+    providerStats map[reflect.Value]*providerRuntimeStat
+
+    // Ring buffer of recent inject/provider failures for diagnostics
+    recentErrors []recentErrorRecord
 }
 ```
 
 ### 2.3 Core Flow
 
-1.  **Register (Provide)**: User registers constructor -> Parse function signature (input/output) -> Store in `providers` table.
-2.  **Invoke (Inject)**: User requests object injection -> Recursively find dependencies -> Execute Provider function -> Cache result -> Fill target.
+1.  **Register (Provide)**: User registers constructor -> Parse function signature (input/output) -> Validate types (unsupported input/output types fail here, not at Inject time) -> Store in `providers` table -> Mark the dependency graph stale.
+2.  **Invoke (Inject)**: User requests object injection -> Cycle check on the cached graph -> Recursively find dependencies -> Execute Provider function (with timeout control) -> Cache result -> Fill target.
 
 ## 3. Detailed Design
 
 ### 3.1 Provider Registration
 
-The `Provide` method registers constructors into the container.
+The `Provide` method registers constructors into the container. `Provide` panics on invalid registrations; `TryProvide` returns an error instead.
 
 #### 3.1.1 Input Parameter Types
 Provider function parameters declare the component's dependencies:
@@ -78,13 +95,15 @@ Provider function parameters declare the component's dependencies:
     *   **Resolution**: Container finds matching instance from registered Providers.
 *   **Struct**:
     *   **Behavior**: **Recursive Dependency Injection**.
-    *   **Resolution**: Framework recursively traverses all **exported fields**. If a field type is supported (Func/Ptr/Interface), the container automatically finds and injects the corresponding instance.
+    *   **Resolution**: Framework recursively traverses all **exported fields**. If a field type is supported (Func/Ptr/Interface/aggregate types), the container automatically finds and injects the corresponding instance.
 *   **Slice (`[]T`)**:
     *   **Behavior**: Declared as aggregate dependency (List).
     *   **Resolution**: Container finds all Providers that can provide type `T` and aggregates results from the **default group** into a slice.
 *   **Map (`map[string]T`)**:
     *   **Behavior**: Declared as aggregate dependency (Map).
     *   **Resolution**: Container finds all Providers for type `T`, using their returned Keys (default "default") to form a Map.
+
+*Parameters that cannot be parsed into any injectable input (e.g. `func(i int)`) are rejected at registration time — registering a provider whose signature cannot be satisfied would otherwise panic at Inject time with an arity mismatch.*
 
 #### 3.1.2 Return Value Types
 Provider function return values define what components it provides to the container.
@@ -107,6 +126,8 @@ Supported types:
 *   **Struct**:
     *   **Behavior**: **Recursive Auto-Flattening**.
     *   **Effect**: Framework recursively traverses all **exported fields**. Supported field types are registered as separate Providers.
+
+*Unsupported output kinds (e.g. `func() int`) fail registration instead of being silently ignored.*
 
 ### 3.2 Dependency Resolution & Injection
 
@@ -140,24 +161,46 @@ Resolution strategies for different dependency declarations:
 3.  **Map (`map[string]T`)**: Query **all groups**, take **last value** per group.
 4.  **Full Map (`map[string][]T`)**: Query **all groups**, take **all values** per group.
 
-### 3.3 Cycle Detection
+### 3.3 Options
 
-To prevent infinite recursion, `dix` builds a dependency graph before or during injection.
+Container options are set via `New(opts...)`; every `Inject`/`TryInject` call may pass additional options, and **caller-level options take precedence over container defaults**.
+
+| Option | Default | Semantics |
+| :--- | :--- | :--- |
+| `AllowValuesNull` / `WithValuesNull()` | `true` | Tolerates missing **map/list** dependencies by resolving them as empty collections. Missing single-value dependencies always fail. |
+| `WithRejectEmptyCollections()` | — | Rejects missing map/list dependencies instead of resolving them as empty collections. |
+| `ProviderTimeout` / `WithProviderTimeout(d)` | `15s` | Max execution time of one provider call; `0` disables timeout. A timed-out call cannot be aborted: the provider is marked as failed and is **never re-executed** by later injections. |
+| `SlowProviderThreshold` / `WithSlowProviderThreshold(d)` | `2s` | Warn when a provider call exceeds the threshold; `0` disables the warning. |
+
+### 3.4 Cycle Detection
+
+To prevent infinite recursion, `dix` checks a dependency graph before injection.
 
 *   **Algorithm**: Depth-First Search (DFS).
-*   **Implementation**: `detectCycle` function in `dixinternal/cycle-check.go`.
-*   **Logic**: Build `map[reflect.Type]map[reflect.Type]bool` adjacency list, traverse to find back edges. If cycle found, immediately report error with cycle path.
+*   **Implementation**: `detectCycle` / `isCycle` in `dixinternal/cycle-check.go` and `dixinternal/util.go`.
+*   **Logic**: Build `map[reflect.Type]map[reflect.Type]bool` adjacency list, traverse to find back edges. If a cycle is found, the reported path is **trimmed to the repeated node** (e.g. `X -> A -> B -> A` is reported as `A -> B -> A`) so the message does not include cycle-external nodes.
+*   **Caching**: The graph is cached on the container and rebuilt lazily only after `Provide` marks it stale — repeated injections do not re-build the graph.
 
-### 3.4 Error Handling
+### 3.5 Error Handling & Runtime Diagnostics
 
-Uses logging system for error recording.
-*   **Rich Context**: Error messages include stack traces, Provider function names, parameter types for debugging.
+Errors are logged with rich context (provider name, output/input types, stage, root cause, hint) and recorded in-memory:
+
 *   **Panic Recovery**: Uses `defer recover` when executing user code (Provider functions) to prevent application crashes.
 *   **Safe APIs**: `TryProvide` and `TryInject` methods return errors instead of panicking, suitable for scenarios where graceful error handling is preferred.
+*   **Recent Errors**: The container keeps a bounded ring buffer of recent failures (`GetRecentErrors`), exposed via `/api/errors`.
+*   **Provider Stats**: Per-provider call count and durations (`GetProviderRuntimeStats`), exposed via `/api/runtime-stats`; slow providers emit warnings.
+*   **Diagnostics File**: When `DIX_DIAG_FILE` is set, structured error/LLM records are appended as JSONL for post-mortem analysis (`ReadDiagFileRecords`).
 
-### 3.5 Visualization
+### 3.6 Tracing
 
-`dix` provides HTTP-based visualization through the `dixhttp` module:
+`dixtrace` provides span/trace instrumentation of the resolve/provider call chain (`BeginSpanCtx`, `Emit`):
+
+*   In-memory ring buffer queryable via `/api/trace`, plus JSONL export.
+*   File export is enabled **only** by setting `DIX_TRACE_FILE` explicitly. There is no fallback to `DIX_DIAG_FILE` — the two files use different JSON schemas by design.
+
+### 3.7 Visualization
+
+`dix` provides HTTP-based visualization through the `dixhttp` module (`NewServer(di *dix.Dix)`):
 
 *   **Web Interface**: Modern UI built with Tailwind CSS + Alpine.js + vis-network
 *   **Features**:
@@ -168,20 +211,29 @@ Uses logging system for error recording.
     *   Interactive graph with drag, zoom, and click
 *   **RESTful API**: JSON endpoints for programmatic access
     *   `/api/stats` - Summary statistics
+    *   `/api/runtime-stats` - Provider runtime metrics
+    *   `/api/errors` - Recent failure records
+    *   `/api/diagnostics` - Diag-file record query
+    *   `/api/trace` - Trace event query
     *   `/api/packages` - Package list
+    *   `/api/package/{name}` - Package details
     *   `/api/dependencies` - Full dependency data
     *   `/api/type/{name}` - Type-specific dependency chain
+    *   `/api/group-rules` - Group aggregation rules
 
-### 3.6 Extension Modules
+### 3.8 Extension Modules
 
-#### 3.6.1 Global Container
+#### 3.8.1 Global Container
 `dixglobal` package provides a global container instance for sharing across application parts.
 
-#### 3.6.2 Context Support
+#### 3.8.2 Context Support
 `dixcontext` package provides functionality to store container instance in context for passing through request chains.
 
-#### 3.6.3 HTTP Visualization
-`dixhttp` package provides HTTP server for visualizing dependency graphs with interactive web interface. See [dixhttp/README.md](../dixhttp/README.md) for details.
+#### 3.8.3 HTTP Visualization
+`dixhttp` package provides HTTP server for visualizing dependency graphs with interactive web interface. `NewServer`/`NewServerWithOptions` accept `*dix.Dix` directly. See [dixhttp/README.md](../dixhttp/README.md) for details.
+
+#### 3.8.4 Tracing
+`dixtrace` package provides span-based tracing of the injection and provider call chains. See 3.6.
 
 ## 4. Module Breakdown
 
@@ -190,14 +242,17 @@ Uses logging system for error recording.
 | `dix.go` | Public API wrapper with generics support (`Inject[T]`, `InjectT[T]`, `Provide`). |
 | `dixinternal/api.go` | Core public API (`New`, `Provide`, `TryProvide`, `Inject`, `TryInject`). |
 | `dixinternal/dix.go` | Core logic: `newDix` initialization, `inject` recursive flow, Provider registration. |
-| `dixinternal/provider.go` | `providerFn` struct definition, encapsulates reflection call details. |
-| `dixinternal/util.go` | Utility functions: reflection Map/Slice creation, output type handling, graph building. |
-| `dixinternal/cycle-check.go` | Circular dependency detection logic. |
+| `dixinternal/provider.go` | `providerFn` struct definition, encapsulates reflection call details and timeout control. |
+| `dixinternal/option.go` | Configuration options (`WithValuesNull`, `WithRejectEmptyCollections`, `WithProviderTimeout`, `WithSlowProviderThreshold`). |
+| `dixinternal/cycle-check.go` | Circular dependency detection over the cached dependency graph. |
+| `dixinternal/util.go` | Utility functions: reflection Map/Slice creation, output type handling, graph building, cycle DFS. |
+| `dixinternal/diag_file.go` | JSONL diagnostics file writer/reader (`DIX_DIAG_FILE`). |
 | `dixinternal/logger.go` | Logging system integration with structured output. |
-| `dixinternal/option.go` | Configuration option pattern (e.g., `WithValuesNull`). |
+| `dixtrace/` | Span/trace instrumentation, in-memory sink, optional JSONL file sink. |
 | `dixglobal/` | Global container module with singleton instance. |
 | `dixcontext/` | Context integration module for storing container in context. |
 | `dixhttp/` | HTTP visualization module with modern web interface. |
+| `example/` | Independent Go module with runnable examples (compiled in CI). |
 
 ## 5. Thread Safety
 
@@ -210,11 +265,14 @@ For concurrent scenarios, consider:
 
 ## 6. Summary
 
-`dix` is a feature-complete Go dependency injection container. It trades some runtime performance (through reflection) for great development flexibility - acceptable during initialization phase. 
+`dix` is a feature-complete Go dependency injection container. It trades some runtime performance (through reflection) for great development flexibility - acceptable during initialization phase.
 
 Design highlights:
-*   Full utilization of Go language features (multi-return for error handling, struct field tags)
+*   Full utilization of Go language features (multi-return for error handling, generics-friendly wrappers)
 *   Elegant support for collection type injection
+*   Fast-failing registration: invalid provider signatures are rejected at Provide time
+*   Cached cycle detection with precise, trimmed cycle paths
+*   Built-in runtime diagnostics: provider stats, recent errors, tracing, diagnostics file
 *   Rich extension ecosystem (global container, context integration, web visualization)
 *   Safe API variants for graceful error handling
 
