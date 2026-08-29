@@ -2,8 +2,11 @@
 
 [中文版](./audit_zh.md)
 
-**Audit Date**: January 2026  
-**Branch**: fix/remote_render  
+> **Point-in-time snapshot.** Numbers below describe the tree as of the audit
+> date and will drift; treat them as a dated report, not a live dashboard.
+
+**Audit Date**: 2026-08-29
+**Branch**: v2 @ 8746133 (v2.0.1 + post-release fixes)
 **Auditor**: Automated Code Review
 
 ---
@@ -12,43 +15,46 @@
 
 | Metric | Value |
 |--------|-------|
-| Total Lines of Code | ~8,459 |
-| Test Cases | 63 (all passing ✅) |
-| Core Test Coverage | 74% (dixinternal) |
-| go vet Check | Passed ✅ |
-| Example Count | 17+ |
+| Core Lines of Code | ~8,600 (excluding examples) |
+| Example Module | ~1,300 LOC, 13 runnable examples (independent Go module) |
+| Test Functions | 127 (all passing ✅) |
+| Test Coverage (`go test -cover`) | dixinternal 69.7% · dix 48.4% · dixhttp 51.1% · dixtrace 66.0% · dixcontext 94.7% · dixglobal 81.8% |
+| CI | GitHub Actions: `go test -race` (+ atomic coverage, incl. example module) and `golangci-lint` on every push/PR ✅ |
+| Lint (`golangci-lint`) | 0 issues ✅ |
 
 ---
 
 ## ✅ Strengths
 
-### 1. Architecture Design (⭐⭐⭐⭐⭐)
-- Clear module layering: `dix` → `dixinternal` → `dixglobal`/`dixcontext`/`dixhttp`
-- Good separation of concerns
-- Clean core API: `New()`, `Provide()`, `Inject()`
+### 1. Architecture Design
+- Clear module layering: `dix` → `dixinternal` → `dixglobal`/`dixcontext`/`dixhttp`/`dixtrace`
+- Good separation of concerns; `dixhttp` accepts `*dix.Dix` directly (no internal-type leakage in signatures)
+- Clean core API: `New()`, `Provide()`, `Inject()` plus safe `Try*` variants
 
-### 2. Feature Completeness (⭐⭐⭐⭐⭐)
-- ✅ Circular dependency detection (graph-based algorithm)
+### 2. Feature Completeness
+- ✅ Circular dependency detection (cached graph + DFS, trimmed cycle paths)
 - ✅ Multiple injection modes: function, struct, Map, List
 - ✅ Namespace isolation
 - ✅ Method injection (`DixInject` prefix)
 - ✅ Error handling (Provider returns error)
 - ✅ Safe APIs: `TryProvide`/`TryInject`
+- ✅ Fail-fast registration: unsupported provider input/output types are rejected at Provide time
+- ✅ Provider timeout control (timed-out providers are never re-executed)
+- ✅ Runtime diagnostics: provider stats, recent errors, tracing, JSONL diagnostics file
 
-### 3. Code Quality (⭐⭐⭐⭐)
-- Proper error handling and panic recovery
+### 3. Code Quality
+- Proper error handling and panic recovery with rich, structured context (stage, root cause, hint)
 - Detailed logging output (slog)
 - Type-safe generic APIs
 
-### 4. Visualization Module (⭐⭐⭐⭐⭐)
-- Modern frontend stack (Tailwind + Alpine.js)
-- Feature-rich: fuzzy search, depth control, bidirectional tracking
-- Well-designed RESTful API
+### 4. Visualization Module
+- Modern frontend stack (Tailwind + Alpine.js + vis-network)
+- Feature-rich: fuzzy search, depth control, bidirectional tracking, group rules
+- Well-designed RESTful API including runtime-stats/errors/diagnostics/trace
 
-### 5. Documentation (⭐⭐⭐⭐)
-- Clear main README with bilingual support
-- Detailed design document
-- Rich example code
+### 5. Documentation & Testing Infrastructure
+- Bilingual README and design document, refreshed against the current architecture
+- CI compiles the independent `example` module (regressions there cannot merge silently)
 
 ---
 
@@ -56,62 +62,21 @@
 
 ### 1. Uneven Test Coverage
 ```
-dixinternal: 74%  ✅
-dix:         0%   ⚠️
-dixhttp:     0%   ⚠️
-dixcontext:  0%   ⚠️
-dixglobal:   0%   ⚠️
+dixinternal: 69.7%  ✅
+dixcontext:  94.7%  ✅
+dixglobal:   81.8%  ✅
+dixtrace:    66.0%  🟡
+dixhttp:     51.1%  🟡
+dix:         48.4%  🟡
 ```
-**Recommendation**: Add unit tests for other modules
+**Recommendation**: Prioritize tests for the root wrapper package and dixhttp handlers.
 
-### 2. dixrender Module
-- `dixrender/` directory exists but appears unused
-- May be legacy code
+### 2. Performance
+- Reflection-based resolution is fine for startup, but hot-path injection in long-running scenarios is unmeasured.
+**Recommendation**: Add benchmark tests for Inject resolution depth and large provider sets.
 
-**Recommendation**: Confirm if needed or remove
-
-### 3. Concurrency Safety
-- Current `Dix` struct has no explicit concurrency protection
-- May have issues if used across multiple goroutines
-
-**Recommendation**: Add read-write locks or document thread safety clearly
-
----
-
-## 📈 Improvement Suggestions
-
-| Priority | Item | Recommendation |
-|----------|------|----------------|
-| 🔴 High | Testing | Add tests for `dix`, `dixhttp` modules |
-| 🟡 Medium | Cleanup | Remove unused `dixrender` module if not needed |
-| 🟡 Medium | Concurrency | Add thread safety documentation or mutex |
-| 🟢 Low | CI/CD | Add GitHub Actions for automated testing |
-| 🟢 Low | Benchmark | Add performance benchmark tests |
-
----
-
-## 🏆 Overall Rating
-
-| Dimension | Rating |
-|-----------|--------|
-| Architecture Design | ⭐⭐⭐⭐⭐ |
-| Feature Completeness | ⭐⭐⭐⭐⭐ |
-| Code Quality | ⭐⭐⭐⭐ |
-| Test Coverage | ⭐⭐⭐ |
-| Documentation | ⭐⭐⭐⭐ |
-| **Overall** | **⭐⭐⭐⭐ (4/5)** |
-
----
-
-## 📋 Summary
-
-`dix` is a well-designed, feature-complete Go dependency injection framework. The core module has sufficient test coverage, and the visualization feature is impressive. Main areas for improvement are:
-
-1. Increase test coverage for edge modules
-2. Clean up legacy code
-3. Document thread safety explicitly
-
-The project is production-ready for most use cases, with particular strength in large project visualization support.
+### 3. API Surface Evolution
+- `Options.Merge` was removed (its semantics made call-level options dead code); `dixinternal` is still importable — long term, consider moving it under a real Go `internal/` directory.
 
 ---
 
@@ -122,14 +87,18 @@ The project is production-ready for most use cases, with particular strength in 
 | Feature | dix | dig |
 |---------|-----|-----|
 | Basic DI | ✅ | ✅ |
-| Cycle Detection | ✅ | ✅ |
+| Cycle Detection | ✅ (cached graph) | ✅ |
 | Map/List Injection | ✅ | ✅ |
 | Namespace | ✅ | ✅ (via Group) |
 | Method Injection | ✅ | ❌ |
-| Safe API (no panic) | ✅ | ❌ |
+| Error-returning registration/invocation | ✅ (`TryProvide`/`TryInject`; `Provide`/`Inject` panic) | ✅ (`Provide`/`Invoke` return error) |
 | Web Visualization | ✅ | ❌ |
 | Generic API | ✅ | ❌ |
 | Struct Auto-Flatten | ✅ | ✅ (via fx) |
+
+> Note: dig's `Provide`/`Invoke` return errors by design; dix's `Provide`/`Inject`
+> panic but ship `TryProvide`/`TryInject` equivalents. The row was corrected from
+> an earlier draft that claimed dig had no safe API.
 
 ### vs google/wire
 
@@ -139,11 +108,17 @@ The project is production-ready for most use cases, with particular strength in 
 | No Code Generation | ✅ | ❌ |
 | Dynamic Registration | ✅ | ❌ |
 | Performance | Medium | High |
-| Debugging | Easier | Harder |
+| Debugging | Easier (runtime diagnostics, visualization) | Harder |
 | Visualization | ✅ | ❌ |
 
 ### Positioning
 
-- **dix**: Best for large projects needing runtime flexibility and visualization
+- **dix**: Best for large projects needing runtime flexibility, diagnostics, and visualization
 - **dig**: Good for simpler runtime DI needs
 - **wire**: Best for performance-critical applications with static dependencies
+
+---
+
+## 📋 Summary
+
+`dix` is a well-designed, feature-complete Go dependency injection framework. Since the previous audit (January 2026): CI now covers race/coverage/lint including the example module, all modules have non-zero test coverage, thread-safety semantics are documented, provider registration fails fast, and runtime diagnostics (stats/errors/trace/diagnostics-file) landed. The main remaining investments are test coverage for the root and dixhttp packages and performance benchmarks.
