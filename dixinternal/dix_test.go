@@ -2310,3 +2310,30 @@ func TestInjectCallerOptionDisablesContainerTimeout(t *testing.T) {
 		t.Fatalf("expected caller-level WithProviderTimeout(0) to disable container timeout, got: %v", err)
 	}
 }
+
+// TestWithRejectEmptyCollections ensures the public option can disable the
+// default tolerance for empty map/list injections (issue #42). Missing
+// single-value dependencies always fail regardless of this option.
+func TestWithRejectEmptyCollections(t *testing.T) {
+	type missingDep struct{}
+
+	// Container-level option rejects empty collections.
+	d := New(WithRejectEmptyCollections())
+	if err := d.TryInject(func(m map[string]*missingDep) {}); err == nil {
+		t.Fatal("expected empty map injection to fail with WithRejectEmptyCollections, got nil")
+	}
+	if err := d.TryInject(func(l []*missingDep) {}); err == nil {
+		t.Fatal("expected empty list injection to fail with WithRejectEmptyCollections, got nil")
+	}
+
+	// Default container tolerates empty collections.
+	d2 := New()
+	if err := d2.TryInject(func(m map[string]*missingDep) {}); err != nil {
+		t.Fatalf("expected empty map injection to be tolerated by default, got: %v", err)
+	}
+
+	// A call-level option can reject them for a single inject call.
+	if err := d2.TryInject(func(m map[string]*missingDep) {}, WithRejectEmptyCollections()); err == nil {
+		t.Fatal("expected call-level WithRejectEmptyCollections to reject empty map, got nil")
+	}
+}

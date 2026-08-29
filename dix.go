@@ -25,6 +25,8 @@ func SetLog(log slog.Handler) { dixinternal.SetLog(log) }
 
 func WithValuesNull() Option { return dixinternal.WithValuesNull() }
 
+func WithRejectEmptyCollections() Option { return dixinternal.WithRejectEmptyCollections() }
+
 func WithProviderTimeout(timeout time.Duration) Option {
 	return dixinternal.WithProviderTimeout(timeout)
 }

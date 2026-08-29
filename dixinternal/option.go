@@ -18,7 +18,9 @@ const (
 type (
 	Option  func(opts *Options)
 	Options struct {
-		// AllowValuesNull allows result to be nil
+		// AllowValuesNull tolerates missing map/list dependencies by resolving
+		// them as empty collections. Missing single-value dependencies always
+		// fail regardless of this flag.
 		AllowValuesNull bool
 
 		// ProviderTimeout limits the maximum execution time of one provider call.
@@ -46,6 +48,15 @@ func (o Options) Validate() error {
 func WithValuesNull() Option {
 	return func(opts *Options) {
 		opts.AllowValuesNull = true
+	}
+}
+
+// WithRejectEmptyCollections rejects injections of missing map/list dependencies
+// instead of resolving them as empty collections. It is the counterpart of the
+// default AllowValuesNull=true behavior.
+func WithRejectEmptyCollections() Option {
+	return func(opts *Options) {
+		opts.AllowValuesNull = false
 	}
 }
 

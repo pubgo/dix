@@ -30,7 +30,6 @@ import (
     "log"
     "github.com/pubgo/dix/v2"
     "github.com/pubgo/dix/v2/dixhttp"
-    "github.com/pubgo/dix/v2/dixinternal"
 )
 
 func main() {
@@ -51,7 +50,7 @@ func main() {
     })
     
     // Create and start HTTP server
-    server := dixhttp.NewServer((*dixinternal.Dix)(di))
+    server := dixhttp.NewServer(di)
     log.Println("Server starting at http://localhost:8080")
     if err := server.ListenAndServe(":8080"); err != nil {
         log.Fatal(err)
@@ -67,7 +66,7 @@ If you need to mount the UI and API under a path prefix (e.g. behind a gateway),
 
 ```go
 server := dixhttp.NewServerWithOptions(
-  (*dixinternal.Dix)(di),
+  di,
   dixhttp.WithBasePath("/dix"),
 )
 // Visit http://localhost:8080/dix/

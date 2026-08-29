@@ -3,11 +3,11 @@ package dixhttp
 import (
 	"log"
 
-	"github.com/pubgo/dix/v2/dixinternal"
+	"github.com/pubgo/dix/v2"
 )
 
 // Example demonstrates how to use the HTTP server for dependency visualization
-func Example(di *dixinternal.Dix) {
+func Example(di *dix.Dix) {
 	// Create HTTP server
 	server := NewServer(di)
 
