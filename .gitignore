@@ -17,3 +17,6 @@ vendor
 .env
 .vscode/
 .local/
+
+# Test artifacts
+coverage.html
