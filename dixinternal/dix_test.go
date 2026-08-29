@@ -2337,3 +2337,62 @@ func TestWithRejectEmptyCollections(t *testing.T) {
 		t.Fatal("expected call-level WithRejectEmptyCollections to reject empty map, got nil")
 	}
 }
+
+// TestTrimCyclePath ensures a DFS path with a back-edge is trimmed so the
+// reported cycle starts at the repeated node and excludes the cycle-external
+// prefix: X -> A -> B -> A must be reported as A -> B -> A (issue #44).
+func TestTrimCyclePath(t *testing.T) {
+	type cycX struct{}
+	type cycA struct{}
+	type cycB struct{}
+
+	path := []reflect.Type{
+		reflect.TypeOf(&cycX{}),
+		reflect.TypeOf(&cycA{}),
+		reflect.TypeOf(&cycB{}),
+		reflect.TypeOf(&cycA{}),
+	}
+
+	trimmed := trimCyclePath(path)
+	want := []reflect.Type{
+		reflect.TypeOf(&cycA{}),
+		reflect.TypeOf(&cycB{}),
+		reflect.TypeOf(&cycA{}),
+	}
+
+	if len(trimmed) != len(want) {
+		t.Fatalf("expected trimmed path %v, got %v", want, trimmed)
+	}
+	for i := range want {
+		if trimmed[i] != want[i] {
+			t.Fatalf("expected trimmed path %v, got %v", want, trimmed)
+		}
+	}
+}
+
+// TestCycleDetectionAfterNewProviders guards the cached dependency graph: a
+// cycle introduced by a later Provide must still be detected (issue #44).
+func TestCycleDetectionAfterNewProviders(t *testing.T) {
+	type incycA struct{}
+	type incycB struct{}
+
+	d := New()
+	d.Provide(func() *incycA { return &incycA{} })
+	d.Provide(func(*incycA) *incycB { return &incycB{} })
+
+	if _, ok := d.isCycle(); ok {
+		t.Fatal("expected no cycle before the back-edge provider is registered")
+	}
+
+	// Introduce the cycle *incycA -> *incycB -> *incycA.
+	d.Provide(func(*incycB) *incycA { return &incycA{} })
+
+	if _, ok := d.isCycle(); !ok {
+		t.Fatal("expected cycle detection to pick up providers registered later")
+	}
+
+	err := d.TryInject(func(*incycB) {})
+	if err == nil || !strings.Contains(err.Error(), "circular dependency") {
+		t.Fatalf("expected circular dependency error, got: %v", err)
+	}
+}

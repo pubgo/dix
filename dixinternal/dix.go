@@ -45,6 +45,8 @@ func newDix(opts ...Option) (d *Dix) {
 		objects:       make(map[outputType]map[group][]value),
 		initializer:   make(map[reflect.Value]bool),
 		timedOut:      make(map[reflect.Value]bool),
+		depGraph:      nil,
+		graphDirty:    true,
 		providerStats: make(map[reflect.Value]*providerRuntimeStat),
 		recentErrors:  make([]recentErrorRecord, 0, 16),
 	}
@@ -61,6 +63,8 @@ type Dix struct {
 	objects       map[outputType]map[group][]value
 	initializer   map[reflect.Value]bool
 	timedOut      map[reflect.Value]bool
+	depGraph      map[reflect.Type]map[reflect.Type]bool
+	graphDirty    bool
 	providerStats map[reflect.Value]*providerRuntimeStat
 	recentErrors  []recentErrorRecord
 }
@@ -1336,6 +1340,10 @@ func (dix *Dix) provide(param any) {
 		logDITrace("provide.register.failed", "provider", traceFnName, "declared_output_type", typ.Out(0).String(), "error", err)
 		panic(err)
 	}
+
+	// The dependency graph used for cycle detection is derived from the
+	// provider set; mark it stale so the next check rebuilds it.
+	dix.graphDirty = true
 
 	logDITrace("provide.done", "component", component, "provider", traceFnName)
 }
