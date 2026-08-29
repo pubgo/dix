@@ -1214,7 +1214,7 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 
 	default:
 		logDITrace("provide.register.output.unsupported", "provider", traceFnName, "declared_output_type", outType.String(), "declared_output_kind", outType.Kind().String())
-		logger.Warn("unsupported output type", "type", outType.String(), "kind", outType.Kind().String(), "provider", fnVal)
+		return fmt.Errorf("unsupported output type %s (kind=%s) for provider %s; supported: ptr, interface, func, slice, map, struct", outType, outType.Kind(), traceFnName)
 	}
 	logDITrace("provide.register.done", "provider", traceFnName, "declared_output_type", outType.String())
 	return nil
@@ -1310,7 +1310,11 @@ func (dix *Dix) provide(param any) {
 		logDITrace("provide.input.analyze.start", "provider", traceFnName, "index", i, "input_type", inType.String())
 		parsedInputs := dix.getProvideInput(inType)
 		if len(parsedInputs) == 0 {
+			// Reject instead of silently dropping the parameter: registering a
+			// provider with fewer inputs than its signature declares would panic
+			// at call time.
 			logDITrace("provide.input.analyze.unsupported", "provider", traceFnName, "index", i, "input_type", inType.String())
+			panic(fmt.Errorf("unsupported input type %s (kind=%s) for provider %s; supported: ptr, interface, func, struct, map, slice", inType, inType.Kind(), traceFnName))
 		}
 		for _, input := range parsedInputs {
 			if input == nil || input.typ == nil {

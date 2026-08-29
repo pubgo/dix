@@ -241,17 +241,21 @@ func TestOverwrite(t *testing.T) {
 	})
 }
 
-func TestInjectUnsupportedType(t *testing.T) {
+func TestProvideUnsupportedType(t *testing.T) {
 	d := New()
 	defer func() {
-		if r := recover(); r == nil {
+		r := recover()
+		if r == nil {
 			t.Fatal("expected a panic when providing an unsupported type, but got none")
+		}
+		if err, ok := r.(error); !ok || !strings.Contains(err.Error(), "unsupported output type") {
+			t.Fatalf("unexpected panic: %v", r)
 		}
 	}()
 
 	// Providing a bare `int` is not supported. It must be a pointer, interface, or func.
+	// The failure must surface at Provide time, not later at Inject time.
 	d.Provide(func() int { return 42 })
-	d.Inject(func(i int) {})
 }
 
 func TestOptionAllowValuesNull(t *testing.T) {
@@ -2239,6 +2243,38 @@ func TestProviderTimeoutNotRetried(t *testing.T) {
 	}
 	if got := atomic.LoadInt32(&calls); got != 1 {
 		t.Fatalf("expected provider to execute exactly once, got %d", got)
+	}
+}
+
+// TestTryProvideRejectsUnsupportedOutputType ensures unsupported provider output
+// types fail at registration instead of silently registering and failing later
+// at Inject time (issue #40).
+func TestTryProvideRejectsUnsupportedOutputType(t *testing.T) {
+	d := New()
+
+	err := d.TryProvide(func() int { return 42 })
+	if err == nil {
+		t.Fatal("expected TryProvide to reject unsupported output type, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported output type") {
+		t.Fatalf("expected unsupported output type error, got: %v", err)
+	}
+}
+
+// TestTryProvideRejectsUnsupportedInputType ensures a provider parameter that
+// cannot be parsed into an injectable input fails at registration instead of
+// shrinking the provider arity and panicking later at Inject (issue #40).
+func TestTryProvideRejectsUnsupportedInputType(t *testing.T) {
+	type validDep struct{}
+
+	d := New()
+
+	err := d.TryProvide(func(i int) *validDep { return &validDep{} })
+	if err == nil {
+		t.Fatal("expected TryProvide to reject unsupported input type, got nil")
+	}
+	if !strings.Contains(err.Error(), "unsupported input type") {
+		t.Fatalf("expected unsupported input type error, got: %v", err)
 	}
 }
 
