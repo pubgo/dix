@@ -358,21 +358,41 @@ GitHub Actions runs `go test ./... -race` and `golangci-lint` on push/PR.
 
 ## 📚 Examples
 
-| Example                                           | Description             |
-| ------------------------------------------------- | ----------------------- |
-| [struct-in](./example/struct-in/)                 | Struct input injection  |
-| [struct-out](./example/struct-out/)               | Struct multi-output     |
-| [func](./example/func/)                           | Function injection      |
-| [map](./example/map/)                             | Map/namespace injection |
-| [map-nil](./example/map-nil/)                     | Map with nil handling   |
-| [list](./example/list/)                           | List injection          |
-| [list-nil](./example/list-nil/)                   | List with nil handling  |
-| [lazy](./example/lazy/)                           | Lazy injection          |
-| [cycle](./example/cycle/)                         | Cycle detection example |
-| [handler](./example/handler/)                     | Handler pattern         |
-| [inject_method](./example/inject_method/)         | Method injection        |
-| [test-return-error](./example/test-return-error/) | Error handling          |
-| [http](./example/http/)                           | HTTP visualization      |
+Naming follows the feature being demonstrated: `inject-*` for injection patterns, `provide-*` for provider capabilities, `context-*` for context integration.
+
+### Injection patterns
+
+| Example                                          | Description                                   |
+| ------------------------------------------------ | --------------------------------------------- |
+| [inject-func](./example/inject-func/)            | Function type injection                       |
+| [inject-struct](./example/inject-struct/)        | Struct field injection (nested)               |
+| [inject-method](./example/inject-method/)        | `DixInject` method injection                  |
+| [inject-generic](./example/inject-generic/)      | Generic `InjectT` / `InjectTContext`          |
+| [context-inject](./example/context-inject/)      | Context-aware injection & trace propagation   |
+| [inject-map](./example/inject-map/)              | Map/namespace injection                       |
+| [inject-list](./example/inject-list/)            | List aggregation                              |
+| [inject-map-list](./example/inject-map-list/)    | Grouped `map[string][]T` aggregation          |
+| [provide-multi-output](./example/provide-multi-output/) | Struct multi-output provider           |
+
+### Runtime semantics
+
+| Example                                    | Description                                        |
+| ------------------------------------------ | -------------------------------------------------- |
+| [lazy](./example/lazy/)                    | Lazy provider execution & caching                  |
+| [cycle](./example/cycle/)                  | Cycle detection                                    |
+| [singleton](./example/singleton/)          | Container-wide singleton sharing                   |
+| [error-handling](./example/error-handling/)| `TryProvide`/`TryInject` error handling            |
+| [timeout](./example/timeout/)              | Provider timeout & slow-provider warning           |
+| [empty-collections](./example/empty-collections/) | Missing collections resolve to empty (or reject) |
+
+### Modules
+
+| Example                                        | Description                        |
+| ---------------------------------------------- | ---------------------------------- |
+| [global](./example/global/)                    | `dixglobal` global container       |
+| [context-container](./example/context-container/) | `dixcontext` container in Context |
+| [custom-logger](./example/custom-logger/)      | `SetLog` custom logging            |
+| [http](./example/http/)                        | HTTP visualization (end-to-end)    |
 
 ## 📖 Documentation
 

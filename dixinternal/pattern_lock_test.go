@@ -80,7 +80,7 @@ func TestPatternLazyResolution(t *testing.T) {
 	}
 }
 
-// 锁定 example/func:同类型多 provider 时,单值注入取最后注册者,
+// 锁定 example/inject-func:同类型多 provider 时,单值注入取最后注册者,
 // 列表注入按注册顺序聚合全部产物;两类查询互不干扰。
 func TestPatternSingleValueLastProviderWins(t *testing.T) {
 	di := New()
@@ -211,7 +211,7 @@ func TestPatternMapNamespaceAggregation(t *testing.T) {
 	}
 }
 
-// 锁定 example/inject_method:
+// 锁定 example/inject-method:
 //  1. DixInject 前缀方法在结构体字段注入之前执行(此时字段仍为零值);
 //  2. 方法按名称字母序依次注入;
 //  3. 方法参数解析规则与函数注入一致:单值取最后注册者,切片聚合全部。
@@ -265,7 +265,7 @@ func (t *patternMethodTarget) DixInjectOne(err error) {
 	t.single = err
 }
 
-// 锁定 example/struct-out:provider 返回的 struct 按导出字段拆分注册,
+// 锁定 example/provide-multi-output:provider 返回的 struct 按导出字段拆分注册,
 // 各字段共享同一底层实例,字段内的嵌套依赖递归解析。
 func TestPatternStructOutSharedInstance(t *testing.T) {
 	di := New()
@@ -304,7 +304,7 @@ func TestPatternStructOutSharedInstance(t *testing.T) {
 	}
 }
 
-// 锁定 example/handler:同类型依赖在容器内是单例——
+// 锁定 example/singleton:同类型依赖在容器内是单例——
 // 不同 provider、注入函数拿到的都是同一实例。
 func TestPatternSingletonSharing(t *testing.T) {
 	di := New()
@@ -334,7 +334,7 @@ func TestPatternSingletonSharing(t *testing.T) {
 	}
 }
 
-// 锁定 example/test-return-error:
+// 锁定 example/error-handling:
 //  1. provider 返回非 nil error 时注入失败,原始错误可通过 errors.Is 判定;
 //  2. 失败的 provider 不缓存,下次 Inject 重新执行(与超时 provider 永不重试相反);
 //  3. 注入函数自身返回的 error 原样保留在错误链上。
@@ -373,7 +373,7 @@ func TestPatternProviderErrorPropagation(t *testing.T) {
 	}
 }
 
-// 锁定 example/list-nil 与 example/map-nil:
+// 锁定 example/empty-collections:
 //  1. 默认容器(AllowValuesNull=true)把缺失的 map/list 依赖解析为非 nil 空集合;
 //  2. WithRejectEmptyCollections 后缺失的 map/list 依赖导致注入失败;
 //  3. 单值依赖缺失永远失败,与 AllowValuesNull 无关。
@@ -408,7 +408,7 @@ func TestPatternNilCollectionsTolerance(t *testing.T) {
 	}
 }
 
-// 锁定 example/struct-in:注入目标结构体的导出指针字段递归解析,
+// 锁定 example/inject-struct:注入目标结构体的导出指针字段递归解析,
 // 未导出字段跳过且不报错。
 func TestPatternStructInNestedResolution(t *testing.T) {
 	di := New()

@@ -4,7 +4,9 @@ package dixinternal
 // provider panic 恢复、诊断文件读取、注册校验等核心路径的行为契约。
 
 import (
+	"bytes"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -273,6 +275,39 @@ func TestLocationHelpers(t *testing.T) {
 	}
 	if got := inferPkgPathFromFile(""); got != "" {
 		t.Fatalf("inferPkgPathFromFile empty input = %q", got)
+	}
+}
+
+// 锁定慢 provider 告警:执行超过 WithSlowProviderThreshold 时输出告警日志,
+// 阈值为 0 时完全禁用(不告警、不计时)。
+func TestSlowProviderWarning(t *testing.T) {
+	originalLogger := logger
+	var buf bytes.Buffer
+	logger = slog.New(slog.NewTextHandler(&buf, nil)).WithGroup(getLogPackage())
+	defer func() { logger = originalLogger }()
+
+	// slowProvider 在超过阈值的容器中注册并解析,产生慢告警。
+	register := func(d *Dix) {
+		d.Provide(func() *apiLockSvc {
+			time.Sleep(5 * time.Millisecond)
+			return &apiLockSvc{}
+		})
+		if err := d.TryInject(func(s *apiLockSvc) { _ = s }); err != nil {
+			t.Errorf("TryInject: %v", err)
+		}
+	}
+
+	di := New(WithSlowProviderThreshold(time.Millisecond))
+	register(di)
+	if !strings.Contains(buf.String(), "slow provider execution detected") {
+		t.Fatalf("expected slow-provider warning, got %q", buf.String())
+	}
+
+	buf.Reset()
+	silent := New(WithSlowProviderThreshold(0))
+	register(silent)
+	if strings.Contains(buf.String(), "slow provider execution detected") {
+		t.Fatalf("disabled threshold must not warn, got %q", buf.String())
 	}
 }
 
