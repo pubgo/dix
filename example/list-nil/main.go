@@ -5,7 +5,8 @@
 //   - 缺失的单值依赖(指针/接口/函数)仍然报错,不受该开关影响;
 //   - 若希望缺失集合依赖直接失败,改用 dix.WithRejectEmptyCollections()。
 //
-// 该语义由 dixinternal 的 TestPatternNilCollectionsTolerance 锁定。
+// 该语义由 dixinternal 的 TestPatternNilCollectionsTolerance
+// 与本目录 main_test.go 的 TestInjectMissingHandlers 锁定。
 //
 // 【运行】
 //
@@ -27,6 +28,20 @@ import (
 type Handler func() string
 
 func main() {
+	handlers := injectMissingHandlers()
+
+	fmt.Printf("Handlers is nil: %v\n", handlers == nil)
+	fmt.Printf("Handlers length: %d\n", len(handlers))
+
+	di := dix.New(dix.WithValuesNull())
+	dix.Inject(di, func(hs []Handler) {
+		fmt.Printf("function inject length: %d\n", len(hs))
+	})
+}
+
+// injectMissingHandlers 演示:没有任何 provider 时,
+// slice 字段与切片参数都注入为非 nil 的空切片。
+func injectMissingHandlers() []Handler {
 	di := dix.New(dix.WithValuesNull())
 
 	type App struct {
@@ -35,11 +50,5 @@ func main() {
 
 	app := &App{}
 	dix.Inject(di, app)
-
-	fmt.Printf("Handlers is nil: %v\n", app.Handlers == nil)
-	fmt.Printf("Handlers length: %d\n", len(app.Handlers))
-
-	dix.Inject(di, func(handlers []Handler) {
-		fmt.Printf("function inject length: %d\n", len(handlers))
-	})
+	return app.Handlers
 }

@@ -7,6 +7,7 @@
 ## 新增
 
 - 新增 dixinternal 模式锁测试（pattern_lock_test.go / api_lock_test.go，17 个），将 example 演示的 provider/inject 行为契约锁死；dixinternal 覆盖率 69.7% → 83.5%
+- example 全部 13 个示例新增 main_test.go：演示逻辑抽取为可返回结果的函数，测试逐一断言各示例特性（含 http 端到端装配）
 
 ## 修复
 

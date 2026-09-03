@@ -6,7 +6,8 @@
 //     单值注入取最后注册者的产物(本例中 C 拿到的是 B 的 *Service);
 //   - 产物缓存在容器内,后续 Inject 不会重复执行 provider。
 //
-// 该语义由 dixinternal 的 TestPatternLazyResolution 锁定。
+// 该语义由 dixinternal 的 TestPatternLazyResolution
+// 与本目录 main_test.go 的 TestRunLazy 锁定。
 //
 // 【运行】
 //
@@ -32,6 +33,16 @@ type Service struct {
 }
 
 func main() {
+	order, injectedErr := runLazy()
+
+	fmt.Println("inject got error:", injectedErr)
+	fmt.Println("execution order:", order)
+}
+
+// runLazy 注册三个 provider 并触发一次注入:
+// A、B 提供 *Service,C 依赖 *Service 并返回 error。
+// 返回 provider 执行顺序(注册顺序)与注入得到的 error。
+func runLazy() ([]string, error) {
 	di := dix.New()
 	order := make([]string, 0, 3)
 
@@ -54,9 +65,7 @@ func main() {
 		return fmt.Errorf("ready")
 	})
 
-	dix.Inject(di, func(err error) {
-		fmt.Println("inject got error:", err)
-	})
-
-	fmt.Println("execution order:", order)
+	var injected error
+	dix.Inject(di, func(err error) { injected = err })
+	return order, injected
 }

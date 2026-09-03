@@ -459,7 +459,29 @@ func runStartupErrorScenarios(di *dix.Dix) {
 func main() {
 	configureExampleLogOutput()
 
-	// Create a Dix container
+	di := buildContainer()
+	preCreateObjects(di)
+
+	// 在启动阶段统一触发多类可识别错误，便于验证 error_type/hint 的识别与定位
+	runStartupErrorScenarios(di)
+
+	log.Println("")
+
+	// ==================== 启动HTTP服务器 ====================
+
+	// Create HTTP server for visualization
+	server := dixhttp.NewServer(di)
+
+	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
+		log.Fatal("Server error:", err)
+	}
+}
+
+// buildContainer 注册示例的全部组件并返回容器:
+// 基础组件 → 服务层 → 控制器层 → Application 聚合,
+// 另含用于诊断演示的慢依赖/错误场景 provider。
+// 该装配契约由 main_test.go 的 TestBuildContainerWiresApplication 锁定。
+func buildContainer() *dix.Dix {
 	di := dix.New(
 		dix.WithProviderTimeout(200*time.Millisecond),
 		dix.WithSlowProviderThreshold(80*time.Millisecond),
@@ -659,13 +681,14 @@ func main() {
 		}
 	})
 
-	// ==================== 预创建对象（用于可视化） ====================
-	// 注意：Objects 只有在实际执行 Provider 后才会被创建
-	// 这里我们通过函数注入来触发对象的创建，这样 objects 视图才能显示内容
+	return di
+}
 
+// preCreateObjects 通过函数注入触发 provider 执行,
+// 让 dixhttp 的 objects 视图在启动后即有内容可展示。
+func preCreateObjects(di *dix.Dix) {
 	log.Println("📦 Pre-creating objects for visualization...")
 
-	// 使用函数注入来创建对象（这种方式可以处理指针类型）
 	if err := di.TryInject(func(
 		app *Application,
 		userService *UserService,
@@ -703,19 +726,5 @@ func main() {
 		}
 	}); err != nil {
 		log.Printf("⚠️ pre-create injection failed, web will still start for diagnostics: %v", err)
-	}
-
-	// 在启动阶段统一触发多类可识别错误，便于验证 error_type/hint 的识别与定位
-	runStartupErrorScenarios(di)
-
-	log.Println("")
-
-	// ==================== 启动HTTP服务器 ====================
-
-	// Create HTTP server for visualization
-	server := dixhttp.NewServer(di)
-
-	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
-		log.Fatal("Server error:", err)
 	}
 }

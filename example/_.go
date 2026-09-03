@@ -16,6 +16,9 @@
 //	test-return-error/  TryProvide/TryInject 错误处理
 //	http/               dixhttp 依赖图可视化(端到端大示例)
 //
-// 各示例演示的行为契约由 dixinternal/pattern_lock_test.go 锁定,
-// 注释与实现不一致时以锁测试为准并修正注释。
+// 各示例演示的行为契约由两层测试锁定:
+//   - dixinternal/pattern_lock_test.go:核心容器语义;
+//   - 各示例目录的 main_test.go:示例抽取出的演示函数本身。
+//
+// 注释与实现不一致时,以测试为准并修正注释。
 package example

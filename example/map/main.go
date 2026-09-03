@@ -6,7 +6,8 @@
 //   - provider 返回 map 中的 nil 值会被跳过;
 //   - 空字符串 key 归入 default 分组,注入后表现为 key "default"。
 //
-// 该语义由 dixinternal 的 TestPatternMapNamespaceAggregation 锁定。
+// 该语义由 dixinternal 的 TestPatternMapNamespaceAggregation
+// 与本目录 main_test.go 的 TestBuildDatabases 锁定。
 //
 // 【运行】
 //
@@ -30,9 +31,18 @@ type Database struct {
 }
 
 func main() {
+	dbs := buildDatabases()
+
+	fmt.Println("master:", dbs["master"].DSN)
+	fmt.Println("slave:", dbs["slave"].DSN)
+	fmt.Println("analytics:", dbs["analytics"].DSN)
+}
+
+// buildDatabases 用两个 provider 向同一个 map[string]*Database
+// 贡献命名空间,注入后返回合并结果。
+func buildDatabases() map[string]*Database {
 	di := dix.New()
 
-	// 多个 provider 可以向同一个 map[string]*Database 贡献命名空间。
 	dix.Provide(di, func() map[string]*Database {
 		return map[string]*Database{
 			"master": {DSN: "postgres://master/db"},
@@ -46,10 +56,7 @@ func main() {
 		}
 	})
 
-	// 注入时所有命名空间合并进同一个 map。
-	dix.Inject(di, func(dbs map[string]*Database) {
-		fmt.Println("master:", dbs["master"].DSN)
-		fmt.Println("slave:", dbs["slave"].DSN)
-		fmt.Println("analytics:", dbs["analytics"].DSN)
-	})
+	var dbs map[string]*Database
+	dix.Inject(di, func(m map[string]*Database) { dbs = m })
+	return dbs
 }

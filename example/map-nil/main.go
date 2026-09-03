@@ -5,7 +5,8 @@
 //   - 缺失的单值依赖(指针/接口/函数)仍然报错,不受该开关影响;
 //   - 若希望缺失集合依赖直接失败,改用 dix.WithRejectEmptyCollections()。
 //
-// 该语义由 dixinternal 的 TestPatternNilCollectionsTolerance 锁定。
+// 该语义由 dixinternal 的 TestPatternNilCollectionsTolerance
+// 与本目录 main_test.go 的 TestInjectMissingErrors 锁定。
 //
 // 【运行】
 //
@@ -25,6 +26,20 @@ import (
 )
 
 func main() {
+	errs := injectMissingErrors()
+
+	fmt.Printf("Errors is nil: %v\n", errs == nil)
+	fmt.Printf("Errors length: %d\n", len(errs))
+
+	di := dix.New(dix.WithValuesNull())
+	dix.Inject(di, func(m map[string]error) {
+		fmt.Printf("function inject length: %d\n", len(m))
+	})
+}
+
+// injectMissingErrors 演示:没有任何 provider 时,
+// map 字段注入为非 nil 的空 map。
+func injectMissingErrors() map[string]error {
 	// WithValuesNull:缺失的集合依赖解析为空集合,而不是报错。
 	di := dix.New(dix.WithValuesNull())
 
@@ -34,11 +49,5 @@ func main() {
 
 	app := &App{}
 	dix.Inject(di, app)
-
-	fmt.Printf("Errors is nil: %v\n", app.Errors == nil)
-	fmt.Printf("Errors length: %d\n", len(app.Errors))
-
-	dix.Inject(di, func(errs map[string]error) {
-		fmt.Printf("function inject length: %d\n", len(errs))
-	})
+	return app.Errors
 }
