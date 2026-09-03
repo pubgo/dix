@@ -6,7 +6,8 @@
 //   - 方法参数解析规则与函数注入一致:
 //     单值参数取最后注册的 provider,切片参数按注册顺序聚合全部。
 //
-// 该语义由 dixinternal 的 TestPatternMethodInjection 锁定。
+// 该语义由 dixinternal 的 TestPatternMethodInjection
+// 与本目录 main_test.go 的 TestInjectWorker 锁定。
 //
 // 【运行】
 //
@@ -25,16 +26,22 @@ import (
 	"github.com/pubgo/dix/v2"
 )
 
-type Worker struct{}
+// Worker 通过 DixInject 前缀方法接收依赖;
+// loggerMsg/tags 字段记录方法实际收到的值,便于测试断言。
+type Worker struct {
+	loggerMsg string
+	tags      []error
+}
 
-// DixInject 前缀方法在 Worker 创建后自动调用,依赖通过参数传入。
-// 单值参数:多个 error provider 时取最后注册的 "secondary"。
+// DixInjectLogger 是单值参数方法:多个 error provider 时取最后注册的 "secondary"。
 func (w *Worker) DixInjectLogger(err error) {
+	w.loggerMsg = err.Error()
 	fmt.Println("logger dependency:", err.Error())
 }
 
-// 切片参数:聚合全部 error 产物,顺序与注册顺序一致。
+// DixInjectTags 是切片参数方法:聚合全部 error 产物,顺序与注册顺序一致。
 func (w *Worker) DixInjectTags(errs []error) {
+	w.tags = errs
 	fmt.Print("tag dependencies:")
 	for i, e := range errs {
 		fmt.Printf(" [%d]=%s", i, e.Error())
@@ -43,10 +50,18 @@ func (w *Worker) DixInjectTags(errs []error) {
 }
 
 func main() {
+	_ = injectWorker()
+}
+
+// injectWorker 创建 Worker 并完成方法注入,
+// 返回 Worker 以便检查方法实际收到的依赖。
+func injectWorker() *Worker {
 	di := dix.New()
 
 	dix.Provide(di, func() error { return errors.New("primary") })
 	dix.Provide(di, func() error { return errors.New("secondary") })
 
-	dix.Inject(di, &Worker{})
+	w := &Worker{}
+	dix.Inject(di, w)
+	return w
 }

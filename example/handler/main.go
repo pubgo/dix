@@ -5,7 +5,8 @@
 //   - map[string]*Redis 提供命名空间版本,与单值 *Redis 并存互不干扰;
 //   - 结构体注入时,指针字段取单值,map 字段取命名空间集合。
 //
-// 该语义由 dixinternal 的 TestPatternSingletonSharing 锁定。
+// 该语义由 dixinternal 的 TestPatternSingletonSharing
+// 与本目录 main_test.go 的 TestBuildHandler 锁定。
 //
 // 【运行】
 //
@@ -39,6 +40,20 @@ type Handler struct {
 }
 
 func main() {
+	di, h := buildHandler()
+
+	// 函数注入演示:拿到的是与 Handler 相同的单例依赖。
+	dix.Inject(di, func(r *Redis, l *log.Logger) {
+		l.Println("invoke default redis:", r.Addr)
+	})
+
+	fmt.Println("handler.Redis:", h.Redis.Addr)
+	fmt.Println("handler.All[cache]:", h.All["cache"].Addr)
+}
+
+// buildHandler 注册 logger(单例)、单值 Redis 与命名空间 Redis,
+// 完成结构体注入后返回容器与 Handler。
+func buildHandler() (*dix.Dix, *Handler) {
 	di := dix.New()
 
 	// Logger 是单例:所有消费者拿到的都是同一个实例。
@@ -59,15 +74,7 @@ func main() {
 		}
 	})
 
-	// 函数注入。
-	dix.Inject(di, func(r *Redis, l *log.Logger) {
-		l.Println("invoke default redis:", r.Addr)
-	})
-
-	// 结构体注入:Redis 字段取单值,All 字段取命名空间集合。
 	h := &Handler{}
 	dix.Inject(di, h)
-
-	fmt.Println("handler.Redis:", h.Redis.Addr)
-	fmt.Println("handler.All[cache]:", h.All["cache"].Addr)
+	return di, h
 }

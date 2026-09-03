@@ -40,5 +40,8 @@ cd example/<名称> && go run .
 
 ## 配套测试
 
-- 行为锁:`dixinternal/pattern_lock_test.go`(与本目录示例一一对应)
+每个示例目录都有 `main_test.go`,直接断言其演示函数的行为(13/13 覆盖):
+`main.go` 把演示逻辑抽取为可返回结果的函数,`main()` 只负责打印——测试与文档互为印证。
+
+- 行为锁:`dixinternal/pattern_lock_test.go`(核心容器语义)+ 各示例 `main_test.go`(示例级契约)
 - 全量单测:`task test`(根模块 + 本模块);可视化演示:`task web-demo`

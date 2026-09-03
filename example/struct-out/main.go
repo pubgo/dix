@@ -5,7 +5,8 @@
 //   - 各字段共享同一底层实例:UserSvc.DB 与 OrderSvc.DB 是同一个 *Database 指针;
 //   - provider 本身只执行一次,产物缓存后按需分发。
 //
-// 该语义由 dixinternal 的 TestPatternStructOutSharedInstance 锁定。
+// 该语义由 dixinternal 的 TestPatternStructOutSharedInstance
+// 与本目录 main_test.go 的 TestBuildServices 锁定。
 //
 // 【运行】
 //
@@ -51,6 +52,15 @@ type Out struct {
 }
 
 func main() {
+	user, order := buildServices()
+
+	// user.DB 与 order.DB 是同一个 *Database 实例。
+	fmt.Println("user service dsn:", user.DB.Config.DSN)
+	fmt.Println("order service dsn:", order.DB.Config.DSN)
+}
+
+// buildServices 注册 Config 与多输出 provider,注入并返回两个服务。
+func buildServices() (*UserService, *OrderService) {
 	di := dix.New()
 
 	dix.Provide(di, func() *Config {
@@ -67,9 +77,8 @@ func main() {
 		}
 	})
 
-	dix.Inject(di, func(user *UserService, order *OrderService) {
-		// user.DB 与 order.DB 是同一个 *Database 实例。
-		fmt.Println("user service dsn:", user.DB.Config.DSN)
-		fmt.Println("order service dsn:", order.DB.Config.DSN)
-	})
+	var user *UserService
+	var order *OrderService
+	dix.Inject(di, func(u *UserService, o *OrderService) { user, order = u, o })
+	return user, order
 }

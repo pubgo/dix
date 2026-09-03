@@ -5,7 +5,8 @@
 //   - provider 内部返回的切片元素顺序保持不变;
 //   - 单值注入与列表注入互不干扰:单值仍取最后注册者。
 //
-// 该语义由 dixinternal 的 TestPatternListAggregationOrder 锁定。
+// 该语义由 dixinternal 的 TestPatternListAggregationOrder
+// 与本目录 main_test.go 的 TestBuildChain 锁定。
 //
 // 【运行】
 //
@@ -29,6 +30,18 @@ import (
 type Middleware func(string) string
 
 func main() {
+	latest, chain := buildChain()
+
+	fmt.Println("latest:", latest("request"))
+	fmt.Println("chain size:", len(chain))
+	for i, mw := range chain {
+		fmt.Printf("  middleware[%d]: %s\n", i, mw("request"))
+	}
+}
+
+// buildChain 注册列表与单值 provider,注入后返回聚合链与单值结果:
+// 链按注册顺序聚合,单值取最后注册者。
+func buildChain() (Middleware, []Middleware) {
 	di := dix.New()
 
 	dix.Provide(di, func() []Middleware {
@@ -48,11 +61,8 @@ func main() {
 		return func(s string) string { return "[trace] " + s }
 	})
 
-	dix.Inject(di, func(latest Middleware, chain []Middleware) {
-		fmt.Println("latest:", latest("request"))
-		fmt.Println("chain size:", len(chain))
-		for i, mw := range chain {
-			fmt.Printf("  middleware[%d]: %s\n", i, mw("request"))
-		}
-	})
+	var latest Middleware
+	var chain []Middleware
+	dix.Inject(di, func(mw Middleware, all []Middleware) { latest, chain = mw, all })
+	return latest, chain
 }

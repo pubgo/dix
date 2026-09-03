@@ -5,7 +5,8 @@
 //   - 嵌套结构体字段:递归注入;
 //   - 未导出字段与基础类型字段:跳过,不报错。
 //
-// 该语义由 dixinternal 的 TestPatternStructInNestedResolution 锁定。
+// 该语义由 dixinternal 的 TestPatternStructInNestedResolution
+// 与本目录 main_test.go 的 TestBuildApp 锁定。
 //
 // 【运行】
 //
@@ -41,6 +42,15 @@ type App struct {
 }
 
 func main() {
+	app := buildApp()
+
+	fmt.Println("app.DB.Config.DSN =", app.DB.Config.DSN)
+	fmt.Println("app.Metadata.Version =", app.Metadata.Version)
+}
+
+// buildApp 注册三个 provider 并注入结构体指针,
+// 返回完成了嵌套字段解析(DB.Config)的 App。
+func buildApp() *App {
 	di := dix.New()
 
 	dix.Provide(di, func() *Config {
@@ -56,10 +66,7 @@ func main() {
 		return &Metadata{Version: "v1"}
 	})
 
-	// 注入结构体指针:嵌套的指针字段(app.DB.Config)会被递归解析。
 	app := &App{}
 	dix.Inject(di, app)
-
-	fmt.Println("app.DB.Config.DSN =", app.DB.Config.DSN)
-	fmt.Println("app.Metadata.Version =", app.Metadata.Version)
+	return app
 }

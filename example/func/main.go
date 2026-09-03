@@ -5,7 +5,8 @@
 //   - 单值注入取最后注册者的产物(后者覆盖前者);
 //   - 切片注入 []Greet 聚合全部产物,顺序即注册顺序。
 //
-// 该语义由 dixinternal 的 TestPatternSingleValueLastProviderWins 锁定。
+// 该语义由 dixinternal 的 TestPatternSingleValueLastProviderWins
+// 与本目录 main_test.go 的 TestBuildGreets 锁定。
 //
 // 【运行】
 //
@@ -27,9 +28,21 @@ import (
 type Greet func() string
 
 func main() {
+	single, all := buildGreets()
+
+	fmt.Println("single func:", single())
+	fmt.Print("all funcs:")
+	for _, fn := range all {
+		fmt.Print(" ", fn())
+	}
+	fmt.Println()
+}
+
+// buildGreets 为同一函数类型注册多个 provider 并注入,
+// 返回单值注入结果(最后注册者)与切片聚合结果(注册顺序)。
+func buildGreets() (Greet, []Greet) {
 	di := dix.New()
 
-	// 1) 为同一函数类型注册多个 provider:两者都会在解析时执行。
 	dix.Provide(di, func() Greet {
 		return func() string { return "hello" }
 	})
@@ -37,17 +50,8 @@ func main() {
 		return func() string { return "world" }
 	})
 
-	// 2) 单值注入:取最后注册的 provider 产物(后者覆盖前者)。
-	dix.Inject(di, func(g Greet) {
-		fmt.Println("single func:", g())
-	})
-
-	// 3) 切片注入:聚合全部产物,顺序与注册顺序一致。
-	dix.Inject(di, func(all []Greet) {
-		fmt.Print("all funcs:")
-		for _, fn := range all {
-			fmt.Print(" ", fn())
-		}
-		fmt.Println()
-	})
+	var single Greet
+	var all []Greet
+	dix.Inject(di, func(g Greet, gs []Greet) { single, all = g, gs })
+	return single, all
 }
