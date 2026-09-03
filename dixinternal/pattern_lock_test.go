@@ -12,6 +12,7 @@ package dixinternal
 
 import (
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -439,4 +440,67 @@ func TestPatternStructInNestedResolution(t *testing.T) {
 	if app.Metadata == nil || app.Metadata.Version != "v1" {
 		t.Fatalf("metadata not injected: %+v", app.Metadata)
 	}
+}
+
+// 锁定聚合查询的元素约束:map/slice 元素必须是指针/接口/函数,
+// 裸 struct 元素 fail-fast 返回明确错误,而不是静默返回错误结果或 panic。
+func TestPatternAggregateStructElementFailsFast(t *testing.T) {
+	di := New()
+
+	type Route struct{ Path string }
+
+	err := di.TryInject(func(m map[string]Route) {})
+	if err == nil || !strings.Contains(err.Error(), "aggregate element") {
+		t.Fatalf("map with struct element should fail fast, got: %v", err)
+	}
+
+	err = di.TryInject(func(rs []Route) {})
+	if err == nil || !strings.Contains(err.Error(), "aggregate element") {
+		t.Fatalf("slice with struct element should fail fast, got: %v", err)
+	}
+
+	// 对照:指针元素聚合不受影响。
+	di2 := New()
+	di2.Provide(func() map[string]*Route {
+		return map[string]*Route{"api": {Path: "/x"}}
+	})
+	if err := di2.TryInject(func(m map[string]*Route) {}); err != nil {
+		t.Fatalf("pointer-element aggregate should work: %v", err)
+	}
+}
+
+// 锁定环路径的确定性:同一依赖图无论 map 遍历顺序如何,
+// 报告的环路径恒定,起点取环成员中类型名字典序最小者。
+func TestDetectCycleDeterministicOrder(t *testing.T) {
+	type cycleA struct{}
+	type cycleB struct{}
+	type cycleC struct{}
+
+	a := reflect.TypeOf(cycleA{})
+	b := reflect.TypeOf(cycleB{})
+	c := reflect.TypeOf(cycleC{})
+	graph := map[reflect.Type]map[reflect.Type]bool{
+		a: {b: true},
+		b: {c: true},
+		c: {a: true},
+	}
+
+	want := a.String() + " -> " + b.String() + " -> " + c.String() + " -> " + a.String()
+	for i := 0; i < 100; i++ {
+		cycle := detectCycle(graph)
+		if len(cycle) != 4 {
+			t.Fatalf("cycle path length = %d, want 4", len(cycle))
+		}
+		if got := strings.Join(typeNames(cycle), " -> "); got != want {
+			t.Fatalf("cycle path = %q, want deterministic %q", got, want)
+		}
+	}
+}
+
+func typeNames(types []reflect.Type) []string {
+	out := make([]string, 0, len(types))
+	for _, typ := range types {
+		out = append(out, typ.String())
+	}
+	return out
 }

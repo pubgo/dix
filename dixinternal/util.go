@@ -127,6 +127,17 @@ func handleOutput(outType outputType, providerOutTyp reflect.Value) map[outputTy
 func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 	visited := make(map[reflect.Type]bool)
 
+	// Deterministic traversal: iterate start nodes and neighbors in
+	// sorted type-name order so the same graph always reports the same
+	// cycle path (starting at its lexicographically smallest member),
+	// regardless of Go's randomized map iteration order.
+	sortTypes := func(types []reflect.Type) []reflect.Type {
+		slices.SortFunc(types, func(a, b reflect.Type) int {
+			return strings.Compare(a.String(), b.String())
+		})
+		return types
+	}
+
 	var dfs func(reflect.Type, map[reflect.Type]bool, []reflect.Type) []reflect.Type
 	dfs = func(t reflect.Type, recursionStack map[reflect.Type]bool, path []reflect.Type) []reflect.Type {
 		if recursionStack[t] {
@@ -141,7 +152,11 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 		recursionStack[t] = true
 		defer delete(recursionStack, t)
 
+		deps := make([]reflect.Type, 0, len(graph[t]))
 		for dep := range graph[t] {
+			deps = append(deps, dep)
+		}
+		for _, dep := range sortTypes(deps) {
 			cycle := dfs(dep, recursionStack, append(slices.Clone(path), dep))
 			if len(cycle) > 0 {
 				return cycle
@@ -150,7 +165,11 @@ func detectCycle(graph map[reflect.Type]map[reflect.Type]bool) []reflect.Type {
 		return nil
 	}
 
+	starts := make([]reflect.Type, 0, len(graph))
 	for t := range graph {
+		starts = append(starts, t)
+	}
+	for _, t := range sortTypes(starts) {
 		if visited[t] {
 			continue
 		}

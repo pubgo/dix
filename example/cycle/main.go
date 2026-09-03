@@ -11,7 +11,7 @@
 //
 //	cd example/cycle && go run .
 //
-// 【预期输出】(日志时间戳省略;环路径起点可能轮换,但环成员与顺序关系固定)
+// 【预期输出】(日志时间戳省略;环路径确定性,起点为环成员中类型名字典序最小者)
 //
 //	cycle detected: circular dependency: *main.ServiceA -> *main.ServiceB -> *main.ServiceC -> *main.ServiceA
 package main
