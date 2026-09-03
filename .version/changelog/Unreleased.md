@@ -6,8 +6,9 @@
 
 ## 新增
 
-- 新增 dixinternal 模式锁测试（pattern_lock_test.go / api_lock_test.go，17 个），将 example 演示的 provider/inject 行为契约锁死；dixinternal 覆盖率 69.7% → 83.5%
-- example 全部 13 个示例新增 main_test.go：演示逻辑抽取为可返回结果的函数，测试逐一断言各示例特性（含 http 端到端装配）
+- 新增 dixinternal 模式锁测试（pattern_lock_test.go / api_lock_test.go），将 example 演示的 provider/inject 行为契约锁死
+- example 覆盖全部公开特性：新增 inject-generic / context-inject / inject-map-list / timeout / global / context-container / custom-logger 七个示例，每个示例均配套 main_test.go
+- 补齐测试盲区：慢 provider 告警、根包公开 API 包装器（Inject/Provide/InjectContext/InjectT/Option）、dixhttp 的 stats/packages/trace/group-rules/index handler
 
 ## 修复
 
@@ -15,7 +16,7 @@
 
 ## 变更
 
-暂无
+- example 目录重构命名：按演示特性统一为 kebab-case（inject-* / provide-* / context-* 前缀），map-nil 与 list-nil 合并为 empty-collections；同步双语 README 示例索引
 
 ## 文档
 

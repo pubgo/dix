@@ -4,7 +4,7 @@
 // 多层架构、运行时诊断),并在启动阶段刻意触发多类可识别错误
 // (缺失依赖、provider 返回 error、provider panic、超时、循环依赖),
 // 用于验证 dixhttp 的 /api/errors 诊断能力。
-// 入门请先看 example/func 与 example/struct-in。
+// 入门请先看 example/inject-func 与 example/inject-struct。
 //
 // 【运行】
 //

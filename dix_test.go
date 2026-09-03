@@ -3,6 +3,7 @@ package dix
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 func TestVersion(t *testing.T) {
@@ -107,4 +108,113 @@ func assertPanics(t *testing.T, fn func()) {
 		}
 	}()
 	fn()
+}
+
+// ---- 公开 API 包装器的行为锁:Inject/Provide/InjectContext/InjectT/Option ----
+
+func TestInjectFunction(t *testing.T) {
+	di := New()
+
+	type dep struct{ V int }
+	if err := TryProvide(di, func() *dep { return &dep{V: 3} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	called := false
+	Inject(di, func(d *dep) { called = d.V == 3 })
+	if !called {
+		t.Fatal("Inject should resolve function parameters")
+	}
+}
+
+func TestInjectStructValue(t *testing.T) {
+	di := New()
+
+	type dep struct{ Name string }
+	type app struct {
+		Dep *dep
+	}
+	if err := TryProvide(di, func() *dep { return &dep{Name: "v"} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	got := Inject(di, app{})
+	if got.Dep == nil || got.Dep.Name != "v" {
+		t.Fatalf("Inject on struct value should fill fields, got %+v", got)
+	}
+}
+
+func TestProvidePanicsOnInvalid(t *testing.T) {
+	assertPanics(t, func() { Provide(New(), nil) })
+}
+
+func TestInjectContextFunction(t *testing.T) {
+	di := New()
+
+	type dep struct{ V int }
+	if err := TryProvide(di, func() *dep { return &dep{V: 4} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	called := false
+	InjectContext(context.Background(), di, func(d *dep) { called = d.V == 4 })
+	if !called {
+		t.Fatal("InjectContext should resolve function parameters")
+	}
+}
+
+func TestInjectTFillsStruct(t *testing.T) {
+	di := New()
+
+	type cfg struct{ DSN string }
+	type app struct {
+		Cfg *cfg
+	}
+	if err := TryProvide(di, func() *cfg { return &cfg{DSN: "x"} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	got := InjectT[app](di)
+	if got.Cfg == nil || got.Cfg.DSN != "x" {
+		t.Fatalf("InjectT should construct and fill the struct, got %+v", got)
+	}
+}
+
+func TestInjectTContextFillsStruct(t *testing.T) {
+	di := New()
+
+	type cfg struct{ DSN string }
+	type app struct {
+		Cfg *cfg
+	}
+	if err := TryProvide(di, func() *cfg { return &cfg{DSN: "ctx"} }); err != nil {
+		t.Fatalf("TryProvide: %v", err)
+	}
+
+	got := InjectTContext[app](context.Background(), di)
+	if got.Cfg == nil || got.Cfg.DSN != "ctx" {
+		t.Fatalf("InjectTContext should construct and fill the struct, got %+v", got)
+	}
+}
+
+// 容器 Option 必须经由根包转发到位,且默认值保留。
+func TestOptionForwarding(t *testing.T) {
+	di := New(
+		WithValuesNull(),
+		WithProviderTimeout(3*time.Second),
+		WithSlowProviderThreshold(time.Millisecond),
+	)
+	opt := di.Option()
+	if !opt.AllowValuesNull || opt.ProviderTimeout != 3*time.Second || opt.SlowProviderThreshold != time.Millisecond {
+		t.Fatalf("options not forwarded: %+v", opt)
+	}
+
+	reject := New(WithRejectEmptyCollections())
+	ropt := reject.Option()
+	if ropt.AllowValuesNull {
+		t.Fatal("WithRejectEmptyCollections must disable AllowValuesNull")
+	}
+	if ropt.ProviderTimeout != 15*time.Second || ropt.SlowProviderThreshold != 2*time.Second {
+		t.Fatalf("unspecified options must keep defaults, got %+v", ropt)
+	}
 }

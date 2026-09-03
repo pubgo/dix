@@ -358,21 +358,41 @@ GitHub Actions 会在 push/PR 时执行 `go test ./... -race` 与 `golangci-lint
 
 ## 📚 示例
 
-| 示例                                              | 说明             |
-| ------------------------------------------------- | ---------------- |
-| [struct-in](./example/struct-in/)                 | 结构体输入注入   |
-| [struct-out](./example/struct-out/)               | 结构体多输出     |
-| [func](./example/func/)                           | 函数注入         |
-| [map](./example/map/)                             | Map/命名空间注入 |
-| [map-nil](./example/map-nil/)                     | Map 空值处理     |
-| [list](./example/list/)                           | List 注入        |
-| [list-nil](./example/list-nil/)                   | List 空值处理    |
-| [lazy](./example/lazy/)                           | 延迟注入         |
-| [cycle](./example/cycle/)                         | 循环检测示例     |
-| [handler](./example/handler/)                     | Handler 模式     |
-| [inject_method](./example/inject_method/)         | 方法注入         |
-| [test-return-error](./example/test-return-error/) | 错误处理         |
-| [http](./example/http/)                           | HTTP 可视化      |
+命名与所演示特性对应:`inject-*` 为注入模式,`provide-*` 为 provider 能力,`context-*` 为 Context 集成。
+
+### 注入模式
+
+| 示例                                             | 说明                                  |
+| ------------------------------------------------ | ------------------------------------- |
+| [inject-func](./example/inject-func/)            | 函数类型注入                          |
+| [inject-struct](./example/inject-struct/)        | 结构体字段注入(嵌套)                |
+| [inject-method](./example/inject-method/)        | `DixInject` 方法注入                  |
+| [inject-generic](./example/inject-generic/)      | 泛型 `InjectT` / `InjectTContext`     |
+| [context-inject](./example/context-inject/)      | 带 Context 的注入与 trace 传播        |
+| [inject-map](./example/inject-map/)              | Map/命名空间注入                      |
+| [inject-list](./example/inject-list/)            | List 聚合注入                         |
+| [inject-map-list](./example/inject-map-list/)    | `map[string][]T` 分组聚合             |
+| [provide-multi-output](./example/provide-multi-output/) | 结构体多输出 provider          |
+
+### 运行语义
+
+| 示例                                             | 说明                                       |
+| ------------------------------------------------ | ------------------------------------------ |
+| [lazy](./example/lazy/)                          | 惰性求值与产物缓存                         |
+| [cycle](./example/cycle/)                        | 循环依赖检测                               |
+| [singleton](./example/singleton/)                | 容器级单例共享                             |
+| [error-handling](./example/error-handling/)      | `TryProvide`/`TryInject` 错误处理          |
+| [timeout](./example/timeout/)                    | provider 超时与慢告警                      |
+| [empty-collections](./example/empty-collections/) | 缺失集合依赖解析为空集合(可改为报错)     |
+
+### 模块
+
+| 示例                                              | 说明                     |
+| ------------------------------------------------- | ------------------------ |
+| [global](./example/global/)                       | `dixglobal` 全局容器     |
+| [context-container](./example/context-container/) | `dixcontext` 容器随 Context 传递 |
+| [custom-logger](./example/custom-logger/)         | `SetLog` 自定义日志      |
+| [http](./example/http/)                           | HTTP 可视化(端到端)     |
 
 ## 📖 文档
 
