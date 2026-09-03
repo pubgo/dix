@@ -1,8 +1,24 @@
-// Lazy resolution: providers run only when their output is first needed.
+// 【功能】惰性求值:provider 只有在其产物被需要时才执行。
 //
-// Run:
+// 【原理】注册阶段不执行任何 provider;Inject 时沿依赖链按需解析:
+//   - 本次注入用不到的 provider 不会执行;
+//   - 同一输出类型的多个 provider 会全部执行(按注册顺序),
+//     单值注入取最后注册者的产物(本例中 C 拿到的是 B 的 *Service);
+//   - 产物缓存在容器内,后续 Inject 不会重复执行 provider。
+//
+// 该语义由 dixinternal 的 TestPatternLazyResolution 锁定。
+//
+// 【运行】
 //
 //	cd example/lazy && go run .
+//
+// 【预期输出】
+//
+//	provider A executed
+//	provider B executed
+//	provider C executed
+//	inject got error: ready
+//	execution order: [provider-A provider-B provider-C]
 package main
 
 import (
@@ -17,7 +33,7 @@ type Service struct {
 
 func main() {
 	di := dix.New()
-	order := make([]string, 0, 2)
+	order := make([]string, 0, 3)
 
 	dix.Provide(di, func() *Service {
 		order = append(order, "provider-A")
@@ -31,7 +47,7 @@ func main() {
 		return &Service{Name: "B"}
 	})
 
-	// Provider C depends on *Service. Only one *Service provider chain is used.
+	// C 依赖 *Service(单值):解析时 A、B 都会执行,C 拿到最后注册者 B 的产物。
 	dix.Provide(di, func(_ *Service) error {
 		order = append(order, "provider-C")
 		fmt.Println("provider C executed")

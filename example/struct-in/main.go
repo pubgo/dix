@@ -1,8 +1,20 @@
-// Struct injection: fill struct fields (including nested structs).
+// 【功能】结构体注入:把依赖填充到结构体的导出字段,支持嵌套递归。
 //
-// Run:
+// 【原理】对结构体指针调用 Inject 时,dix 逐个解析导出字段:
+//   - 指针/接口/函数字段:按类型从容器解析;
+//   - 嵌套结构体字段:递归注入;
+//   - 未导出字段与基础类型字段:跳过,不报错。
+//
+// 该语义由 dixinternal 的 TestPatternStructInNestedResolution 锁定。
+//
+// 【运行】
 //
 //	cd example/struct-in && go run .
+//
+// 【预期输出】
+//
+//	app.DB.Config.DSN = postgres://localhost/app
+//	app.Metadata.Version = v1
 package main
 
 import (
@@ -35,6 +47,7 @@ func main() {
 		return &Config{DSN: "postgres://localhost/app"}
 	})
 
+	// provider 的输入同样来自容器:Database 的构造依赖 *Config。
 	dix.Provide(di, func(cfg *Config) *Database {
 		return &Database{Config: cfg}
 	})
@@ -43,7 +56,7 @@ func main() {
 		return &Metadata{Version: "v1"}
 	})
 
-	// Inject into a struct pointer: nested pointer fields are resolved recursively.
+	// 注入结构体指针:嵌套的指针字段(app.DB.Config)会被递归解析。
 	app := &App{}
 	dix.Inject(di, app)
 

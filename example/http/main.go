@@ -1,18 +1,24 @@
-// HTTP visualization demo for dixhttp.
+// 【功能】dixhttp 依赖图可视化:端到端综合示例。
 //
-// This is a large end-to-end sample (interfaces, map/list, struct output, diagnostics).
-// For learning basics, start with simpler examples under example/func and example/struct-in.
+// 【原理】这是一个大而全的演示(接口绑定、map/list 聚合、结构体多输出、
+// 多层架构、运行时诊断),并在启动阶段刻意触发多类可识别错误
+// (缺失依赖、provider 返回 error、provider panic、超时、循环依赖),
+// 用于验证 dixhttp 的 /api/errors 诊断能力。
+// 入门请先看 example/func 与 example/struct-in。
 //
-// Run:
+// 【运行】
 //
 //	cd example/http && go run .
-//	# or: task web-demo
+//	# 或:task web-demo
 //
-// Optional env:
+// 【可选环境变量】
 //
-//	DIX_HTTP_ADDR=:8080
-//	DIX_TRACE_DI=true
-//	DIX_DIAG_FILE=.local/dix-diag.jsonl
+//	DIX_HTTP_ADDR=:8080                      # 服务监听地址
+//	DIX_TRACE_DI=true                        # 控制台逐步 DI trace
+//	DIX_DIAG_FILE=.local/dix-diag.jsonl      # JSONL 诊断文件
+//
+// 【预期行为】启动后打印 API 端点清单并阻塞服务,
+// 浏览器打开 http://localhost:8080 查看依赖图与诊断页。
 package main
 
 import (
