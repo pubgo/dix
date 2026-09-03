@@ -33,7 +33,7 @@ cd example/<名称> && go run .
 | 示例 | 功能 | 涉及语义 |
 | --- | --- | --- |
 | [lazy](./lazy/) | 惰性求值 | provider 仅在被需要时执行;产物缓存,后续注入不重复执行 |
-| [cycle](./cycle/) | 循环依赖检测 | 注入前环检测,报错含化简后的环路径(起点可能轮换) |
+| [cycle](./cycle/) | 循环依赖检测 | 注入前环检测,报错含化简后的环路径(确定性,起点为字典序最小成员) |
 | [singleton](./singleton/) | 单例共享 | 同类型依赖容器级单例;单值与命名空间 map 并存 |
 | [error-handling](./error-handling/) | TryProvide/TryInject 错误处理 | 根因保留在错误链(errors.Is 可判定);失败 provider 不缓存、会重试 |
 | [timeout](./timeout/) | provider 超时与慢告警 | 超时使注入失败且 provider 不再重试;慢 provider 输出告警 |

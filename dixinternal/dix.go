@@ -722,6 +722,21 @@ func (dix *Dix) getProviderStack(typ reflect.Type) []string {
 
 // getValue retrieves a value for a dependency, handling recursion for structs
 func (dix *Dix) getValue(ctx context.Context, typ reflect.Type, opt Options, isMap, isList bool, parents ...reflect.Type) (retVal reflect.Value, retErr error) {
+	// Aggregate queries (map/list) must not fall into the struct-injection
+	// path below: dix only manages addressable types as aggregate elements,
+	// so a bare-struct element is a usage error and must fail fast with a
+	// clear message instead of silently resolving to a struct instance.
+	if (isMap || isList) && typ.Kind() == reflect.Struct {
+		logDITrace("resolve.aggregate.unsupported",
+			"type", typ.String(),
+			"kind", typ.Kind().String(),
+			"query_kind", dependencyQueryKind(isMap, isList),
+			"parents", parentTypeChain(parents),
+		)
+		retErr = fmt.Errorf("aggregate element type must be ptr, interface or func, got %s (kind=struct); use a pointer for map/list injection", typ)
+		return reflect.Value{}, retErr
+	}
+
 	// If it's a struct, we inject into a new instance
 	if typ.Kind() == reflect.Struct {
 		logDITrace("resolve.struct.start",
