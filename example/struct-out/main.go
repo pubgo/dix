@@ -1,8 +1,20 @@
-// Struct multi-output: one provider returns many dependencies via an Out struct.
+// 【功能】结构体多输出:一个 provider 通过返回 Out 结构体,一次提供多个依赖。
 //
-// Run:
+// 【原理】provider 返回 struct 时,dix 按导出字段逐一拆分注册
+// (仅注册指针/接口/函数/聚合类型的字段):
+//   - 各字段共享同一底层实例:UserSvc.DB 与 OrderSvc.DB 是同一个 *Database 指针;
+//   - provider 本身只执行一次,产物缓存后按需分发。
+//
+// 该语义由 dixinternal 的 TestPatternStructOutSharedInstance 锁定。
+//
+// 【运行】
 //
 //	cd example/struct-out && go run .
+//
+// 【预期输出】
+//
+//	user service dsn: postgres://localhost/shop
+//	order service dsn: postgres://localhost/shop
 package main
 
 import (
@@ -27,7 +39,7 @@ type OrderService struct {
 	DB *Database
 }
 
-// In groups provider inputs; Out groups provider outputs.
+// In 聚合 provider 的输入依赖;Out 聚合 provider 的输出依赖。
 type In struct {
 	Config *Config
 }
@@ -45,6 +57,7 @@ func main() {
 		return &Config{DSN: "postgres://localhost/shop"}
 	})
 
+	// 返回 Out:dix 把 DB、UserSvc、OrderSvc 三个字段拆开分别注册。
 	dix.Provide(di, func(in In) Out {
 		db := &Database{Config: in.Config}
 		return Out{
@@ -55,6 +68,7 @@ func main() {
 	})
 
 	dix.Inject(di, func(user *UserService, order *OrderService) {
+		// user.DB 与 order.DB 是同一个 *Database 实例。
 		fmt.Println("user service dsn:", user.DB.Config.DSN)
 		fmt.Println("order service dsn:", order.DB.Config.DSN)
 	})
