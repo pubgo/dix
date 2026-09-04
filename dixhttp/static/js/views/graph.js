@@ -53,7 +53,9 @@ DIX.views = DIX.views || {};
 
   // ---------- 全局图构建(移植自旧版 renderGraph) ----------
   function buildGlobal() {
-    const { providers, edges } = state.allData;
+    if (!state.allData) return { nodes: [], edges: [] };
+    const providers = state.allData.providers || [];
+    const edges = state.allData.edges || [];
     const nodes = [], gedges = [];
     const nodeMap = new Map();
     const addType = label => {
@@ -291,7 +293,7 @@ DIX.views = DIX.views || {};
   async function redraw() {
     const canvas = document.getElementById("graph-canvas");
     try {
-      if (state.mode !== "modules") await loadData();
+      await loadData(); // 详情抽屉也依赖 allData,所有模式都预载
       let graph;
       if (state.mode === "modules") {
         graph = await buildModules();
