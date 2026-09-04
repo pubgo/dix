@@ -229,26 +229,6 @@ func getProvideAllInputs(typ reflect.Type) []*providerInputType {
 	return input
 }
 
-func buildDependencyGraph(providers map[outputType][]*providerFn) map[reflect.Type]map[reflect.Type]bool {
-	graph := make(map[reflect.Type]map[reflect.Type]bool)
-	// Pre-allocate map capacity to reduce rehash
-	for outTyp := range providers {
-		graph[outTyp] = make(map[reflect.Type]bool)
-	}
-
-	// Build dependency graph
-	for outTyp, nodes := range providers {
-		for _, providerNode := range nodes {
-			for _, input := range providerNode.inputList {
-				for _, provider := range getProvideAllInputs(input.typ) {
-					graph[outTyp][provider.typ] = true
-				}
-			}
-		}
-	}
-	return graph
-}
-
 // isSupportedType checks if the type is supported for dependency injection
 func isSupportedType(typ reflect.Type) bool {
 	switch typ.Kind() {

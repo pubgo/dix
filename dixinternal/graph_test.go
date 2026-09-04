@@ -37,7 +37,7 @@ func sortStrings(s []string) {
 func TestGraphDeclaredAdjacency(t *testing.T) {
 	g := newGraph()
 
-	a, b, c := reflect.TypeOf(graphDepA{}), reflect.TypeOf(graphDepB{}), reflect.TypeOf(graphDepC{})
+	a, b, c := reflect.TypeOf(&graphDepA{}), reflect.TypeOf(&graphDepB{}), reflect.TypeOf(&graphDepC{})
 
 	// provider p1: 产出 *A,依赖 *B(等价于 func(*B) *A)
 	p1 := g.providerNode(&providerFn{}, a)
@@ -172,5 +172,93 @@ func TestGraphSearchNodes(t *testing.T) {
 	hits := g.searchNodes("graphdepa", 10)
 	if len(hits) == 0 {
 		t.Fatal("search should match type name case-insensitively")
+	}
+}
+
+// 锁定 Provide 增量建图:声明边语义与原 buildDependencyGraph 一致——
+// 含 struct 输出按导出字段展开、struct 输入经 getProvideAllInputs 扁平化。
+func TestDixProvideBuildsGraph(t *testing.T) {
+	di := New()
+
+	type GConf struct{ DSN string }
+	type GDB struct{ Conf *GConf }
+	type GIn struct {
+		DB *GDB
+	}
+	type GOut struct {
+		DB    *GDB
+		Probe *GDB
+	}
+
+	di.Provide(func() *GConf { return &GConf{} })
+	di.Provide(func(c *GConf) *GDB { return &GDB{Conf: c} })
+	di.Provide(func(in GIn) GOut { return GOut{} })
+
+	adj := di.graph.declaredAdjacency()
+
+	conf := reflect.TypeOf(&GConf{})
+	db := reflect.TypeOf(&GDB{})
+	out := reflect.TypeOf(GOut{})
+
+	// struct 输入扁平化:GOut 的 provider 对 GIn 的声明等价于对 *GDB 的声明
+	if !adj[out][db] {
+		t.Fatalf("GOut should declare dependency on *GDB, got %v", adjacencyString(adj))
+	}
+	if !adj[db][conf] {
+		t.Fatalf("*GDB should declare dependency on *GConf, got %v", adjacencyString(adj))
+	}
+	// 容器自注册(func() *Dix)与 *GConf 无声明边
+	if adj[conf] != nil {
+		t.Fatalf("*GConf should have no declared deps, got %v", adjacencyString(adj))
+	}
+
+	// 产物边:5 条 = 容器自注册(*Dix)+ *GConf + *GDB + GOut 父类型 + *GDB(两个字段同类型去重后 1 条)。
+	// 注:GOut 父类型的产物/声明边是比旧 buildDependencyGraph 更完整的语义——
+	// 旧图只看 providers map 键,struct 输出父类型不注册,其字段依赖关系会漏检环。
+	produced := 0
+	di.graph.mu.RLock()
+	for _, e := range di.graph.eIndex {
+		if e.Kind == EdgeProduced {
+			produced++
+		}
+	}
+	di.graph.mu.RUnlock()
+	if produced != 5 {
+		t.Fatalf("produced edges = %d, want 5", produced)
+	}
+}
+
+func TestDixGraphVersionOnProvide(t *testing.T) {
+	di := New()
+	v0 := di.GraphVersion()
+	di.Provide(func() *graphDepA { return &graphDepA{} })
+	if di.GraphVersion() <= v0 {
+		t.Fatal("version should bump on provide")
+	}
+}
+
+// 黄金断言:容器级邻接投影必须精确等于原 buildDependencyGraph 的输出
+// (A->B->C 环 + 一个无依赖 provider),含 struct 输出/输入的展开语义。
+func TestDixAdjacencyGolden(t *testing.T) {
+	di := New()
+
+	type GCycleA struct{}
+	type GCycleB struct{}
+	type GCycleC struct{}
+	type GFree struct{}
+
+	di.Provide(func(*GCycleB) *GCycleA { return &GCycleA{} })
+	di.Provide(func(*GCycleC) *GCycleB { return &GCycleB{} })
+	di.Provide(func(*GCycleA) *GCycleC { return &GCycleC{} })
+	di.Provide(func() *GFree { return &GFree{} })
+
+	got := adjacencyString(di.graph.declaredAdjacency())
+	want := []string{
+		"*dixinternal.GCycleA -> [*dixinternal.GCycleB]",
+		"*dixinternal.GCycleB -> [*dixinternal.GCycleC]",
+		"*dixinternal.GCycleC -> [*dixinternal.GCycleA]",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("adjacency = %v, want %v", got, want)
 	}
 }

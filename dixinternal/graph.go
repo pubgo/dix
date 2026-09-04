@@ -54,7 +54,7 @@ type nodeKey struct {
 	kind  NodeKind
 	typ   reflect.Type
 	group string
-	fn    *providerFn
+	fn    reflect.Value // provider 节点:函数值(handleProvide 对 struct 输出按字段递归,指针每次新建,函数值才稳定可比较)
 }
 
 type edgeKey struct {
@@ -62,7 +62,7 @@ type edgeKey struct {
 	kind     EdgeKind
 	field    string
 	agg      string
-	provider *providerFn
+	fn       reflect.Value
 }
 
 // Graph 是容器运行时依赖图。Dix 单线程写,但 dixhttp 并发读,
@@ -118,21 +118,21 @@ func (g *Graph) searchNodes(q string, limit int) []Node {
 func (g *Graph) providerNode(p *providerFn, outTyp reflect.Type) NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.nodeLocked(NodeProvider, outTyp, "", p)
+	return g.nodeLocked(NodeProvider, outTyp, "", p.fn)
 }
 
 // node 取得或创建类型节点。
 func (g *Graph) node(kind NodeKind, typ reflect.Type, group string, provider *providerFn) NodeID {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	return g.nodeLocked(kind, typ, group, provider)
+	return g.nodeLocked(kind, typ, group, fnKeyOf(provider))
 }
 
 // addProduced 记录 provider 产物边。
 func (g *Graph) addProduced(pNode NodeID, outTyp reflect.Type) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	to := g.nodeLocked(NodeType, outTyp, "", nil)
+	to := g.nodeLocked(NodeType, outTyp, "", reflect.Value{})
 	g.edgeLocked(pNode, to, EdgeProduced, "", "", nil)
 }
 
@@ -140,8 +140,8 @@ func (g *Graph) addProduced(pNode NodeID, outTyp reflect.Type) {
 func (g *Graph) addDeclared(outTyp, inTyp reflect.Type, agg string, p *providerFn) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	from := g.nodeLocked(NodeType, outTyp, "", nil)
-	to := g.nodeLocked(NodeType, inTyp, "", nil)
+	from := g.nodeLocked(NodeType, outTyp, "", reflect.Value{})
+	to := g.nodeLocked(NodeType, inTyp, "", reflect.Value{})
 	g.edgeLocked(from, to, EdgeDeclared, "", agg, p)
 }
 
@@ -149,7 +149,7 @@ func (g *Graph) addDeclared(outTyp, inTyp reflect.Type, agg string, p *providerF
 func (g *Graph) markResolved(pNode NodeID, outTyp reflect.Type) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	to := g.nodeLocked(NodeType, outTyp, "", nil)
+	to := g.nodeLocked(NodeType, outTyp, "", reflect.Value{})
 	g.edgeLocked(pNode, to, EdgeResolved, "", "", nil).Count++
 }
 
@@ -161,7 +161,7 @@ func (g *Graph) addObject(typ reflect.Type, group string) bool {
 	if _, ok := g.nIndex[key]; ok {
 		return false
 	}
-	g.nodeLocked(NodeObject, typ, group, nil)
+	g.nodeLocked(NodeObject, typ, group, reflect.Value{})
 	return true
 }
 
@@ -185,10 +185,14 @@ func (g *Graph) declaredAdjacency() map[reflect.Type]map[reflect.Type]bool {
 	return adj
 }
 
-func (g *Graph) nodeLocked(kind NodeKind, typ reflect.Type, group string, provider *providerFn) NodeID {
-	key := nodeKey{kind: kind, typ: typ, group: group, fn: provider}
+func (g *Graph) nodeLocked(kind NodeKind, typ reflect.Type, group string, fn reflect.Value) NodeID {
+	key := nodeKey{kind: kind, typ: typ, group: group, fn: fn}
 	if id, ok := g.nIndex[key]; ok {
 		return id
+	}
+	provider := (*providerFn)(nil)
+	if fn.IsValid() {
+		provider = &providerFn{fn: fn}
 	}
 	id := NodeID(len(g.nodes))
 	g.nodes = append(g.nodes, Node{
@@ -199,8 +203,16 @@ func (g *Graph) nodeLocked(kind NodeKind, typ reflect.Type, group string, provid
 	return id
 }
 
+// fnKeyOf 取 providerFn 的函数值作为稳定键;nil/零值安全。
+func fnKeyOf(p *providerFn) reflect.Value {
+	if p == nil {
+		return reflect.Value{}
+	}
+	return p.fn
+}
+
 func (g *Graph) edgeLocked(from, to NodeID, kind EdgeKind, field, agg string, p *providerFn) *Edge {
-	key := edgeKey{from: from, to: to, kind: kind, field: field, agg: agg, provider: p}
+	key := edgeKey{from: from, to: to, kind: kind, field: field, agg: agg, fn: fnKeyOf(p)}
 	if e, ok := g.eIndex[key]; ok {
 		return e
 	}
