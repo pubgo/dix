@@ -163,3 +163,48 @@ func TestHandleIndexRendersBasePath(t *testing.T) {
 		t.Fatalf("redirect /dix -> /dix/ expected, got %d", rr.Code)
 	}
 }
+
+type apiStatsDep2 struct{}
+
+// 同 version 重复请求必须复用缓存(零反射);Provide 新依赖后 version 递增,快照刷新。
+func TestDependencySnapshotCache(t *testing.T) {
+	di := dixinternal.New()
+	di.Provide(func() *apiStatsDep { return &apiStatsDep{} })
+	if err := di.TryInject(func(*apiStatsDep) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+
+	server := NewServer(di)
+
+	first := server.dependencyData("", 0)
+	second := server.dependencyData("", 0)
+	if first != second {
+		t.Fatal("same version must return the cached snapshot (zero recompute)")
+	}
+
+	di.Provide(func() *apiStatsDep2 { return &apiStatsDep2{} })
+	third := server.dependencyData("", 0)
+	if third == second {
+		t.Fatal("version bump must invalidate the snapshot")
+	}
+}
+
+func BenchmarkHandleDependenciesWarm(b *testing.B) {
+	di := dixinternal.New()
+	di.Provide(func() *apiStatsDep { return &apiStatsDep{} })
+	if err := di.TryInject(func(*apiStatsDep) {}); err != nil {
+		b.Fatalf("inject: %v", err)
+	}
+	server := NewServer(di)
+	req := httptest.NewRequest(http.MethodGet, "/api/dependencies", nil)
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rr := httptest.NewRecorder()
+		server.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			b.Fatalf("status %d", rr.Code)
+		}
+	}
+}

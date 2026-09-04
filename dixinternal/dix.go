@@ -45,8 +45,7 @@ func newDix(opts ...Option) (d *Dix) {
 		objects:       make(map[outputType]map[group][]value),
 		initializer:   make(map[reflect.Value]bool),
 		timedOut:      make(map[reflect.Value]bool),
-		depGraph:      nil,
-		graphDirty:    true,
+		graph:         newGraph(),
 		providerStats: make(map[reflect.Value]*providerRuntimeStat),
 		recentErrors:  make([]recentErrorRecord, 0, 16),
 	}
@@ -63,8 +62,7 @@ type Dix struct {
 	objects       map[outputType]map[group][]value
 	initializer   map[reflect.Value]bool
 	timedOut      map[reflect.Value]bool
-	depGraph      map[reflect.Type]map[reflect.Type]bool
-	graphDirty    bool
+	graph         *Graph
 	providerStats map[reflect.Value]*providerRuntimeStat
 	recentErrors  []recentErrorRecord
 }
@@ -195,6 +193,8 @@ func (dix *Dix) executeProvider(ctx context.Context, p *providerFn, outTyp outpu
 	fnName := GetFnName(p.fn)
 	traceFnName := GetFnTraceName(p.fn)
 	inputTypes := providerInputTypeNames(p.inputList)
+	// 图节点预取:provider 节点与输出类型节点,成功路径用于解析计数。
+	gProviderNode := dix.graph.providerNode(p, outTyp)
 	ctx, span := dixtrace.BeginSpanCtx(ctx, "provider.execute", fnName,
 		"provider", traceFnName,
 		"output_type", outTyp.String(),
@@ -376,6 +376,7 @@ func (dix *Dix) executeProvider(ctx context.Context, p *providerFn, outTyp outpu
 	}
 
 	dix.initializer[p.fn] = true
+	dix.graph.markResolved(gProviderNode, outTyp)
 	dix.recordProviderStat(p, duration, nil)
 	if opt.SlowProviderThreshold > 0 && duration > opt.SlowProviderThreshold {
 		logger.Warn("slow provider execution detected",
@@ -416,6 +417,19 @@ func (dix *Dix) processProviderOutput(requestedType outputType, p *providerFn, o
 		for groupKey, values := range groups {
 			dix.objects[typeKey][groupKey] = append(dix.objects[typeKey][groupKey], values...)
 		}
+	}
+
+	// 对象节点:首次出现 (type, group) 时建节点并 bump version(快照判脏依据)。
+	created := false
+	for typeKey, groups := range newObjects {
+		for groupKey := range groups {
+			if dix.graph.addObject(typeKey, groupKey) {
+				created = true
+			}
+		}
+	}
+	if created {
+		dix.graph.bumpVersion()
 	}
 }
 
@@ -1235,9 +1249,28 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 		logDITrace("provide.register.output.unsupported", "provider", traceFnName, "declared_output_type", outType.String(), "declared_output_kind", outType.Kind().String())
 		return fmt.Errorf("unsupported output type %s (kind=%s) for provider %s; supported: ptr, interface, func, slice, map, struct", outType, outType.Kind(), traceFnName)
 	}
+	// 增量维护运行时依赖图:产物边 + 声明边(输入扁平化),幂等。
+	pNode := dix.graph.providerNode(provider, outType)
+	dix.graph.addProduced(pNode, outType)
+	for _, input := range inputs {
+		agg := ""
+		if input.isMap {
+			agg = "map"
+		} else if input.isList {
+			agg = "list"
+		}
+		for _, flat := range getProvideAllInputs(input.typ) {
+			dix.graph.addDeclared(outType, flat.typ, agg, provider)
+		}
+	}
+	dix.graph.bumpVersion()
+
 	logDITrace("provide.register.done", "provider", traceFnName, "declared_output_type", outType.String())
 	return nil
 }
+
+// GraphVersion 返回运行时依赖图版本号,供 dixhttp 快照判脏。
+func (dix *Dix) GraphVersion() uint64 { return dix.graph.Version() }
 
 // getProvideInput is a wrapper for parseInputType used during provider registration
 func (dix *Dix) getProvideInput(typ reflect.Type) []*providerInputType {
@@ -1355,10 +1388,6 @@ func (dix *Dix) provide(param any) {
 		logDITrace("provide.register.failed", "provider", traceFnName, "declared_output_type", typ.Out(0).String(), "error", err)
 		panic(err)
 	}
-
-	// The dependency graph used for cycle detection is derived from the
-	// provider set; mark it stale so the next check rebuilds it.
-	dix.graphDirty = true
 
 	logDITrace("provide.done", "component", component, "provider", traceFnName)
 }

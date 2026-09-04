@@ -63,10 +63,10 @@ type Dix struct {
     // Providers whose call timed out; they are never re-executed
     timedOut map[reflect.Value]bool
 
-    // Cached dependency graph for cycle detection,
-    // rebuilt lazily after providers change
-    depGraph   map[reflect.Type]map[reflect.Type]bool
-    graphDirty bool
+    // Runtime dependency graph: declared edges maintained incrementally
+    // on Provide, provider execution counters updated on resolve;
+    // consumed by cycle detection and dixhttp (version-keyed snapshot cache)
+    graph *Graph
 
     // Runtime stats per provider (call count, durations, last error)
     providerStats map[reflect.Value]*providerRuntimeStat
@@ -179,7 +179,7 @@ To prevent infinite recursion, `dix` checks a dependency graph before injection.
 *   **Algorithm**: Depth-First Search (DFS).
 *   **Implementation**: `detectCycle` / `isCycle` in `dixinternal/cycle-check.go` and `dixinternal/util.go`.
 *   **Logic**: Build `map[reflect.Type]map[reflect.Type]bool` adjacency list, traverse to find back edges. If a cycle is found, the reported path is **trimmed to the repeated node** (e.g. `X -> A -> B -> A` is reported as `A -> B -> A`) so the message does not include cycle-external nodes.
-*   **Caching**: The graph is cached on the container and rebuilt lazily only after `Provide` marks it stale — repeated injections do not re-build the graph.
+*   **Incremental**: The dependency graph is maintained incrementally on `Provide` — cycle detection is a read-only projection with no rebuild step; dixhttp serves dependency data from a version-keyed snapshot cache (zero reflection on warm requests).
 
 ### 3.5 Error Handling & Runtime Diagnostics
 

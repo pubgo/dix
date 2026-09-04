@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,16 @@ type Server struct {
 	mux *http.ServeMux
 	// basePath is an optional URL prefix (no trailing slash). Example: "/dix"
 	basePath string
+
+	// 依赖数据快照缓存:按 GraphVersion 判脏。反射(ProviderDetails/objects)
+	// 与全量投影只在版本变化后的第一次请求发生;未过滤请求返回同一份快照,
+	// 过滤请求基于缓存输入重建(零反射)。
+	snapMu   sync.Mutex
+	snapVer  uint64
+	snapDet  []dixinternal.ProviderDetails
+	snapObj  map[reflect.Type]map[string][]reflect.Value
+	snapFull *DependencyData
+	haveSnap bool
 }
 
 // GroupRule defines a group name with prefix list for aggregation.
@@ -250,8 +261,7 @@ func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 
 // HandleStats returns summary statistics
 func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
-	providerDetails := s.dix.GetProviderDetails()
-	objects := s.dix.GetObjects()
+	providerDetails, objects := s.cachedGraphInputs()
 
 	// Count objects
 	objectCount := 0
@@ -307,7 +317,7 @@ func (s *Server) HandleRuntimeStats(w http.ResponseWriter, r *http.Request) {
 
 // HandlePackages returns list of packages for navigation
 func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
-	providerDetails := s.dix.GetProviderDetails()
+	providerDetails, _ := s.cachedGraphInputs()
 
 	// Group by package
 	packageMap := make(map[string]*PackageInfo)
@@ -363,7 +373,7 @@ func (s *Server) HandlePackageDetails(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerDetails := s.dix.GetProviderDetails()
+	providerDetails, _ := s.cachedGraphInputs()
 
 	// Filter providers by package
 	var providers []ProviderInfo
@@ -433,7 +443,7 @@ func (s *Server) HandleTypeDetails(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	providerDetails := s.dix.GetProviderDetails()
+	providerDetails, _ := s.cachedGraphInputs()
 
 	// Build type -> provider mapping
 	typeToProvider := make(map[string][]dixinternal.ProviderDetails)
@@ -502,6 +512,20 @@ func (s *Server) HandleTypeDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleDependencies returns JSON data about providers and objects relationships
+// cachedGraphInputs 返回按图版本判脏缓存的 provider 详情与对象表。
+func (s *Server) cachedGraphInputs() ([]dixinternal.ProviderDetails, map[reflect.Type]map[string][]reflect.Value) {
+	ver := s.dix.GraphVersion()
+	s.snapMu.Lock()
+	defer s.snapMu.Unlock()
+	if !s.haveSnap || s.snapVer != ver {
+		s.snapDet = s.dix.GetProviderDetails()
+		s.snapObj = s.dix.GetObjects()
+		s.snapVer = ver
+		s.haveSnap = true
+	}
+	return s.snapDet, s.snapObj
+}
+
 func (s *Server) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters for filtering
 	pkgFilter := r.URL.Query().Get("package")
@@ -513,7 +537,7 @@ func (s *Server) HandleDependencies(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := s.extractDependencyData(pkgFilter, limit)
+	data := s.dependencyData(pkgFilter, limit)
 
 	writeJSON(w, data)
 }
@@ -527,16 +551,38 @@ func (s *Server) HandleGroupRules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, rules)
 }
 
-// extractDependencyData extracts structured data from the Dix container
-func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyData {
+// dependencyData 组装依赖数据:未过滤请求返回缓存的全量快照(零反射、零分配),
+// 过滤请求基于缓存输入做纯函数投影;反射只在图版本变化后的第一次请求发生。
+func (s *Server) dependencyData(pkgFilter string, limit int) *DependencyData {
+	ver := s.dix.GraphVersion()
+
+	s.snapMu.Lock()
+	if !s.haveSnap || s.snapVer != ver {
+		s.snapDet = s.dix.GetProviderDetails()
+		s.snapObj = s.dix.GetObjects()
+		s.snapVer = ver
+		s.haveSnap = true
+		s.snapFull = buildDependencyData(s.snapDet, s.snapObj, "", 0)
+	}
+	if pkgFilter == "" && limit == 0 {
+		full := s.snapFull
+		s.snapMu.Unlock()
+		return full
+	}
+	details, objects := s.snapDet, s.snapObj
+	s.snapMu.Unlock()
+	return buildDependencyData(details, objects, pkgFilter, limit)
+}
+
+// buildDependencyData 从 provider 详情与对象表提取结构化依赖数据(纯函数)。
+func buildDependencyData(details []dixinternal.ProviderDetails, objects map[reflect.Type]map[string][]reflect.Value, pkgFilter string, limit int) *DependencyData {
 	data := &DependencyData{
 		Providers: []ProviderInfo{},
 		Objects:   []ObjectInfo{},
 		Edges:     []EdgeInfo{},
 	}
 
-	providerDetails := s.dix.GetProviderDetails()
-	data.Providers = aggregateProviderInfos(providerDetails, pkgFilter, limit)
+	data.Providers = aggregateProviderInfos(details, pkgFilter, limit)
 
 	for _, provider := range data.Providers {
 		outputTypes := provider.OutputTypes
@@ -554,9 +600,7 @@ func (s *Server) extractDependencyData(pkgFilter string, limit int) *DependencyD
 		}
 	}
 
-	// Extract object information using the public API
-	objects := s.dix.GetObjects()
-
+	// Extract object information using the cached objects table
 	for outputType, groupsMap := range objects {
 		// Apply package filter if specified
 		if pkgFilter != "" {
