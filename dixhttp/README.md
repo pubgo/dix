@@ -4,6 +4,19 @@ This module provides an HTTP server to visualize dependency relationships in the
 
 [中文文档](./README_zh.md)
 
+## UI 信息架构(五视图)
+
+前端为无构建的本地静态资源(`static/`:原生 JS + 自绘 CSS + 本地 vendored vis-network,**零 CDN 依赖**),按任务组织为五个视图:
+
+| 视图(hash 路由) | 主任务 | 数据源 |
+| --- | --- | --- |
+| 概览 `#/overview` | 全局状态一览 | `/api/stats`、`/api/errors` |
+| 依赖图 `#/graph` | 模块列表 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/search`、`/api/ego` |
+| 检索 `#/search` | 服务端检索 + 状态过滤,一键跳转依赖图 | `/api/search` |
+| 调用链 `#/trace` | trace 列表(错误优先)+ 嵌套调用树 | `/api/trace`、`/api/trace-tree` |
+| 诊断 `#/diag` | 最近注入错误 + provider 启动耗时 | `/api/errors`、`/api/runtime-stats` |
+
+
 ## Features
 
 - 📊 **Interactive Visualization** - Modern UI built with vis.js + Tailwind CSS + Alpine.js
@@ -17,7 +30,7 @@ This module provides an HTTP server to visualize dependency relationships in the
 - 🧭 **Group Subgraph** - View a group's internal + upstream/downstream dependencies
 - ⏱️ **Startup Runtime Stats** - Show all providers' startup durations (total/avg/last, call count), with executed-only filter (`call_count > 0`)
 - 🗂 **Diagnostic File Query** - When `DIX_DIAG_FILE` is set, UI can query and display `trace/error/llm` JSONL records for troubleshooting
-- 🧵 **Trace Timeline Query** - Query unified in-memory trace events from `dixtrace` via `/api/trace` (with rich filters); for file persistence, `DIX_TRACE_FILE` is preferred, and falls back to `DIX_DIAG_FILE` when unset
+- 🧵 **Trace Timeline Query** - Query unified in-memory trace events from `dixtrace` via `/api/trace` (with rich filters); `/api/trace-tree` assembles the nested call tree per trace id; for file persistence, `DIX_TRACE_FILE` is preferred, and falls back to `DIX_DIAG_FILE` when unset
 - 📡 **RESTful API** - Provide JSON format dependency data
 - 🧩 **Mermaid Export/Preview** - Generate Mermaid flowcharts for current graph (respects grouping/filtering)
 
