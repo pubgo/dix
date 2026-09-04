@@ -115,8 +115,9 @@ type Graph struct {
   - diag 文件 record 从 `trace|error|llm` 三类收敛为 `trace|error` 两类(llm record 的全部字段 error record 均已包含);
   - 删 example/http 中重复解析该 env 的 `isMachineDiagMode`/`configureExampleLogOutput`;
   - **保留** `error_type` / `root_cause` / `hint` 字段体系(hint 文案是给 LLM 与人的真正价值),作为结构化字段走全部出口:stderr slog 行(现状已带 `dix.error_type=` 等属性)、diag JSONL error record、`/api/errors`;
+  - **数据完整性是不变量**:任何出口(日志行/JSONL/API)必须携带完整结构化字段——"数据在,LLM 就能读",包括读人类可读日志;
   - LLM/agent 的消费契约定义为两条:终端 agent 读 stderr 的结构化 attrs;文件型 agent 读 diag JSONL 或 `/api/errors`、`/api/diagnostics`。不再有专门的"LLM 格式";
-  - 兼容:`DIX_LLM_DIAG_MODE` 保留一个过渡版本为 no-op(启动时打一条 deprecated 提示),下个版本删除。
+  - 兼容:`DIX_LLM_DIAG_MODE` 直接删除(不留 no-op 过渡;当前 LLM 完全可读人类可读日志,单独通道无存续价值)。
 
 ## 6. P4 大规模可视化与检索(100+ provider / 300+ 对象 / 几十模块)
 
@@ -195,7 +196,7 @@ Graph 的天然层次:`Module(pkg) → Type → Object`。API 支持粒度参数
 | `dixhttp` 响应 | 增字段(container_id、节点 id、调用树端点) | 向后兼容 |
 | `/api/graph` 语义 | level 参数成默认;全量 object 列表改为分页/下钻 | 前端同期重构(已获准) |
 | dixhttp 前端 | 五视图信息架构重写,template.html 拆分与本地化 | 已获准"前后端一起" |
-| `DIX_LLM_DIAG_MODE` / `DIX_LLM_DIAG` 行 / diag `kind:llm` | P3 移除,error 字段体系保留 | env 一版 no-op 过渡;`/api/diagnostics` 的 kind 枚举文档同步 |
+| `DIX_LLM_DIAG_MODE` / `DIX_LLM_DIAG` 行 / diag `kind:llm` | P3 直接移除(无过渡期),error 字段体系保留 | `/api/diagnostics` 的 kind 枚举文档同步 |
 | `dix.New` | 新 Option(WithTraceBuffer) | 纯增量 |
 
 ## 8. 分期交付
