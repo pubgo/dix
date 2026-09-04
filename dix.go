@@ -35,6 +35,8 @@ func WithSlowProviderThreshold(threshold time.Duration) Option {
 	return dixinternal.WithSlowProviderThreshold(threshold)
 }
 
+func WithTraceBuffer(n int) Option { return dixinternal.WithTraceBuffer(n) }
+
 func New(opts ...Option) *Dix { return dixinternal.New(opts...) }
 
 func Inject[T any](di *Dix, data T, opts ...Option) T {

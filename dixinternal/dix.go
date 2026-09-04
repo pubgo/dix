@@ -39,6 +39,12 @@ func newDix(opts ...Option) (d *Dix) {
 		panic(err)
 	}
 
+	// WithTraceBuffer 启用容器私有 trace 通道;默认 nil = 事件进全局内存 sink。
+	var traceTracer *dixtrace.Tracer
+	if options.TraceBuffer > 0 {
+		traceTracer = dixtrace.NewTracer(dixtrace.NewMemorySink(options.TraceBuffer))
+	}
+
 	container := &Dix{
 		option:        options,
 		providers:     make(map[outputType][]*providerFn),
@@ -46,6 +52,8 @@ func newDix(opts ...Option) (d *Dix) {
 		initializer:   make(map[reflect.Value]bool),
 		timedOut:      make(map[reflect.Value]bool),
 		graph:         newGraph(),
+		containerID:   dixtrace.NewContainerID(),
+		traceTracer:   traceTracer,
 		providerStats: make(map[reflect.Value]*providerRuntimeStat),
 		recentErrors:  make([]recentErrorRecord, 0, 16),
 	}
@@ -57,12 +65,19 @@ func newDix(opts ...Option) (d *Dix) {
 }
 
 type Dix struct {
-	option        Options
-	providers     map[outputType][]*providerFn
-	objects       map[outputType]map[group][]value
-	initializer   map[reflect.Value]bool
-	timedOut      map[reflect.Value]bool
-	graph         *Graph
+	option      Options
+	providers   map[outputType][]*providerFn
+	objects     map[outputType]map[group][]value
+	initializer map[reflect.Value]bool
+	timedOut    map[reflect.Value]bool
+	graph       *Graph
+
+	// containerID 标识本容器(随机 16 hex),trace 事件携带它实现多容器隔离。
+	containerID string
+
+	// traceTracer 是容器私有 trace 通道(WithTraceBuffer 启用);nil 表示进全局 sink。
+	traceTracer *dixtrace.Tracer
+
 	providerStats map[reflect.Value]*providerRuntimeStat
 	recentErrors  []recentErrorRecord
 }
@@ -1081,6 +1096,7 @@ func (dix *Dix) inject(ctx context.Context, param any, opts ...Option) (err erro
 	if fnVal := reflect.ValueOf(param); fnVal.IsValid() && fnVal.Kind() == reflect.Func && !fnVal.IsNil() {
 		component = GetFnTraceName(fnVal)
 	}
+	ctx = dix.withTraceContext(ctx)
 	ctx, span := dixtrace.BeginSpanCtx(ctx, "inject", component, "param_type", paramType)
 	defer func() {
 		span.End(err, "param_type", paramType)
@@ -1271,6 +1287,24 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 
 // GraphVersion 返回运行时依赖图版本号,供 dixhttp 快照判脏。
 func (dix *Dix) GraphVersion() uint64 { return dix.graph.Version() }
+
+// withTraceContext 把容器标识(及私有 tracer,如启用)写入 ctx,
+// 必须在任何 span 创建之前调用,保证嵌套 span 事件落入正确通道。
+func (dix *Dix) withTraceContext(ctx context.Context) context.Context {
+	if dix.traceTracer != nil {
+		return dixtrace.WithContainerTracer(ctx, dix.containerID, dix.traceTracer)
+	}
+	return dixtrace.WithContainer(ctx, dix.containerID)
+}
+
+// TraceTree 返回一次注入链路的调用树(按 trace_id)。
+// 容器启用 WithTraceBuffer 时查询私有缓冲,否则查询全局。
+func (dix *Dix) TraceTree(traceID string) dixtrace.TreeResult {
+	if dix.traceTracer != nil {
+		return dix.traceTracer.QueryTree(traceID)
+	}
+	return dixtrace.QueryTree(traceID)
+}
 
 // getProvideInput is a wrapper for parseInputType used during provider registration
 func (dix *Dix) getProvideInput(typ reflect.Type) []*providerInputType {

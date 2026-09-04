@@ -190,6 +190,7 @@ Errors are logged with rich context (provider name, output/input types, stage, r
 *   **Recent Errors**: The container keeps a bounded ring buffer of recent failures (`GetRecentErrors`), exposed via `/api/errors`.
 *   **Provider Stats**: Per-provider call count and durations (`GetProviderRuntimeStats`), exposed via `/api/runtime-stats`; slow providers emit warnings.
 *   **Diagnostics File**: When `DIX_DIAG_FILE` is set, structured error/LLM records are appended as JSONL for post-mortem analysis (`ReadDiagFileRecords`).
+*   **Containerized Tracing**: Every container stamps its trace events with a random container id; `WithTraceBuffer(n)` gives a container a private in-memory sink. `Dix.TraceTree` / `/api/trace-tree` assemble the nested call tree (inject → resolve → provider) per trace id.
 
 ### 3.6 Tracing
 

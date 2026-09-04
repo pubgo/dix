@@ -2,6 +2,8 @@ package dixtrace
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -20,6 +22,7 @@ const (
 // Event 是统一 trace 事件结构。
 type Event struct {
 	ID               int64          `json:"id"`
+	ContainerID      string         `json:"container_id,omitempty"`
 	TraceID          string         `json:"trace_id,omitempty"`
 	SpanID           string         `json:"span_id,omitempty"`
 	ParentSpanID     string         `json:"parent_span_id,omitempty"`
@@ -43,6 +46,7 @@ type Event struct {
 // Query 控制 trace 查询过滤。
 type Query struct {
 	TraceID     string
+	ContainerID string
 	Operation   string
 	Status      string
 	Event       string
@@ -65,15 +69,32 @@ type ReadResult struct {
 	Records    []Event `json:"records"`
 }
 
+// TreeNode 是调用树节点:Event 为 span.start,End 为 span.end(存在时)。
+type TreeNode struct {
+	Event    Event       `json:"event"`
+	End      *Event      `json:"end,omitempty"`
+	Children []*TreeNode `json:"children"`
+}
+
+// TreeResult 是一次 trace 的调用树。
+type TreeResult struct {
+	Enabled bool        `json:"enabled"`
+	TraceID string      `json:"trace_id"`
+	Total   int         `json:"total"`
+	Roots   []*TreeNode `json:"roots"`
+}
+
 type Sink interface {
 	Write(Event)
 }
 
 type spanFrame struct {
-	TraceID   string
-	SpanID    string
-	Operation string
-	Component string
+	TraceID     string
+	SpanID      string
+	Operation   string
+	Component   string
+	ContainerID string
+	tracer      *Tracer
 }
 
 type spanContextKey struct{}
@@ -84,6 +105,8 @@ type Span struct {
 	parentSpanID string
 	operation    string
 	component    string
+	containerID  string
+	tracer       *Tracer
 	startedAt    int64
 	ended        atomic.Bool
 }
@@ -134,7 +157,7 @@ func (s *Span) End(err error, args ...any) {
 		errMsg = err.Error()
 	}
 
-	Emit(Event{
+	emitTo(s.tracer, Event{
 		TraceID:      s.traceID,
 		SpanID:       s.spanID,
 		ParentSpanID: s.parentSpanID,
@@ -143,6 +166,7 @@ func (s *Span) End(err error, args ...any) {
 		Event:        "span.end",
 		Status:       status,
 		Component:    s.component,
+		ContainerID:  s.containerID,
 		Error:        errMsg,
 		DurationNs:   duration,
 		OccurredAt:   time.Now().UnixNano(),
@@ -150,12 +174,40 @@ func (s *Span) End(err error, args ...any) {
 	})
 }
 
+func emitTo(tr *Tracer, e Event) {
+	if tr == nil {
+		Emit(e)
+		return
+	}
+	tr.Emit(e)
+}
+
+// NewContainerID 生成容器标识(16 hex 随机,rand 失败回退计数器)。
+func NewContainerID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "cont-" + strconv.FormatInt(traceSeq.Add(1), 10)
+	}
+	return hex.EncodeToString(b[:])
+}
+
 func nextTraceID() string {
-	return "t-" + strconv.FormatInt(traceSeq.Add(1), 10)
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "t-" + strconv.FormatInt(traceSeq.Add(1), 10)
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func nextSpanID() string {
 	return "s-" + strconv.FormatInt(spanSeq.Add(1), 10)
+}
+
+type ctxStateKey struct{}
+
+type ctxState struct {
+	containerID string
+	tracer      *Tracer
 }
 
 // BeginSpan 开始一个 span。
@@ -165,21 +217,43 @@ func BeginSpan(operation, component string, args ...any) *Span {
 	return span
 }
 
+// ctxState 携带容器标识与可选 Tracer,经 ctx 传递并被嵌套 span 继承。
+// WithContainer 把容器标识写入 ctx:之后创建的 span 事件都会携带该标识。
+func WithContainer(ctx context.Context, containerID string) context.Context {
+	return context.WithValue(ctx, ctxStateKey{}, ctxState{containerID: containerID})
+}
+
+// WithContainerTracer 同 WithContainer,并把 span 事件路由到指定 Tracer。
+func WithContainerTracer(ctx context.Context, containerID string, tr *Tracer) context.Context {
+	return context.WithValue(ctx, ctxStateKey{}, ctxState{containerID: containerID, tracer: tr})
+}
+
 // BeginSpanCtx starts a span and returns a context carrying this span as current parent.
-// Parent resolution is context-only.
+// Parent resolution and container/tracer inheritance are context-only.
 func BeginSpanCtx(ctx context.Context, operation, component string, args ...any) (context.Context, *Span) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	parent, hasParent := resolveCurrentParentFrame(ctx)
+	parent, hasParent := spanFrameFromContext(ctx)
 
-	traceID := ""
-	parentSpanID := ""
+	var st ctxState
+	if v, ok := ctx.Value(ctxStateKey{}).(ctxState); ok {
+		st = v
+	}
+
+	traceID, parentSpanID := "", ""
 	if hasParent {
-		traceID = parent.TraceID
-		parentSpanID = parent.SpanID
+		traceID, parentSpanID = parent.TraceID, parent.SpanID
 	} else {
 		traceID = nextTraceID()
+	}
+	tracer := st.tracer
+	if tracer == nil && hasParent {
+		tracer = parent.tracer
+	}
+	containerID := st.containerID
+	if containerID == "" && hasParent {
+		containerID = parent.ContainerID
 	}
 
 	span := &Span{
@@ -188,17 +262,21 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 		parentSpanID: parentSpanID,
 		operation:    strings.TrimSpace(operation),
 		component:    strings.TrimSpace(component),
+		containerID:  containerID,
+		tracer:       tracer,
 		startedAt:    time.Now().UnixNano(),
 	}
 
 	frame := spanFrame{
-		TraceID:   span.traceID,
-		SpanID:    span.spanID,
-		Operation: span.operation,
-		Component: span.component,
+		TraceID:     span.traceID,
+		SpanID:      span.spanID,
+		Operation:   span.operation,
+		Component:   span.component,
+		ContainerID: span.containerID,
+		tracer:      span.tracer,
 	}
 
-	Emit(Event{
+	emitTo(span.tracer, Event{
 		TraceID:      span.traceID,
 		SpanID:       span.spanID,
 		ParentSpanID: span.parentSpanID,
@@ -207,6 +285,7 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 		Event:        "span.start",
 		Status:       "start",
 		Component:    span.component,
+		ContainerID:  span.containerID,
 		OccurredAt:   span.startedAt,
 		Attrs:        TraceToAttrs(args...),
 	})
@@ -241,18 +320,27 @@ func (t *Tracer) Emit(e Event) {
 	}
 }
 
-// MemorySink 用于 API 查询。
+// MemorySink 用于 API 查询,并增量维护每条 trace 的调用树索引。
 type MemorySink struct {
 	mu     sync.RWMutex
 	max    int
 	events []Event
+
+	treeMax   int                     // 树索引保留的最大 trace 数(FIFO 驱逐)
+	trees     map[string]*treeBuilder // traceID -> 树索引
+	treeOrder []string
 }
 
 func NewMemorySink(max int) *MemorySink {
 	if max <= 0 {
 		max = 5000
 	}
-	return &MemorySink{max: max, events: make([]Event, 0, max)}
+	return &MemorySink{
+		max:     max,
+		events:  make([]Event, 0, max),
+		treeMax: defaultTreeMax,
+		trees:   make(map[string]*treeBuilder),
+	}
 }
 
 func (m *MemorySink) Write(e Event) {
@@ -262,7 +350,115 @@ func (m *MemorySink) Write(e Event) {
 	if len(m.events) > m.max {
 		m.events = m.events[len(m.events)-m.max:]
 	}
+	m.indexTree(e)
 }
+
+const defaultTreeMax = 128
+
+type treeBuilder struct {
+	children  map[string][]string
+	starts    map[string]Event
+	ends      map[string]Event
+	rootOrder []string
+}
+
+// indexTree 增量维护调用树索引:start 建父子关系,end 归档状态。
+func (m *MemorySink) indexTree(e Event) {
+	if e.TraceID == "" || e.SpanID == "" {
+		return
+	}
+	tb, ok := m.trees[e.TraceID]
+	if !ok {
+		tb = &treeBuilder{
+			children: make(map[string][]string),
+			starts:   make(map[string]Event),
+			ends:     make(map[string]Event),
+		}
+		m.trees[e.TraceID] = tb
+		m.treeOrder = append(m.treeOrder, e.TraceID)
+		if len(m.treeOrder) > m.treeMax {
+			old := m.treeOrder[0]
+			m.treeOrder = m.treeOrder[1:]
+			delete(m.trees, old)
+		}
+	}
+	switch e.Event {
+	case "span.start":
+		tb.starts[e.SpanID] = e
+		if e.ParentSpanID == "" {
+			tb.rootOrder = append(tb.rootOrder, e.SpanID)
+		} else {
+			tb.children[e.ParentSpanID] = append(tb.children[e.ParentSpanID], e.SpanID)
+		}
+	case "span.end":
+		tb.ends[e.SpanID] = e
+	}
+}
+
+// QueryTree 组装一次 trace 的调用树;孤儿 span(父已驱逐)按根处理。
+func (m *MemorySink) QueryTree(traceID string) TreeResult {
+	res := TreeResult{Enabled: true, TraceID: traceID, Roots: []*TreeNode{}}
+	m.mu.RLock()
+	tb, ok := m.trees[strings.TrimSpace(traceID)]
+	if !ok {
+		m.mu.RUnlock()
+		return res
+	}
+	starts, children, ends, rootOrder := tb.starts, tb.children, tb.ends, tb.rootOrder
+	total := len(starts)
+	m.mu.RUnlock()
+	res.Total = total
+
+	var build func(id string) *TreeNode
+	build = func(id string) *TreeNode {
+		node := &TreeNode{Event: starts[id], Children: []*TreeNode{}}
+		if e, ok := ends[id]; ok {
+			cp := e
+			node.End = &cp
+		}
+		for _, c := range children[id] {
+			if _, ok := starts[c]; ok {
+				node.Children = append(node.Children, build(c))
+			}
+		}
+		return node
+	}
+	for _, r := range rootOrder {
+		if _, ok := starts[r]; ok {
+			res.Roots = append(res.Roots, build(r))
+		}
+	}
+	return res
+}
+
+// QueryEvents 查询该 Tracer 内存 sink 中的事件;nil 回落全局。
+func (t *Tracer) QueryEvents(q Query) ReadResult {
+	if t == nil {
+		return defaultMemorySink.Query(q)
+	}
+	for _, s := range t.sinks {
+		if ms, ok := s.(*MemorySink); ok {
+			return ms.Query(q)
+		}
+	}
+	return defaultMemorySink.Query(q)
+}
+
+// QueryTree 返回该 Tracer 内存 sink 中的调用树;nil 回落全局。
+func (t *Tracer) QueryTree(traceID string) TreeResult {
+	if t == nil {
+		return defaultMemorySink.QueryTree(traceID)
+	}
+	for _, s := range t.sinks {
+		if ms, ok := s.(*MemorySink); ok {
+			return ms.QueryTree(traceID)
+		}
+	}
+	return defaultMemorySink.QueryTree(traceID)
+}
+
+// QueryTree 查询全局内存 sink 中的调用树。
+func QueryTree(traceID string) TreeResult { return defaultMemorySink.QueryTree(traceID) }
 
 func (m *MemorySink) Query(q Query) ReadResult {
 	m.mu.RLock()
@@ -439,6 +635,9 @@ func matches(rec Event, q Query) bool {
 	if !contains(rec.TraceID, q.TraceID) {
 		return false
 	}
+	if !contains(rec.ContainerID, q.ContainerID) {
+		return false
+	}
 	if !contains(rec.Operation, q.Operation) {
 		return false
 	}
@@ -508,6 +707,7 @@ func QueryEvents(q Query) ReadResult {
 func ParseQueryFromMap(values map[string]any) Query {
 	return Query{
 		TraceID:     parseString(values["trace_id"]),
+		ContainerID: parseString(values["container_id"]),
 		Operation:   parseString(values["operation"]),
 		Status:      parseString(values["status"]),
 		Event:       parseString(values["event"]),
@@ -553,6 +753,8 @@ func TraceToAttrs(args ...any) map[string]any {
 func resetDefaultForTest() {
 	defaultMemorySink.mu.Lock()
 	defaultMemorySink.events = defaultMemorySink.events[:0]
+	defaultMemorySink.trees = make(map[string]*treeBuilder)
+	defaultMemorySink.treeOrder = nil
 	defaultMemorySink.mu.Unlock()
 	defaultTracer.seq.Store(0)
 	traceSeq.Store(0)

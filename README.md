@@ -129,6 +129,7 @@ Container options:
 | `WithRejectEmptyCollections()` | disabled | Reject missing map/list dependencies instead of resolving them as empty collections |
 | `WithProviderTimeout(d)` | `15s` | Per-provider execution timeout (`0` = disabled) |
 | `WithSlowProviderThreshold(d)` | `2s` | Warn when provider is slow (`0` = disabled) |
+| `WithTraceBuffer(n)` | off | Give the container a private in-memory trace buffer of `n` events (isolated from the global sink) |
 
 ### Provide / TryProvide
 
