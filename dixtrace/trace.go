@@ -2,6 +2,8 @@ package dixtrace
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -20,6 +22,7 @@ const (
 // Event 是统一 trace 事件结构。
 type Event struct {
 	ID               int64          `json:"id"`
+	ContainerID      string         `json:"container_id,omitempty"`
 	TraceID          string         `json:"trace_id,omitempty"`
 	SpanID           string         `json:"span_id,omitempty"`
 	ParentSpanID     string         `json:"parent_span_id,omitempty"`
@@ -43,6 +46,7 @@ type Event struct {
 // Query 控制 trace 查询过滤。
 type Query struct {
 	TraceID     string
+	ContainerID string
 	Operation   string
 	Status      string
 	Event       string
@@ -70,10 +74,12 @@ type Sink interface {
 }
 
 type spanFrame struct {
-	TraceID   string
-	SpanID    string
-	Operation string
-	Component string
+	TraceID     string
+	SpanID      string
+	Operation   string
+	Component   string
+	ContainerID string
+	tracer      *Tracer
 }
 
 type spanContextKey struct{}
@@ -84,6 +90,8 @@ type Span struct {
 	parentSpanID string
 	operation    string
 	component    string
+	containerID  string
+	tracer       *Tracer
 	startedAt    int64
 	ended        atomic.Bool
 }
@@ -134,7 +142,7 @@ func (s *Span) End(err error, args ...any) {
 		errMsg = err.Error()
 	}
 
-	Emit(Event{
+	emitTo(s.tracer, Event{
 		TraceID:      s.traceID,
 		SpanID:       s.spanID,
 		ParentSpanID: s.parentSpanID,
@@ -143,6 +151,7 @@ func (s *Span) End(err error, args ...any) {
 		Event:        "span.end",
 		Status:       status,
 		Component:    s.component,
+		ContainerID:  s.containerID,
 		Error:        errMsg,
 		DurationNs:   duration,
 		OccurredAt:   time.Now().UnixNano(),
@@ -150,12 +159,40 @@ func (s *Span) End(err error, args ...any) {
 	})
 }
 
+func emitTo(tr *Tracer, e Event) {
+	if tr == nil {
+		Emit(e)
+		return
+	}
+	tr.Emit(e)
+}
+
+// NewContainerID 生成容器标识(16 hex 随机,rand 失败回退计数器)。
+func NewContainerID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "cont-" + strconv.FormatInt(traceSeq.Add(1), 10)
+	}
+	return hex.EncodeToString(b[:])
+}
+
 func nextTraceID() string {
-	return "t-" + strconv.FormatInt(traceSeq.Add(1), 10)
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "t-" + strconv.FormatInt(traceSeq.Add(1), 10)
+	}
+	return hex.EncodeToString(b[:])
 }
 
 func nextSpanID() string {
 	return "s-" + strconv.FormatInt(spanSeq.Add(1), 10)
+}
+
+type ctxStateKey struct{}
+
+type ctxState struct {
+	containerID string
+	tracer      *Tracer
 }
 
 // BeginSpan 开始一个 span。
@@ -165,21 +202,43 @@ func BeginSpan(operation, component string, args ...any) *Span {
 	return span
 }
 
+// ctxState 携带容器标识与可选 Tracer,经 ctx 传递并被嵌套 span 继承。
+// WithContainer 把容器标识写入 ctx:之后创建的 span 事件都会携带该标识。
+func WithContainer(ctx context.Context, containerID string) context.Context {
+	return context.WithValue(ctx, ctxStateKey{}, ctxState{containerID: containerID})
+}
+
+// WithContainerTracer 同 WithContainer,并把 span 事件路由到指定 Tracer。
+func WithContainerTracer(ctx context.Context, containerID string, tr *Tracer) context.Context {
+	return context.WithValue(ctx, ctxStateKey{}, ctxState{containerID: containerID, tracer: tr})
+}
+
 // BeginSpanCtx starts a span and returns a context carrying this span as current parent.
-// Parent resolution is context-only.
+// Parent resolution and container/tracer inheritance are context-only.
 func BeginSpanCtx(ctx context.Context, operation, component string, args ...any) (context.Context, *Span) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	parent, hasParent := resolveCurrentParentFrame(ctx)
+	parent, hasParent := spanFrameFromContext(ctx)
 
-	traceID := ""
-	parentSpanID := ""
+	var st ctxState
+	if v, ok := ctx.Value(ctxStateKey{}).(ctxState); ok {
+		st = v
+	}
+
+	traceID, parentSpanID := "", ""
 	if hasParent {
-		traceID = parent.TraceID
-		parentSpanID = parent.SpanID
+		traceID, parentSpanID = parent.TraceID, parent.SpanID
 	} else {
 		traceID = nextTraceID()
+	}
+	tracer := st.tracer
+	if tracer == nil && hasParent {
+		tracer = parent.tracer
+	}
+	containerID := st.containerID
+	if containerID == "" && hasParent {
+		containerID = parent.ContainerID
 	}
 
 	span := &Span{
@@ -188,17 +247,21 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 		parentSpanID: parentSpanID,
 		operation:    strings.TrimSpace(operation),
 		component:    strings.TrimSpace(component),
+		containerID:  containerID,
+		tracer:       tracer,
 		startedAt:    time.Now().UnixNano(),
 	}
 
 	frame := spanFrame{
-		TraceID:   span.traceID,
-		SpanID:    span.spanID,
-		Operation: span.operation,
-		Component: span.component,
+		TraceID:     span.traceID,
+		SpanID:      span.spanID,
+		Operation:   span.operation,
+		Component:   span.component,
+		ContainerID: span.containerID,
+		tracer:      span.tracer,
 	}
 
-	Emit(Event{
+	emitTo(span.tracer, Event{
 		TraceID:      span.traceID,
 		SpanID:       span.spanID,
 		ParentSpanID: span.parentSpanID,
@@ -207,6 +270,7 @@ func BeginSpanCtx(ctx context.Context, operation, component string, args ...any)
 		Event:        "span.start",
 		Status:       "start",
 		Component:    span.component,
+		ContainerID:  span.containerID,
 		OccurredAt:   span.startedAt,
 		Attrs:        TraceToAttrs(args...),
 	})
@@ -439,6 +503,9 @@ func matches(rec Event, q Query) bool {
 	if !contains(rec.TraceID, q.TraceID) {
 		return false
 	}
+	if !contains(rec.ContainerID, q.ContainerID) {
+		return false
+	}
 	if !contains(rec.Operation, q.Operation) {
 		return false
 	}
@@ -508,6 +575,7 @@ func QueryEvents(q Query) ReadResult {
 func ParseQueryFromMap(values map[string]any) Query {
 	return Query{
 		TraceID:     parseString(values["trace_id"]),
+		ContainerID: parseString(values["container_id"]),
 		Operation:   parseString(values["operation"]),
 		Status:      parseString(values["status"]),
 		Event:       parseString(values["event"]),

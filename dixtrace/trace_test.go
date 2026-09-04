@@ -104,14 +104,12 @@ func TestTraceIDSequenceOnlyIncrementsOnRootSpan(t *testing.T) {
 	if rootStart.TraceID == "" || childStart.TraceID == "" || anotherRootStart.TraceID == "" {
 		t.Fatalf("missing spans: root=%q child=%q another=%q", rootStart.TraceID, childStart.TraceID, anotherRootStart.TraceID)
 	}
-	if rootStart.TraceID != "t-1" {
-		t.Fatalf("expected root trace id t-1, got %s", rootStart.TraceID)
+	// 随机 TraceID 语义:根 span 各得随机 ID(32 hex),子 span 继承父 ID。
+	if len(rootStart.TraceID) != 32 || rootStart.TraceID == anotherRootStart.TraceID {
+		t.Fatalf("root trace ids should be distinct 32-hex, got root=%q another=%q", rootStart.TraceID, anotherRootStart.TraceID)
 	}
 	if childStart.TraceID != rootStart.TraceID {
 		t.Fatalf("child should keep parent trace id, child=%s root=%s", childStart.TraceID, rootStart.TraceID)
-	}
-	if anotherRootStart.TraceID != "t-2" {
-		t.Fatalf("expected next root trace id t-2, got %s", anotherRootStart.TraceID)
 	}
 }
 
@@ -206,5 +204,48 @@ func TestResolveTraceFilePathFromEnvNoFallback(t *testing.T) {
 	}
 	if appendOnly {
 		t.Fatalf("expected append mode to be irrelevant when disabled")
+	}
+}
+
+func TestTraceIDIsRandomHex(t *testing.T) {
+	ResetForTest()
+	s1 := BeginSpan("op", "c")
+	s2 := BeginSpan("op", "c")
+	t1, _, _ := s1.IDs()
+	t2, _, _ := s2.IDs()
+	if t1 == t2 {
+		t.Fatal("root spans must get distinct random trace ids")
+	}
+	if len(t1) != 32 {
+		t.Fatalf("trace id len = %d, want 32 hex", len(t1))
+	}
+}
+
+func TestContainerIDStamping(t *testing.T) {
+	ResetForTest()
+	ctx := WithContainer(context.Background(), "cont-1")
+	ctx, span := BeginSpanCtx(ctx, "inject", "c")
+	_, child := BeginSpanCtx(ctx, "resolve", "c")
+	child.End(nil)
+	span.End(nil)
+
+	res := QueryEvents(Query{ContainerID: "cont-1"})
+	if res.Total == 0 {
+		t.Fatal("events should carry container id")
+	}
+	for _, rec := range res.Records {
+		if rec.ContainerID != "cont-1" {
+			t.Fatalf("event %s has container %q", rec.Event, rec.ContainerID)
+		}
+	}
+	if res := QueryEvents(Query{ContainerID: "cont-other"}); res.Total != 0 {
+		t.Fatal("other container must not match")
+	}
+}
+
+func TestNewContainerID(t *testing.T) {
+	a, b := NewContainerID(), NewContainerID()
+	if a == b || len(a) != 16 {
+		t.Fatalf("container ids must be random 16 hex, got %q %q", a, b)
 	}
 }
