@@ -19,7 +19,7 @@ Core features include:
 *   **Method Injection**: Support setter injection via `DixInject` prefix methods.
 *   **Namespace Grouping**: Support grouping dependencies by namespace.
 *   **Safe APIs**: `TryProvide`/`TryInject` variants that return errors instead of panicking.
-*   **Runtime Diagnostics**: Provider execution stats, recent error records, structured tracing (`dixtrace`), and a JSONL diagnostics file.
+*   **Runtime Diagnostics**: Provider execution stats, recent error records, unified instrumentation through the tracer event stream, and a JSONL diagnostics file.
 
 ## 2. Core Architecture
 
@@ -189,7 +189,7 @@ Errors are logged with rich context (provider name, output/input types, stage, r
 *   **Safe APIs**: `TryProvide` and `TryInject` methods return errors instead of panicking, suitable for scenarios where graceful error handling is preferred.
 *   **Recent Errors**: The container keeps a bounded ring buffer of recent failures (`GetRecentErrors`), exposed via `/api/errors`.
 *   **Provider Stats**: Per-provider call count and durations (`GetProviderRuntimeStats`), exposed via `/api/runtime-stats`; slow providers emit warnings.
-*   **Diagnostics File**: When `DIX_DIAG_FILE` is set, structured error/LLM records are appended as JSONL for post-mortem analysis (`ReadDiagFileRecords`).
+*   **Diagnostics File**: When `DIX_DIAG_FILE` is set, structured error/trace records are appended as JSONL for post-mortem analysis (`ReadDiagFileRecords`).
 *   **Containerized Tracing**: Every container stamps its trace events with a random container id; `WithTraceBuffer(n)` gives a container a private in-memory sink. `Dix.TraceTree` / `/api/trace-tree` assemble the nested call tree (inject → resolve → provider) per trace id.
 
 ### 3.6 Tracing

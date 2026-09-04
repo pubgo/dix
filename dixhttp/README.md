@@ -334,7 +334,6 @@ If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty record
       "process": "my-app",
       "hostname": "dev-mac",
       "trace_di": true,
-      "llm_diag_mode": "dual",
       "kind": "trace",
       "event": "provider.call.start",
       "occurred_at_unix_nano": 1700000000000000000,

@@ -327,7 +327,6 @@ server.ListenAndServe(":8080")
 | `DIX_TRACE_DI` | 关闭 | 控制台逐步 DI trace（`di_trace ...`） |
 | `DIX_DIAG_FILE` | 关闭 | 追加写入 `trace` / `error` / `llm` JSONL |
 | `DIX_TRACE_FILE` | 关闭 | 仅 trace 的 JSONL（未设置时回退到 `DIX_DIAG_FILE`） |
-| `DIX_LLM_DIAG_MODE` | `human` | 日志模式：`human` / `machine` / `dual` |
 
 ```bash
 export DIX_TRACE_DI=true

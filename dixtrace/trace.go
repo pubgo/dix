@@ -174,6 +174,20 @@ func (s *Span) End(err error, args ...any) {
 	})
 }
 
+// EmitTo 向指定 Tracer 发布事件(nil 回落全局默认)。
+func EmitTo(tr *Tracer, e Event) { emitTo(tr, e) }
+
+// AddSink 追加事件订阅 sink。
+func (t *Tracer) AddSink(s Sink) {
+	if t == nil || s == nil {
+		return
+	}
+	t.sinks = append(t.sinks, s)
+}
+
+// AddDefaultSink 向全局 Tracer 追加事件订阅 sink。
+func AddDefaultSink(s Sink) { defaultTracer.AddSink(s) }
+
 func emitTo(tr *Tracer, e Event) {
 	if tr == nil {
 		Emit(e)

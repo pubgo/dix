@@ -27,34 +27,32 @@ var (
 )
 
 type diagFileRecord struct {
-	RecordID    int64          `json:"record_id,omitempty"`
-	Source      string         `json:"source,omitempty"`
-	PID         int            `json:"pid,omitempty"`
-	Process     string         `json:"process,omitempty"`
-	Hostname    string         `json:"hostname,omitempty"`
-	TraceDI     bool           `json:"trace_di,omitempty"`
-	LLMDiagMode string         `json:"llm_diag_mode,omitempty"`
-	Kind        string         `json:"kind"`
-	OccurredAt  int64          `json:"occurred_at_unix_nano"`
-	Event       string         `json:"event,omitempty"`
-	Fields      map[string]any `json:"fields,omitempty"`
-	Payload     any            `json:"payload,omitempty"`
+	RecordID   int64          `json:"record_id,omitempty"`
+	Source     string         `json:"source,omitempty"`
+	PID        int            `json:"pid,omitempty"`
+	Process    string         `json:"process,omitempty"`
+	Hostname   string         `json:"hostname,omitempty"`
+	TraceDI    bool           `json:"trace_di,omitempty"`
+	Kind       string         `json:"kind"`
+	OccurredAt int64          `json:"occurred_at_unix_nano"`
+	Event      string         `json:"event,omitempty"`
+	Fields     map[string]any `json:"fields,omitempty"`
+	Payload    any            `json:"payload,omitempty"`
 }
 
 // DiagFileRecord is an exported diagnostic record returned by file-query APIs.
 type DiagFileRecord struct {
-	RecordID    int64          `json:"record_id,omitempty"`
-	Source      string         `json:"source,omitempty"`
-	PID         int            `json:"pid,omitempty"`
-	Process     string         `json:"process,omitempty"`
-	Hostname    string         `json:"hostname,omitempty"`
-	TraceDI     bool           `json:"trace_di,omitempty"`
-	LLMDiagMode string         `json:"llm_diag_mode,omitempty"`
-	Kind        string         `json:"kind"`
-	OccurredAt  int64          `json:"occurred_at_unix_nano"`
-	Event       string         `json:"event,omitempty"`
-	Fields      map[string]any `json:"fields,omitempty"`
-	Payload     any            `json:"payload,omitempty"`
+	RecordID   int64          `json:"record_id,omitempty"`
+	Source     string         `json:"source,omitempty"`
+	PID        int            `json:"pid,omitempty"`
+	Process    string         `json:"process,omitempty"`
+	Hostname   string         `json:"hostname,omitempty"`
+	TraceDI    bool           `json:"trace_di,omitempty"`
+	Kind       string         `json:"kind"`
+	OccurredAt int64          `json:"occurred_at_unix_nano"`
+	Event      string         `json:"event,omitempty"`
+	Fields     map[string]any `json:"fields,omitempty"`
+	Payload    any            `json:"payload,omitempty"`
 }
 
 // DiagFileQuery controls filtering and pagination for DIX_DIAG_FILE records.
@@ -85,18 +83,17 @@ func nextDiagRecordID() int64 {
 
 func toDiagRecord(r diagFileRecord) DiagFileRecord {
 	return DiagFileRecord{
-		RecordID:    r.RecordID,
-		Source:      r.Source,
-		PID:         r.PID,
-		Process:     r.Process,
-		Hostname:    r.Hostname,
-		TraceDI:     r.TraceDI,
-		LLMDiagMode: r.LLMDiagMode,
-		Kind:        r.Kind,
-		OccurredAt:  r.OccurredAt,
-		Event:       r.Event,
-		Fields:      r.Fields,
-		Payload:     r.Payload,
+		RecordID:   r.RecordID,
+		Source:     r.Source,
+		PID:        r.PID,
+		Process:    r.Process,
+		Hostname:   r.Hostname,
+		TraceDI:    r.TraceDI,
+		Kind:       r.Kind,
+		OccurredAt: r.OccurredAt,
+		Event:      r.Event,
+		Fields:     r.Fields,
+		Payload:    r.Payload,
 	}
 }
 
@@ -106,18 +103,17 @@ func buildDiagRecord(kind, event string, fields map[string]any, payload any, occ
 	}
 	hostname, _ := os.Hostname()
 	return diagFileRecord{
-		RecordID:    nextDiagRecordID(),
-		Source:      "dix",
-		PID:         os.Getpid(),
-		Process:     filepath.Base(os.Args[0]),
-		Hostname:    hostname,
-		TraceDI:     shouldTraceDependencyFlow(),
-		LLMDiagMode: currentLLMDiagMode(),
-		Kind:        kind,
-		OccurredAt:  occurredAt,
-		Event:       event,
-		Fields:      fields,
-		Payload:     payload,
+		RecordID:   nextDiagRecordID(),
+		Source:     "dix",
+		PID:        os.Getpid(),
+		Process:    filepath.Base(os.Args[0]),
+		Hostname:   hostname,
+		TraceDI:    shouldTraceDependencyFlow(),
+		Kind:       kind,
+		OccurredAt: occurredAt,
+		Event:      event,
+		Fields:     fields,
+		Payload:    payload,
 	}
 }
 
@@ -199,10 +195,6 @@ func emitDiagFileTraceEvent(event string, args ...any) {
 
 func emitDiagFileErrorRecord(record recentErrorRecord) {
 	emitDiagFileRecord(buildDiagRecord("error", "", nil, record, record.Occurred.UnixNano()))
-}
-
-func emitDiagFileLLMRecord(payload any) {
-	emitDiagFileRecord(buildDiagRecord("llm", "", nil, payload, time.Now().UnixNano()))
 }
 
 func kvArgsToMap(args ...any) map[string]any {

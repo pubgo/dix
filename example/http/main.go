@@ -23,12 +23,10 @@ package main
 
 import (
 	"errors"
-	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/pubgo/dix/v2"
@@ -278,22 +276,6 @@ type Application struct {
 
 const defaultHTTPAddr = ":8080"
 
-func isMachineDiagMode() bool {
-	mode := strings.TrimSpace(strings.ToLower(os.Getenv("DIX_LLM_DIAG_MODE")))
-	switch mode {
-	case "only", "machine", "machine-only", "machine_only", "json":
-		return true
-	default:
-		return false
-	}
-}
-
-func configureExampleLogOutput() {
-	if isMachineDiagMode() {
-		log.SetOutput(io.Discard)
-	}
-}
-
 func startVisualizationServer(server *dixhttp.Server) error {
 	addr := os.Getenv("DIX_HTTP_ADDR")
 	if addr == "" {
@@ -457,8 +439,6 @@ func runStartupErrorScenarios(di *dix.Dix) {
 }
 
 func main() {
-	configureExampleLogOutput()
-
 	di := buildContainer()
 	preCreateObjects(di)
 
