@@ -25,6 +25,6 @@ tasks:
     deps: [test]
 
   web-demo:
-    desc: Run web demo
+    desc: Run web demo (example/http, 五视图 UI)
     cmds:
-      - go run example/http/main.go
+      - go run -C example ./http
