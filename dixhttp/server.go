@@ -148,6 +148,9 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
 	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
 	s.mux.HandleFunc(base+"/api/trace-tree", s.HandleTraceTree)
+	s.mux.HandleFunc(base+"/api/search", s.HandleSearch)
+	s.mux.HandleFunc(base+"/api/modules", s.HandleModules)
+	s.mux.HandleFunc(base+"/api/ego", s.HandleEgo)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
@@ -255,6 +258,50 @@ func (s *Server) HandleTraceTree(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.dix.TraceTree(traceID))
 }
 
+// HandleSearch 检索图节点。
+// Query params:
+// - q: 关键字(类型名/函数名包含匹配)
+// - kind: type|provider|object
+// - module: pkg 前缀
+// - state: instantiated|error|slow
+// - limit: 缺省 50,上限 500
+func (s *Server) HandleSearch(w http.ResponseWriter, r *http.Request) {
+	hits := s.dix.SearchNodes(
+		r.URL.Query().Get("q"),
+		r.URL.Query().Get("kind"),
+		r.URL.Query().Get("module"),
+		r.URL.Query().Get("state"),
+		atoiOr(r.URL.Query().Get("limit"), 50),
+	)
+	writeJSON(w, hits)
+}
+
+// HandleModules 返回模块级聚合视图(含跨模块依赖)。
+func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.dix.ModuleGraph())
+}
+
+// HandleEgo 返回以 center 为中心的 N 跳邻域子图。
+// Query params:
+// - center: 类型 label(必填)
+// - depth: 缺省 2,上限 10
+// - direction: both|deps|dependents,缺省 both
+func (s *Server) HandleEgo(w http.ResponseWriter, r *http.Request) {
+	center := strings.TrimSpace(r.URL.Query().Get("center"))
+	if center == "" {
+		http.Error(w, "center required", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, s.dix.EgoGraph(center, atoiOr(r.URL.Query().Get("depth"), 2), r.URL.Query().Get("direction")))
+}
+
+func atoiOr(s string, def int) int {
+	if v, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && v > 0 {
+		return v
+	}
+	return def
+}
+
 // ServeHTTP implements http.Handler interface
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
@@ -276,6 +323,7 @@ func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 // HandleStats returns summary statistics
 func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
 	providerDetails, objects := s.cachedGraphInputs()
+	modules := s.dix.ModuleGraph()
 
 	// Count objects
 	objectCount := 0
@@ -300,11 +348,22 @@ func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
 		edgeCount += len(detail.InputTypes)
 	}
 
+	slow, errored := s.dix.ProblemProviders()
+	top := s.dix.ResolvedTopN(10)
+	top2 := make([]ResolvedCount2, 0, len(top))
+	for _, rc := range top {
+		top2 = append(top2, ResolvedCount2{Type: rc.Type, Count: rc.Count})
+	}
+
 	stats := StatsData{
-		ProviderCount: len(providerDetails),
-		ObjectCount:   objectCount,
-		PackageCount:  len(packages),
-		EdgeCount:     edgeCount,
+		ProviderCount:  len(providerDetails),
+		ObjectCount:    objectCount,
+		PackageCount:   len(packages),
+		EdgeCount:      edgeCount,
+		Modules:        len(modules),
+		TopResolved:    top2,
+		SlowProviders:  slow,
+		ErrorProviders: errored,
 	}
 
 	writeJSON(w, stats)
@@ -748,6 +807,18 @@ type StatsData struct {
 	ObjectCount   int `json:"object_count"`
 	PackageCount  int `json:"package_count"`
 	EdgeCount     int `json:"edge_count"`
+
+	// 概览增强(P4a):模块数、解析热度 TopN、慢/错误 provider
+	Modules        int              `json:"modules"`
+	TopResolved    []ResolvedCount2 `json:"top_resolved,omitempty"`
+	SlowProviders  []string         `json:"slow_providers,omitempty"`
+	ErrorProviders []string         `json:"error_providers,omitempty"`
+}
+
+// ResolvedCount2 是 dixhttp 对内部分析计数类型的投影。
+type ResolvedCount2 struct {
+	Type  string `json:"type"`
+	Count int64  `json:"count"`
 }
 
 // PackageInfo contains information about a package
