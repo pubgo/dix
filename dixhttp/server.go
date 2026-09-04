@@ -607,14 +607,16 @@ func (s *Server) HandleTypeDetails(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleDependencies returns JSON data about providers and objects relationships
-// cachedGraphInputs 返回按图版本判脏缓存的 provider 详情与对象表。
+// cachedGraphInputs 返回按图版本判脏缓存的 provider 详情与对象表,
+// 并保证全量投影 snapFull 同步重建(stats/packages/details 等端点共用)。
 func (s *Server) cachedGraphInputs() ([]dixinternal.ProviderDetails, map[reflect.Type]map[string][]reflect.Value) {
 	ver := s.dix.GraphVersion()
 	s.snapMu.Lock()
 	defer s.snapMu.Unlock()
-	if !s.haveSnap || s.snapVer != ver {
+	if !s.haveSnap || s.snapVer != ver || s.snapFull == nil {
 		s.snapDet = s.dix.GetProviderDetails()
 		s.snapObj = s.dix.GetObjects()
+		s.snapFull = buildDependencyData(s.snapDet, s.snapObj, "", 0)
 		s.snapVer = ver
 		s.haveSnap = true
 	}
@@ -649,23 +651,7 @@ func (s *Server) HandleGroupRules(w http.ResponseWriter, r *http.Request) {
 // dependencyData 组装依赖数据:未过滤请求返回缓存的全量快照(零反射、零分配),
 // 过滤请求基于缓存输入做纯函数投影;反射只在图版本变化后的第一次请求发生。
 func (s *Server) dependencyData(pkgFilter string, limit int) *DependencyData {
-	ver := s.dix.GraphVersion()
-
-	s.snapMu.Lock()
-	if !s.haveSnap || s.snapVer != ver {
-		s.snapDet = s.dix.GetProviderDetails()
-		s.snapObj = s.dix.GetObjects()
-		s.snapVer = ver
-		s.haveSnap = true
-		s.snapFull = buildDependencyData(s.snapDet, s.snapObj, "", 0)
-	}
-	if pkgFilter == "" && limit == 0 {
-		full := s.snapFull
-		s.snapMu.Unlock()
-		return full
-	}
-	details, objects := s.snapDet, s.snapObj
-	s.snapMu.Unlock()
+	details, objects := s.cachedGraphInputs()
 	return buildDependencyData(details, objects, pkgFilter, limit)
 }
 
