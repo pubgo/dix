@@ -104,11 +104,19 @@ type Graph struct {
 - 新增:TreeResult 与事件流一致性、多容器事件隔离(按 containerID 过滤)、JSONL 旧文件可被新代码读取;
 - example/context-inject 扩展断言树结构。
 
-## 5. P3 埋点统一
+## 5. P3 埋点统一与 LLM 通道收敛
 
 - Graph/resolve 过程发布结构化事件到容器内事件总线(就是 Tracer 的 sink 流,不新造机制)。
 - **console(`di_trace ...`)与 diag file 降级为订阅者**:各实现一个 sink/适配器,格式与现状逐字节一致(锁测试 `TestDITraceLogsInInjectFlow`、`TestDiagFileConfiguredCollectsTraceErrorAndLLM` 原样通过)。
 - `dix.go` 中 `logDITrace` 调用点全部删除,仅保留 span/事件发布一处;预期 dixinternal/dix.go 净减 200+ 行。
+- **移除独立的 LLM 输出通道**(v2.1.0 后评审结论:同一错误的机器可读信息已存在三份,第四份纯属冗余):
+  - 删 `DIX_LLM_DIAG_MODE` env 与 human/machine/dual 分支(machine-only 会整体丢弃人类日志,迫使"给人看"与"给 LLM 看"二选一,有害);
+  - 删 `emitLLMDiagnosticLine` 与 stderr `DIX_LLM_DIAG {...}` 行;
+  - diag 文件 record 从 `trace|error|llm` 三类收敛为 `trace|error` 两类(llm record 的全部字段 error record 均已包含);
+  - 删 example/http 中重复解析该 env 的 `isMachineDiagMode`/`configureExampleLogOutput`;
+  - **保留** `error_type` / `root_cause` / `hint` 字段体系(hint 文案是给 LLM 与人的真正价值),作为结构化字段走全部出口:stderr slog 行(现状已带 `dix.error_type=` 等属性)、diag JSONL error record、`/api/errors`;
+  - LLM/agent 的消费契约定义为两条:终端 agent 读 stderr 的结构化 attrs;文件型 agent 读 diag JSONL 或 `/api/errors`、`/api/diagnostics`。不再有专门的"LLM 格式";
+  - 兼容:`DIX_LLM_DIAG_MODE` 保留一个过渡版本为 no-op(启动时打一条 deprecated 提示),下个版本删除。
 
 ## 6. P4 大规模可视化与检索(100+ provider / 300+ 对象 / 几十模块)
 
@@ -187,6 +195,7 @@ Graph 的天然层次:`Module(pkg) → Type → Object`。API 支持粒度参数
 | `dixhttp` 响应 | 增字段(container_id、节点 id、调用树端点) | 向后兼容 |
 | `/api/graph` 语义 | level 参数成默认;全量 object 列表改为分页/下钻 | 前端同期重构(已获准) |
 | dixhttp 前端 | 五视图信息架构重写,template.html 拆分与本地化 | 已获准"前后端一起" |
+| `DIX_LLM_DIAG_MODE` / `DIX_LLM_DIAG` 行 / diag `kind:llm` | P3 移除,error 字段体系保留 | env 一版 no-op 过渡;`/api/diagnostics` 的 kind 枚举文档同步 |
 | `dix.New` | 新 Option(WithTraceBuffer) | 纯增量 |
 
 ## 8. 分期交付
