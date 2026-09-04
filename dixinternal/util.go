@@ -272,7 +272,7 @@ func isMapListSupportedType(p reflect.Type) bool {
 
 // GetFnName returns the name of the function represented by reflect.Value
 func GetFnName(fn reflect.Value) string {
-	if fn.IsNil() {
+	if !fn.IsValid() || fn.IsNil() {
 		return "nil"
 	}
 	pc := fn.Pointer()
