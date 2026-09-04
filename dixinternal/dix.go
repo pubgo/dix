@@ -193,6 +193,8 @@ func (dix *Dix) executeProvider(ctx context.Context, p *providerFn, outTyp outpu
 	fnName := GetFnName(p.fn)
 	traceFnName := GetFnTraceName(p.fn)
 	inputTypes := providerInputTypeNames(p.inputList)
+	// 图节点预取:provider 节点与输出类型节点,成功路径用于解析计数。
+	gProviderNode := dix.graph.providerNode(p, outTyp)
 	ctx, span := dixtrace.BeginSpanCtx(ctx, "provider.execute", fnName,
 		"provider", traceFnName,
 		"output_type", outTyp.String(),
@@ -374,6 +376,7 @@ func (dix *Dix) executeProvider(ctx context.Context, p *providerFn, outTyp outpu
 	}
 
 	dix.initializer[p.fn] = true
+	dix.graph.markResolved(gProviderNode, outTyp)
 	dix.recordProviderStat(p, duration, nil)
 	if opt.SlowProviderThreshold > 0 && duration > opt.SlowProviderThreshold {
 		logger.Warn("slow provider execution detected",
@@ -414,6 +417,19 @@ func (dix *Dix) processProviderOutput(requestedType outputType, p *providerFn, o
 		for groupKey, values := range groups {
 			dix.objects[typeKey][groupKey] = append(dix.objects[typeKey][groupKey], values...)
 		}
+	}
+
+	// 对象节点:首次出现 (type, group) 时建节点并 bump version(快照判脏依据)。
+	created := false
+	for typeKey, groups := range newObjects {
+		for groupKey := range groups {
+			if dix.graph.addObject(typeKey, groupKey) {
+				created = true
+			}
+		}
+	}
+	if created {
+		dix.graph.bumpVersion()
 	}
 }
 

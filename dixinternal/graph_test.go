@@ -1,6 +1,7 @@
 package dixinternal
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"sync"
@@ -260,5 +261,78 @@ func TestDixAdjacencyGolden(t *testing.T) {
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Fatalf("adjacency = %v, want %v", got, want)
+	}
+}
+
+// provider 每实际执行一次,对应 Resolved 边计数 +1;首次产物入缓存建 Object 节点。
+// 失败的 provider 不产生 resolved 计数。
+func TestDixGraphResolvedAndObjects(t *testing.T) {
+	di := New()
+
+	type GObj struct{ N int }
+	di.Provide(func() *GObj { return &GObj{N: 1} })
+
+	if err := di.TryInject(func(o *GObj) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	if err := di.TryInject(func(o *GObj) {}); err != nil {
+		t.Fatalf("inject2: %v", err)
+	}
+
+	// resolved 计数:provider 只执行一次(产物缓存),第二次 inject 不再执行
+	di.graph.mu.RLock()
+	var resolved int64
+	objNodes := 0
+	for _, e := range di.graph.eIndex {
+		if e.Kind == EdgeResolved {
+			resolved = e.Count
+		}
+	}
+	for _, n := range di.graph.nodes {
+		if n.Kind == NodeObject {
+			objNodes++
+		}
+	}
+	di.graph.mu.RUnlock()
+
+	if resolved != 1 {
+		t.Fatalf("resolved count = %d, want 1 (provider cached)", resolved)
+	}
+	if objNodes != 1 {
+		t.Fatalf("object nodes = %d, want 1", objNodes)
+	}
+
+	// 失败 provider 不产生 resolved 计数
+	di2 := New()
+	di2.Provide(func() (*GObj, error) { return nil, errors.New("boom") })
+	_ = di2.TryInject(func(o *GObj) {})
+	di2.graph.mu.RLock()
+	failedResolved := int64(0)
+	for _, e := range di2.graph.eIndex {
+		if e.Kind == EdgeResolved {
+			failedResolved = e.Count
+		}
+	}
+	di2.graph.mu.RUnlock()
+	if failedResolved != 0 {
+		t.Fatalf("failed provider must not count as resolved, got %d", failedResolved)
+	}
+}
+
+// version 在对象首次入缓存时递增;重复注入(命中缓存)不再递增。
+func TestDixGraphVersionOnObjectCreation(t *testing.T) {
+	di := New()
+	di.Provide(func() *graphDepA { return &graphDepA{} })
+
+	if err := di.TryInject(func(a *graphDepA) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	v1 := di.GraphVersion()
+
+	if err := di.TryInject(func(a *graphDepA) {}); err != nil {
+		t.Fatalf("inject2: %v", err)
+	}
+	if di.GraphVersion() != v1 {
+		t.Fatal("cached re-injection must not bump version")
 	}
 }
