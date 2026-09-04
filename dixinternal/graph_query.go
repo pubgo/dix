@@ -329,7 +329,7 @@ func (dix *Dix) ResolvedTopN(n int) []ResolvedCount {
 }
 
 // ProblemProviders 返回慢 provider 与错误 provider 的函数名(去重、排序)。
-func (dix *Dix) ProblemProviders() (slow []string, errored []string) {
+func (dix *Dix) ProblemProviders() (slow, errored []string) {
 	slowSet := make(map[string]bool)
 	errSet := make(map[string]bool)
 	for _, stat := range dix.providerStats {

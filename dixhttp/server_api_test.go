@@ -251,3 +251,52 @@ func TestHandleTraceTree(t *testing.T) {
 		t.Fatalf("missing trace_id should 400, got %d", rr.Code)
 	}
 }
+
+// /api/search、/api/modules、/api/ego 契约;stats 概览增字段。
+func TestHandleSearchModulesEgo(t *testing.T) {
+	di := dixinternal.New()
+	di.Provide(func() *apiStatsDep { return &apiStatsDep{} })
+	if err := di.TryInject(func(*apiStatsDep) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	server := NewServer(di)
+
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/search?q=apistats&kind=type", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("search status %d", rr.Code)
+	}
+	var hits []dixinternal.SearchHit
+	if err := json.Unmarshal(rr.Body.Bytes(), &hits); err != nil || len(hits) == 0 {
+		t.Fatalf("search hits = %v err = %v", hits, err)
+	}
+
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/modules", nil))
+	var modules []dixinternal.ModuleInfo
+	if err := json.Unmarshal(rr.Body.Bytes(), &modules); err != nil || len(modules) == 0 {
+		t.Fatalf("modules = %v err = %v", modules, err)
+	}
+
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/ego", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("ego without center should 400, got %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/ego?center=*dixinternal.apiStatsDep&depth=1&direction=deps", nil))
+	var view dixinternal.GraphView
+	if err := json.Unmarshal(rr.Body.Bytes(), &view); err != nil {
+		t.Fatalf("decode ego: %v", err)
+	}
+
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/stats", nil))
+	var stats StatsData
+	if err := json.Unmarshal(rr.Body.Bytes(), &stats); err != nil {
+		t.Fatalf("decode stats: %v", err)
+	}
+	if stats.Modules == 0 || stats.TopResolved == nil {
+		t.Fatalf("stats upgrade missing: %+v", stats)
+	}
+}

@@ -345,6 +345,18 @@ If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty record
 }
 ```
 
+### GET `/api/search?q=xxx&kind=type|provider|object&module=pkg-prefix&state=instantiated|error|slow&limit=50`
+
+Server-side search over the dependency graph (case-insensitive contains on type/function name). `state=instantiated` filters types that already have objects; `error`/`slow` filter providers whose last execution failed or exceeded the slow threshold.
+
+### GET `/api/modules`
+
+Module-level aggregation: per-package node counts plus cross-package dependency lists (`depends_on`). The default building block for the drill-down module view.
+
+### GET `/api/ego?center=<type-label>&depth=2&direction=both`
+
+Neighborhood subgraph centered on one type: `depth`-hop BFS (max 10) over declared dependencies; `direction` = `deps` / `dependents` / `both`. Returns `{nodes, edges}`.
+
 ### GET `/api/trace-tree?trace_id=xxx`
 
 Returns the nested call tree for one trace (`inject` → `inject.param` → `resolve.*` → `provider.*`), assembled server-side from the in-memory sink. `404`-style empty result (`total: 0`) when the trace id is unknown (evicted or never existed).

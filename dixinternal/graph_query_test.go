@@ -7,13 +7,15 @@ import (
 	"time"
 )
 
-type QAService struct{}
-type QARepo struct{}
-type QADepA struct{}
-type QADepB struct{}
-type QADepC struct{}
-type QASlow struct{}
-type QABroken struct{}
+type (
+	QAService struct{}
+	QARepo    struct{}
+	QADepA    struct{}
+	QADepB    struct{}
+	QADepC    struct{}
+	QASlow    struct{}
+	QABroken  struct{}
+)
 
 func containsStr(list []string, v string) bool {
 	for _, s := range list {
