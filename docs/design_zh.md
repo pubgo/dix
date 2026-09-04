@@ -63,9 +63,9 @@ type Dix struct {
     // 调用超时的 Provider 集合，之后不会被重新执行
     timedOut map[reflect.Value]bool
 
-    // 循环依赖检测用的依赖图缓存，providers 变更后惰性重建
-    depGraph   map[reflect.Type]map[reflect.Type]bool
-    graphDirty bool
+    // 运行时依赖图：声明依赖在 Provide 时增量维护，
+    // provider 执行计数在解析时累加；环检测与 dixhttp（按版本判脏的快照缓存）均读它
+    graph *Graph
 
     // 每个 Provider 的运行时统计（调用次数、耗时、最近错误）
     providerStats map[reflect.Value]*providerRuntimeStat
@@ -171,7 +171,7 @@ Provider 函数必须返回 **1 个或 2 个** 值。
 *   **算法**: 深度优先搜索 (DFS)
 *   **实现**: `dixinternal/cycle-check.go` 与 `dixinternal/util.go` 中的 `isCycle` / `detectCycle`
 *   **逻辑**: 构建邻接表（`map[reflect.Type]map[reflect.Type]bool`），遍历图寻找回边。发现循环时，报告的路径会**裁剪到重复节点处**（如 `X -> A -> B -> A` 报告为 `A -> B -> A`），避免错误信息包含环外节点
-*   **缓存**: 依赖图缓存在容器上，仅在 `Provide` 标记失效后惰性重建——重复注入不会重复建图
+*   **增量**: 依赖图在 `Provide` 时增量维护——环检测是只读投影，无重建步骤；dixhttp 依赖数据按图版本快照缓存（热请求零反射）
 
 ### 3.5 错误处理与运行时诊断
 

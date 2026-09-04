@@ -8,9 +8,11 @@ import (
 	"testing"
 )
 
-type graphDepA struct{}
-type graphDepB struct{}
-type graphDepC struct{}
+type (
+	graphDepA struct{}
+	graphDepB struct{}
+	graphDepC struct{}
+)
 
 // 邻接表字符串视图,便于断言。
 func adjacencyString(adj map[reflect.Type]map[reflect.Type]bool) []string {
