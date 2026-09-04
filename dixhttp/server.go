@@ -20,6 +20,9 @@ import (
 //go:embed static
 var staticFS embed.FS
 
+//go:embed template.html
+var legacyTemplate string
+
 // Server provides HTTP endpoints to visualize dependency relationships
 type Server struct {
 	dix *dix.Dix
@@ -153,6 +156,7 @@ func (s *Server) setupRoutes() {
 	if err == nil {
 		s.mux.Handle(base+"/static/", http.StripPrefix(base+"/static/", http.FileServer(http.FS(staticRoot))))
 	}
+	s.mux.HandleFunc(base+"/next", s.HandleNextIndex)
 	s.mux.HandleFunc(base+"/api/search", s.HandleSearch)
 	s.mux.HandleFunc(base+"/api/modules", s.HandleModules)
 	s.mux.HandleFunc(base+"/api/ego", s.HandleEgo)
@@ -307,6 +311,18 @@ func atoiOr(s string, def int) int {
 	return def
 }
 
+// HandleNextIndex 服务五视图实验版 UI(/next)。
+func (s *Server) HandleNextIndex(w http.ResponseWriter, r *http.Request) {
+	index, err := fs.ReadFile(staticFS, "static/index.html")
+	if err != nil {
+		http.Error(w, "index not found", http.StatusInternalServerError)
+		return
+	}
+	html := strings.ReplaceAll(string(index), "__DIX_BASE_PATH__", s.basePath)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, html)
+}
+
 // ServeHTTP implements http.Handler interface
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
@@ -321,12 +337,7 @@ func (s *Server) ListenAndServe(addr string) error {
 func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	index, err := fs.ReadFile(staticFS, "static/index.html")
-	if err != nil {
-		http.Error(w, "index not found", http.StatusInternalServerError)
-		return
-	}
-	html := strings.ReplaceAll(string(index), "__DIX_BASE_PATH__", s.basePath)
+	html := strings.ReplaceAll(legacyTemplate, "__DIX_BASE_PATH__", s.basePath)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, html)
 }

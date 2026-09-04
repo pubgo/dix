@@ -47,7 +47,7 @@ DIX.views.search = {
         box.querySelectorAll("button[data-i]").forEach(btn => {
           btn.addEventListener("click", () => {
             const h = hits[Number(btn.dataset.i)];
-            if (h.kind !== "type") return;
+            // SearchHit 的 label 即该依赖的类型名(provider 节点为其输出类型),可直接作邻域中心
             location.hash = "#/graph?center=" + encodeURIComponent(h.label);
           });
         });
