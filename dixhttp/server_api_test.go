@@ -208,3 +208,46 @@ func BenchmarkHandleDependenciesWarm(b *testing.B) {
 		}
 	}
 }
+
+// /api/trace-tree 返回一次 trace 的嵌套调用树;缺 trace_id 返回 400。
+func TestHandleTraceTree(t *testing.T) {
+	di := dixinternal.New()
+	di.Provide(func() *apiStatsDep { return &apiStatsDep{} })
+	if err := di.TryInject(func(*apiStatsDep) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+
+	all := dixtrace.QueryEvents(dixtrace.Query{Limit: 1})
+	if len(all.Records) == 0 {
+		t.Fatal("no trace events")
+	}
+	traceID := all.Records[0].TraceID
+
+	server := NewServer(di)
+	rr := httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/trace-tree?trace_id="+traceID, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	var tree struct {
+		Enabled bool `json:"enabled"`
+		Total   int  `json:"total"`
+		Roots   []struct {
+			Event struct {
+				Operation string `json:"operation"`
+			} `json:"event"`
+		} `json:"roots"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &tree); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !tree.Enabled || tree.Total == 0 || len(tree.Roots) == 0 {
+		t.Fatalf("tree = %+v", tree)
+	}
+
+	rr = httptest.NewRecorder()
+	server.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/trace-tree", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("missing trace_id should 400, got %d", rr.Code)
+	}
+}

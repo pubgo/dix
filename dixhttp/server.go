@@ -147,6 +147,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
 	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
 	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
+	s.mux.HandleFunc(base+"/api/trace-tree", s.HandleTraceTree)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
 	s.mux.HandleFunc(base+"/api/type/", s.HandleTypeDetails)
@@ -224,6 +225,7 @@ func (s *Server) HandleDiagnostics(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleTrace(w http.ResponseWriter, r *http.Request) {
 	params := map[string]any{
 		"trace_id":        strings.TrimSpace(r.URL.Query().Get("trace_id")),
+		"container_id":    strings.TrimSpace(r.URL.Query().Get("container_id")),
 		"operation":       strings.TrimSpace(r.URL.Query().Get("operation")),
 		"status":          strings.TrimSpace(r.URL.Query().Get("status")),
 		"event":           strings.TrimSpace(r.URL.Query().Get("event")),
@@ -239,6 +241,18 @@ func (s *Server) HandleTrace(w http.ResponseWriter, r *http.Request) {
 
 	result := dixtrace.QueryEvents(dixtrace.ParseQueryFromMap(params))
 	writeJSON(w, result)
+}
+
+// HandleTraceTree returns the nested call tree of one trace.
+// Query params:
+// - trace_id: required trace id.
+func (s *Server) HandleTraceTree(w http.ResponseWriter, r *http.Request) {
+	traceID := strings.TrimSpace(r.URL.Query().Get("trace_id"))
+	if traceID == "" {
+		http.Error(w, "trace_id required", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, s.dix.TraceTree(traceID))
 }
 
 // ServeHTTP implements http.Handler interface
