@@ -6,7 +6,8 @@ DIX.views.graph = {
     el.innerHTML = `
       <form class="filters" id="g-form">
         <input type="text" id="g-center" placeholder="中心类型(如 *example/http.Application)" value="${DIX.esc(query.get("center") || "")}" style="min-width:320px">
-        <select id="g-depth"><option value="1">1 跳</option><option value="2" selected>2 跳</option><option value="3">3 跳</option><option value="4">4 跳</option></select>
+        <!-- depth/direction 由下方脚本按 URL 参数回填 -->
+        <select id="g-depth"><option value="1">1 跳</option><option value="2" selected>2 跳</option><option value="3">3 跳</option><option value="4">4 跳</option><option value="5">5 跳</option></select>
         <select id="g-dir"><option value="both">双向</option><option value="deps">依赖(上游)</option><option value="dependents">被依赖(下游)</option></select>
         <button class="btn" type="submit">绘制邻域</button>
         <span class="muted">点击模块查看其类型;点击类型以它为中心重绘。</span>
@@ -71,6 +72,8 @@ DIX.views.graph = {
       }).catch(err => DIX.renderError(document.getElementById("g-detail").parentElement, err));
     };
     // 占位:上方 “draw loading;” 会在下方被真实实现替换(见 plan Task 2 Step 4)
+    if (query.get("depth")) document.getElementById("g-depth").value = query.get("depth");
+    if (query.get("direction")) document.getElementById("g-dir").value = query.get("direction");
     document.getElementById("g-form").addEventListener("submit", submit);
 
     // 模块列表:点击模块 → 该模块类型列表;点击类型 → 以它为中心重绘

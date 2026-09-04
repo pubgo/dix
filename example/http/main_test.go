@@ -2,8 +2,8 @@ package main
 
 import "testing"
 
-// 锁定 example/http 的端到端装配契约:接口绑定、map/list 聚合、
-// 结构体多输出、多层链路(Config → Services → Controllers → Application)。
+// 锁定 example/http 的端到端装配契约:十个域模块 + 插件族 + 聚合根,
+// 全链路(Config → Client → Repo → Service → Handler)可解析、已实例化。
 func TestBuildContainerWiresApplication(t *testing.T) {
 	di := buildContainer()
 
@@ -12,46 +12,35 @@ func TestBuildContainerWiresApplication(t *testing.T) {
 		t.Fatalf("TryInject(Application): %v", err)
 	}
 
-	if app.Config == nil || app.Config.Database == nil || app.Config.Cache == nil || app.Config.HTTP == nil {
-		t.Fatalf("config not wired: %+v", app.Config)
+	if app.Logger == nil {
+		t.Fatal("logger not wired")
 	}
-	if app.Config.Database.Host != "localhost" || app.Config.Cache.Type != "redis" {
-		t.Fatalf("unexpected config values: %+v", app.Config)
+	services := map[string]any{
+		"billing":   app.Billing,
+		"inventory": app.Inventory,
+		"shipping":  app.Shipping,
+		"identity":  app.Identity,
+		"analytics": app.Analytics,
+		"notify":    app.Notify,
+		"search":    app.Search,
+		"storage":   app.Storage,
+		"media":     app.Media,
+		"workflow":  app.Workflow,
 	}
-
-	if app.UserController == nil || app.UserController.UserService == nil {
-		t.Fatal("user controller chain not wired")
-	}
-	if app.OrderController == nil || app.OrderController.OrderService == nil ||
-		app.OrderController.PaymentService == nil || app.OrderController.NotificationService == nil {
-		t.Fatal("order controller chain not wired")
-	}
-
-	// 订单服务与用户服务共享同一个 *UserService 实例(容器级单例)。
-	if app.OrderController.OrderService.UserService != app.UserController.UserService {
-		t.Fatal("*UserService must be singleton-shared across services")
-	}
-
-	if len(app.AllServices) != 4 {
-		t.Fatalf("AllServices = %d, want 4", len(app.AllServices))
-	}
-
-	// 注意:[]Service provider 的产物会以 "default" 分组混入 map 注入,
-	// 因此 map[string]Service 的 key 是 4 个命名 key + "default" = 5。
-	for _, key := range []string{"user", "order", "payment", "notification"} {
-		if app.ServiceMap[key] == nil {
-			t.Fatalf("ServiceMap missing key %q: %v", key, keys(app.ServiceMap))
+	for name, svc := range services {
+		if svc == nil {
+			t.Fatalf("domain service %s not wired", name)
 		}
 	}
-	if len(app.ServiceMap) != 5 {
-		t.Fatalf("ServiceMap has %d keys, want 5 (4 named + default)", len(app.ServiceMap))
+	if len(app.Plugins) != 120 {
+		t.Fatalf("plugins = %d, want 120", len(app.Plugins))
 	}
-}
 
-func keys(m map[string]Service) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
+	// 领域链路抽检:计费服务 → 仓储 → 客户端 → 配置
+	if app.Billing.Repo == nil || app.Billing.Repo.Client == nil || app.Billing.Repo.Client.Config == nil {
+		t.Fatalf("billing chain not resolved: %+v", app.Billing)
 	}
-	return out
+	if app.Billing.Repo.Client.Config.Env != "prod" {
+		t.Fatalf("config value = %+v", app.Billing.Repo.Client.Config)
+	}
 }

@@ -1,9 +1,10 @@
-// 【功能】dixhttp 依赖图可视化:端到端综合示例。
+// 【功能】dixhttp 依赖图可视化:大规模端到端综合示例。
 //
-// 【原理】这是一个大而全的演示(接口绑定、map/list 聚合、结构体多输出、
-// 多层架构、运行时诊断),并在启动阶段刻意触发多类可识别错误
-// (缺失依赖、provider 返回 error、provider panic、超时、循环依赖),
-// 用于验证 dixhttp 的 /api/errors 诊断能力。
+// 【原理】构造真实项目规模的容器(十个域模块 + 泛型插件/工作器族,
+// 约 200 个 provider、300 个对象),并触发多类可诊断错误,用于:
+//   - 体验五视图 UI(概览/依赖图/检索/调用链/诊断)的交互流程;
+//   - 验证大规模下"模块下钻 + 邻域子图 + 服务端检索"的可用性。
+//
 // 入门请先看 example/inject-func 与 example/inject-struct。
 //
 // 【运行】
@@ -31,250 +32,75 @@ import (
 
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixhttp"
+
+	"github.com/pubgo/dix/example/http/domain/analytics"
+	"github.com/pubgo/dix/example/http/domain/billing"
+	"github.com/pubgo/dix/example/http/domain/identity"
+	"github.com/pubgo/dix/example/http/domain/inventory"
+	"github.com/pubgo/dix/example/http/domain/media"
+	"github.com/pubgo/dix/example/http/domain/notification"
+	"github.com/pubgo/dix/example/http/domain/searchx"
+	"github.com/pubgo/dix/example/http/domain/shipping"
+	"github.com/pubgo/dix/example/http/domain/storage"
+	"github.com/pubgo/dix/example/http/domain/workflow"
 )
 
-// ==================== 接口定义 ====================
-
-// Database 数据库接口
-type Database interface {
-	Connect() error
-	Query(sql string) ([]map[string]any, error)
-}
-
-// Cache 缓存接口
-type Cache interface {
-	Get(key string) (string, error)
-	Set(key, value string, ttl time.Duration) error
-}
-
-// Logger 日志接口
+// Logger 全局日志接口。
 type Logger interface {
 	Info(msg string)
 	Error(msg string)
 }
 
-// HTTPClient HTTP客户端接口
-type HTTPClient interface {
-	Get(url string) ([]byte, error)
-	Post(url string, data []byte) ([]byte, error)
-}
+// ConsoleLogger 默认实现。
+type ConsoleLogger struct{ Prefix string }
 
-// Service 服务接口（所有业务服务都实现此接口）
-type Service interface {
-	Name() string
-}
+func (c *ConsoleLogger) Info(msg string)  { log.Printf("[INFO] %s", msg) }
+func (c *ConsoleLogger) Error(msg string) { log.Printf("[ERROR] %s", msg) }
 
-// ==================== 实现 ====================
+const defaultHTTPAddr = ":8080"
 
-// MySQLDatabase MySQL数据库实现
-type MySQLDatabase struct {
-	Host     string
-	Port     int
-	Database string
-	Logger   Logger
-}
+// ==================== 诊断演示用的合成组件 ====================
 
-func (m *MySQLDatabase) Connect() error {
-	m.Logger.Info("Connecting to MySQL database")
-	return nil
-}
+// SlowRemoteClient 模拟外部慢依赖(触发 provider_timeout)。
+type SlowRemoteClient struct{ Ready bool }
 
-func (m *MySQLDatabase) Query(sql string) ([]map[string]any, error) {
-	m.Logger.Info("Executing query: " + sql)
-	return []map[string]any{}, nil
-}
+// TimeoutProbe 触发 SlowRemoteClient 的解析。
+type TimeoutProbe struct{ Client *SlowRemoteClient }
 
-// RedisCache Redis缓存实现
-type RedisCache struct {
-	Host   string
-	Port   int
-	Logger Logger
-}
-
-func (r *RedisCache) Get(key string) (string, error) {
-	r.Logger.Info("Getting from cache: " + key)
-	return "", nil
-}
-
-func (r *RedisCache) Set(key, value string, ttl time.Duration) error {
-	r.Logger.Info("Setting cache: " + key)
-	return nil
-}
-
-// FileCache 文件缓存实现
-type FileCache struct {
-	Path   string
-	Logger Logger
-}
-
-func (f *FileCache) Get(key string) (string, error) {
-	f.Logger.Info("Getting from file cache: " + key)
-	return "", nil
-}
-
-func (f *FileCache) Set(key, value string, ttl time.Duration) error {
-	f.Logger.Info("Setting file cache: " + key)
-	return nil
-}
-
-// ConsoleLogger 控制台日志实现
-type ConsoleLogger struct {
-	Level string
-}
-
-func (c *ConsoleLogger) Info(msg string) {
-	log.Printf("[INFO] %s", msg)
-}
-
-func (c *ConsoleLogger) Error(msg string) {
-	log.Printf("[ERROR] %s", msg)
-}
-
-// DefaultHTTPClient 默认HTTP客户端实现
-type DefaultHTTPClient struct {
-	Timeout time.Duration
-	Logger  Logger
-}
-
-func (d *DefaultHTTPClient) Get(url string) ([]byte, error) {
-	d.Logger.Info("HTTP GET: " + url)
-	return []byte("response"), nil
-}
-
-func (d *DefaultHTTPClient) Post(url string, data []byte) ([]byte, error) {
-	d.Logger.Info("HTTP POST: " + url)
-	return []byte("response"), nil
-}
-
-// ==================== 配置结构体 ====================
-
-// AppConfig 应用配置
-type AppConfig struct {
-	Database *DatabaseConfig
-	Cache    *CacheConfig
-	HTTP     *HTTPConfig
-}
-
-// DatabaseConfig 数据库配置
-type DatabaseConfig struct {
-	Host     string
-	Port     int
-	Database string
-}
-
-// CacheConfig 缓存配置
-type CacheConfig struct {
-	Type string // "redis" or "file"
-	Host string
-	Port int
-	Path string
-}
-
-// HTTPConfig HTTP配置
-type HTTPConfig struct {
-	Timeout time.Duration
-}
-
-// ==================== 服务层 ====================
-
-// UserService 用户服务
-type UserService struct {
-	DB     Database
-	Cache  Cache
-	Logger Logger
-}
-
-func (u *UserService) Name() string {
-	return "UserService"
-}
-
-// OrderService 订单服务
-type OrderService struct {
-	DB          Database
-	Cache       Cache
-	UserService *UserService
-	Logger      Logger
-}
-
-func (o *OrderService) Name() string {
-	return "OrderService"
-}
-
-// PaymentService 支付服务
-type PaymentService struct {
-	HTTPClient HTTPClient
-	Logger     Logger
-}
-
-func (p *PaymentService) Name() string {
-	return "PaymentService"
-}
-
-// NotificationService 通知服务
-type NotificationService struct {
-	HTTPClient HTTPClient
-	Cache      Cache
-	Logger     Logger
-}
-
-func (n *NotificationService) Name() string {
-	return "NotificationService"
-}
-
-// SlowRemoteClient 模拟一个外部慢依赖
-type SlowRemoteClient struct {
-	Ready bool
-}
-
-// TimeoutProbe 仅用于触发 SlowRemoteClient 的构建
-type TimeoutProbe struct {
-	Client *SlowRemoteClient
-}
-
-// StartupMissingDependency 用于模拟“注入缺失依赖”
+// StartupMissingDependency 模拟注入缺失依赖。
 type StartupMissingDependency struct{}
 
-// StartupResolveInputMissing 用于模拟“provider 输入依赖缺失”
+// StartupResolveInputMissing 模拟 provider 输入依赖缺失。
 type StartupResolveInputMissing struct{}
 
-// StartupResolveInputProbe 用于触发 StartupResolveInputMissing 的解析
+// StartupResolveInputProbe 用于触发 StartupResolveInputMissing 的解析。
 type StartupResolveInputProbe struct{}
 
-// StartupBrokenComponent 用于模拟“provider 返回 error”
+// StartupBrokenComponent 模拟 provider 返回 error。
 type StartupBrokenComponent struct{}
 
-// StartupPanicComponent 用于模拟“provider panic”
+// StartupPanicComponent 模拟 provider panic。
 type StartupPanicComponent struct{}
-
-// ==================== 业务逻辑层 ====================
-
-// UserController 用户控制器
-type UserController struct {
-	UserService *UserService
-	Logger      Logger
-}
-
-// OrderController 订单控制器
-type OrderController struct {
-	OrderService        *OrderService
-	PaymentService      *PaymentService
-	NotificationService *NotificationService
-	Logger              Logger
-}
 
 // ==================== 应用主结构 ====================
 
-// Application 应用主结构
+// Application 应用聚合根:引用十个域模块的服务,是整棵依赖图的汇点。
 type Application struct {
-	Config              *AppConfig
-	UserController      *UserController
-	OrderController     *OrderController
-	NotificationService *NotificationService
-	AllServices         []Service          // 所有服务的集合（使用具体接口类型）
-	ServiceMap          map[string]Service // 服务映射（使用具体接口类型）
+	Logger    Logger
+	Billing   *billing.Service
+	Inventory *inventory.Service
+	Shipping  *shipping.Service
+	Identity  *identity.Service
+	Analytics *analytics.Service
+	Notify    *notification.Service
+	Search    *searchx.Service
+	Storage   *storage.Service
+	Media     *media.Service
+	Workflow  *workflow.Service
+	Plugins   []string
 }
 
-const defaultHTTPAddr = ":8080"
+// ==================== HTTP 服务器 ====================
 
 func startVisualizationServer(server *dixhttp.Server) error {
 	addr := os.Getenv("DIX_HTTP_ADDR")
@@ -300,30 +126,22 @@ func startVisualizationServer(server *dixhttp.Server) error {
 	}
 
 	log.Printf("🚀 Starting HTTP server on http://%s", displayAddr)
-	log.Printf("📊 Open http://%s in your browser to view dependency relationships", displayAddr)
+	log.Printf("📊 Open http://%s in your browser: overview / graph / search / trace / diag", displayAddr)
 	log.Println("📡 API endpoints:")
 	log.Println("   - GET /api/dependencies - JSON data of dependencies")
-	log.Println("   - GET /api/runtime-stats - Provider startup runtime stats")
-	log.Println("   - GET /api/errors - Recent Inject/TryInject errors")
-	log.Println("   - GET /api/trace - In-memory dixtrace timeline query")
-	log.Println("   - GET /api/graph?type=providers - DOT graph format")
-	log.Println("   - GET /api/graph?type=provider_types - Provider types graph")
-	log.Println("   - GET /api/graph?type=objects - Objects graph")
-	log.Println("")
-	log.Println("💡 This example demonstrates:")
-	log.Println("   - Interface-based dependency injection")
-	log.Println("   - Multiple implementations (RedisCache, FileCache)")
-	log.Println("   - Map and Slice dependencies")
-	log.Println("   - Struct output (auto-flattening)")
-	log.Println("   - Multi-layer architecture (Config -> Services -> Controllers -> Application)")
-	log.Println("   - Complex dependency chains")
-	log.Println("   - Simulated timeout provider (for red-highlight diagnosis)")
-	log.Println("")
-	log.Println("💡 Runtime stats will include a timeout provider sample for diagnostics!")
-
-	httpServer := &http.Server{Handler: server}
-	return httpServer.Serve(ln)
+	log.Println("   - GET /api/modules      - module-level aggregation")
+	log.Println("   - GET /api/ego          - neighborhood subgraph")
+	log.Println("   - GET /api/search       - server-side graph search")
+	log.Println("   - GET /api/stats        - overview statistics")
+	log.Println("   - GET /api/runtime-stats - provider startup timings")
+	log.Println("   - GET /api/errors       - recent inject errors")
+	log.Println("   - GET /api/diagnostics  - DIX_DIAG_FILE records")
+	log.Println("   - GET /api/trace        - dixtrace event query")
+	log.Println("   - GET /api/trace-tree   - nested call tree per trace")
+	return (&http.Server{Handler: server}).Serve(ln)
 }
+
+// ==================== 启动诊断场景 ====================
 
 func logStartupScenarioResult(di *dix.Dix, scenario string, err error, previousCount int) {
 	if err == nil {
@@ -347,29 +165,16 @@ func logStartupScenarioResult(di *dix.Dix, scenario string, err error, previousC
 	log.Printf("⚠️ [startup-diagnostic][%s] captured %d record(s)", scenario, newCount)
 	for i := newCount - 1; i >= 0; i-- {
 		item := recent[i]
-		recordIndex := newCount - i
-		log.Printf("   - record=%d", recordIndex)
-		log.Printf("     type=%s", item.ErrorType)
-		log.Printf("     op=%s", item.Operation)
-		if item.Stage != "" {
-			log.Printf("     stage=%s", item.Stage)
-		}
-		log.Printf("     message=%s", item.Message)
-		if item.ProviderFunction != "" {
-			log.Printf("     provider=%s", item.ProviderFunction)
-		}
-		if item.OutputType != "" {
-			log.Printf("     output=%s", item.OutputType)
-		}
-		if item.InputType != "" {
-			log.Printf("     input=%s", item.InputType)
-		}
+		log.Printf("   - record=%d type=%s op=%s message=%s",
+			newCount-i, item.ErrorType, item.Operation, item.Message)
 		if item.Hint != "" {
 			log.Printf("     hint=%s", item.Hint)
 		}
 	}
 }
 
+// runStartupErrorScenarios 在启动阶段统一触发多类可识别错误,
+// 验证 /api/errors 的 error_type/hint 识别与定位能力。
 func runStartupErrorScenarios(di *dix.Dix) {
 	log.Println("🧪 Running startup error diagnostics...")
 
@@ -422,7 +227,7 @@ func runStartupErrorScenarios(di *dix.Dix) {
 		logStartupScenarioResult(di, "provider_timeout", err, before)
 	}
 
-	// 循环依赖演示使用临时容器，避免污染主容器导致后续所有注入失败。
+	// 循环依赖演示使用临时容器,避免污染主容器。
 	cycleDI := dix.New()
 	type cycleA struct{}
 	type cycleB struct{}
@@ -438,273 +243,111 @@ func runStartupErrorScenarios(di *dix.Dix) {
 	log.Println("🧪 Startup diagnostics done. Visit /api/errors to verify error_type/hint recognition.")
 }
 
-func main() {
-	di := buildContainer()
-	preCreateObjects(di)
-
-	// 在启动阶段统一触发多类可识别错误，便于验证 error_type/hint 的识别与定位
-	runStartupErrorScenarios(di)
-
-	log.Println("")
-
-	// ==================== 启动HTTP服务器 ====================
-
-	// Create HTTP server for visualization
-	server := dixhttp.NewServer(di)
-
-	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
-		log.Fatal("Server error:", err)
-	}
-}
-
 // buildContainer 注册示例的全部组件并返回容器:
-// 基础组件 → 服务层 → 控制器层 → Application 聚合,
+// 十个域模块(billing/workflow/…) + 泛型插件/工作器族 + 聚合根 Application,
 // 另含用于诊断演示的慢依赖/错误场景 provider。
-// 该装配契约由 main_test.go 的 TestBuildContainerWiresApplication 锁定。
+// 装配契约由 main_test.go 的 TestBuildContainerWiresApplication 锁定。
 func buildContainer() *dix.Dix {
 	di := dix.New(
 		dix.WithProviderTimeout(200*time.Millisecond),
 		dix.WithSlowProviderThreshold(80*time.Millisecond),
 	)
 
-	// ==================== 注册基础组件 ====================
+	// 基础组件
+	dix.Provide(di, func() Logger { return &ConsoleLogger{Prefix: "app"} })
 
-	// 注册日志服务
-	dix.Provide(di, func() Logger {
-		return &ConsoleLogger{Level: "info"}
-	})
+	// 十个域模块:每域五层链路(配置→客户端→仓储→服务→处理器)+ 多区域连接
+	analytics.Providers(di)
+	billing.Providers(di)
+	identity.Providers(di)
+	inventory.Providers(di)
+	media.Providers(di)
+	notification.Providers(di)
+	searchx.Providers(di)
+	shipping.Providers(di)
+	storage.Providers(di)
+	workflow.Providers(di)
 
-	// 注册配置（结构体输出会自动分解为各个字段类型）
-	dix.Provide(di, func() AppConfig {
-		return AppConfig{
-			Database: &DatabaseConfig{
-				Host:     "localhost",
-				Port:     3306,
-				Database: "mydb",
-			},
-			Cache: &CacheConfig{
-				Type: "redis",
-				Host: "localhost",
-				Port: 6379,
-				Path: "/tmp/cache",
-			},
-			HTTP: &HTTPConfig{
-				Timeout: 30 * time.Second,
-			},
+	// 泛型插件/工作器族(百余合成依赖,形成 Plugin -> Worker 链路)
+	activators := registerPlugins(di)
+
+	// 聚合根:引用全部域服务,是依赖图的汇点
+	dix.Provide(di, func(
+		logger Logger,
+		billing *billing.Service,
+		inventory *inventory.Service,
+		shipping *shipping.Service,
+		identity *identity.Service,
+		analytics *analytics.Service,
+		notify *notification.Service,
+		search *searchx.Service,
+		storage *storage.Service,
+		media *media.Service,
+		workflow *workflow.Service,
+	) *Application {
+		return &Application{
+			Logger:    logger,
+			Billing:   billing,
+			Inventory: inventory,
+			Shipping:  shipping,
+			Identity:  identity,
+			Analytics: analytics,
+			Notify:    notify,
+			Search:    search,
+			Storage:   storage,
+			Media:     media,
+			Workflow:  workflow,
+			Plugins:   pluginNames,
 		}
 	})
 
-	// 注册 AppConfig 指针类型（Application 需要 *AppConfig）
-	dix.Provide(di, func(config AppConfig) *AppConfig {
-		return &config
-	})
+	// 预创建对象:执行插件 provider,让 objects 视图有内容
+	for _, activate := range activators {
+		activate()
+	}
 
-	// 注册数据库实现
-	dix.Provide(di, func(logger Logger, config *DatabaseConfig) Database {
-		return &MySQLDatabase{
-			Host:     config.Host,
-			Port:     config.Port,
-			Database: config.Database,
-			Logger:   logger,
-		}
-	})
-
-	// 注册多个缓存实现（使用 map）
-	dix.Provide(di, func(logger Logger, config *CacheConfig) map[string]Cache {
-		return map[string]Cache{
-			"redis": &RedisCache{
-				Host:   config.Host,
-				Port:   config.Port,
-				Logger: logger,
-			},
-			"file": &FileCache{
-				Path:   config.Path,
-				Logger: logger,
-			},
-		}
-	})
-
-	// 注册HTTP客户端
-	dix.Provide(di, func(logger Logger, config *HTTPConfig) HTTPClient {
-		return &DefaultHTTPClient{
-			Timeout: config.Timeout,
-			Logger:  logger,
-		}
-	})
-
-	// ==================== 模拟异常场景（用于可视化排查） ====================
-
-	// 模拟慢依赖：刻意 sleep 超过 ProviderTimeout，触发 timeout
+	// 模拟慢依赖:刻意超过 ProviderTimeout(用于可视化排查)
 	dix.Provide(di, func(logger Logger) *SlowRemoteClient {
 		logger.Info("[demo] SlowRemoteClient start (expected timeout)")
 		time.Sleep(450 * time.Millisecond)
-		logger.Info("[demo] SlowRemoteClient done")
 		return &SlowRemoteClient{Ready: true}
 	})
-
-	// 触发 SlowRemoteClient 的解析
 	dix.Provide(di, func(client *SlowRemoteClient) *TimeoutProbe {
 		return &TimeoutProbe{Client: client}
 	})
 
-	// ==================== 注册服务层 ====================
-
-	// 注册用户服务
-	dix.Provide(di, func(db Database, cache map[string]Cache, logger Logger) *UserService {
-		return &UserService{
-			DB:     db,
-			Cache:  cache["redis"], // 使用redis缓存
-			Logger: logger,
-		}
+	// 错误场景 provider(诊断演示)
+	dix.Provide(di, func(logger Logger) (*StartupBrokenComponent, error) {
+		return nil, errors.New("demo startup: provider return error")
 	})
-
-	// 注册订单服务（依赖用户服务）
-	dix.Provide(di, func(db Database, cache map[string]Cache, userService *UserService, logger Logger) *OrderService {
-		return &OrderService{
-			DB:          db,
-			Cache:       cache["redis"],
-			UserService: userService,
-			Logger:      logger,
-		}
-	})
-
-	// 注册支付服务
-	dix.Provide(di, func(httpClient HTTPClient, logger Logger) *PaymentService {
-		return &PaymentService{
-			HTTPClient: httpClient,
-			Logger:     logger,
-		}
-	})
-
-	// 注册通知服务（依赖HTTP客户端和缓存）
-	dix.Provide(di, func(httpClient HTTPClient, cache map[string]Cache, logger Logger) *NotificationService {
-		return &NotificationService{
-			HTTPClient: httpClient,
-			Cache:      cache["file"], // 使用文件缓存
-			Logger:     logger,
-		}
-	})
-
-	// ==================== 注册控制器层 ====================
-
-	// 注册用户控制器
-	dix.Provide(di, func(userService *UserService, logger Logger) *UserController {
-		return &UserController{
-			UserService: userService,
-			Logger:      logger,
-		}
-	})
-
-	// 注册订单控制器（依赖多个服务）
-	dix.Provide(di, func(
-		orderService *OrderService,
-		paymentService *PaymentService,
-		notificationService *NotificationService,
-		logger Logger,
-	) *OrderController {
-		return &OrderController{
-			OrderService:        orderService,
-			PaymentService:      paymentService,
-			NotificationService: notificationService,
-			Logger:              logger,
-		}
-	})
-
-	// ==================== 注册应用主结构 ====================
-
-	// 注册所有服务的列表（使用 slice，使用具体接口类型）
-	dix.Provide(di, func(
-		userService *UserService,
-		orderService *OrderService,
-		paymentService *PaymentService,
-		notificationService *NotificationService,
-	) []Service {
-		return []Service{
-			userService,
-			orderService,
-			paymentService,
-			notificationService,
-		}
-	})
-
-	// 注册服务映射（使用 map，使用具体接口类型）
-	dix.Provide(di, func(
-		userService *UserService,
-		orderService *OrderService,
-		paymentService *PaymentService,
-		notificationService *NotificationService,
-	) map[string]Service {
-		return map[string]Service{
-			"user":         userService,
-			"order":        orderService,
-			"payment":      paymentService,
-			"notification": notificationService,
-		}
-	})
-
-	// 注册应用主结构（包含所有依赖）
-	dix.Provide(di, func(
-		config *AppConfig,
-		userController *UserController,
-		orderController *OrderController,
-		notificationService *NotificationService,
-		allServices []Service,
-		serviceMap map[string]Service,
-	) *Application {
-		return &Application{
-			Config:              config,
-			UserController:      userController,
-			OrderController:     orderController,
-			NotificationService: notificationService,
-			AllServices:         allServices,
-			ServiceMap:          serviceMap,
-		}
+	dix.Provide(di, func(logger Logger) *StartupPanicComponent {
+		panic("demo startup: provider panic")
 	})
 
 	return di
 }
 
-// preCreateObjects 通过函数注入触发 provider 执行,
+// preCreateObjects 通过函数注入触发核心对象创建,
 // 让 dixhttp 的 objects 视图在启动后即有内容可展示。
 func preCreateObjects(di *dix.Dix) {
-	log.Println("📦 Pre-creating objects for visualization...")
-
-	if err := di.TryInject(func(
-		app *Application,
-		userService *UserService,
-		orderService *OrderService,
-		db Database,
-		cacheMap map[string]Cache,
-		allServices []Service,
-	) {
-		if app != nil {
-			log.Printf("✅ Application created successfully")
-			log.Printf("   - UserController: %v", app.UserController != nil)
-			log.Printf("   - OrderController: %v", app.OrderController != nil)
-			log.Printf("   - Services count: %d", len(app.AllServices))
-			log.Printf("   - ServiceMap keys: %d", len(app.ServiceMap))
-		}
-
-		if userService != nil {
-			log.Printf("✅ UserService created")
-		}
-
-		if orderService != nil {
-			log.Printf("✅ OrderService created")
-		}
-
-		if db != nil {
-			log.Printf("✅ Database interface created")
-		}
-
-		if cacheMap != nil {
-			log.Printf("✅ Cache map created with %d entries", len(cacheMap))
-		}
-
-		if allServices != nil {
-			log.Printf("✅ Services list created with %d services", len(allServices))
-		}
+	if err := di.TryInject(func(app *Application, logger Logger) {
+		log.Printf("✅ Application created: modules=10 plugins=%d", len(app.Plugins))
 	}); err != nil {
-		log.Printf("⚠️ pre-create injection failed, web will still start for diagnostics: %v", err)
+		log.Printf("⚠️ pre-create injection failed: %v", err)
+	}
+}
+
+func main() {
+	di := buildContainer()
+	preCreateObjects(di)
+
+	// 启动阶段触发多类可识别错误,验证 error_type/hint 识别
+	runStartupErrorScenarios(di)
+
+	log.Println("")
+
+	server := dixhttp.NewServer(di)
+	if err := startVisualizationServer(server); err != nil && err != http.ErrServerClosed {
+		log.Fatal("Server error:", err)
 	}
 }
