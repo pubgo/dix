@@ -385,10 +385,12 @@ func TestContainerTraceIsolationAndTree(t *testing.T) {
 		t.Fatal("inject span should appear in the tree")
 	}
 
-	// 另一容器的私有缓冲为空(隔离)
+	// 隔离语义:另一容器的私有缓冲里绝不能出现本容器的事件
+	// (di2 自注册产生的点事件属于 di2,不算泄漏)。
 	di2 := New(WithTraceBuffer(64))
-	if got := di2.traceTracer.QueryEvents(dixtrace.Query{}); got.Total != 0 {
-		t.Fatalf("isolated container sink should be empty, got %d", got.Total)
+	leaked := di2.traceTracer.QueryEvents(dixtrace.Query{ContainerID: di.containerID})
+	if leaked.Total != 0 {
+		t.Fatalf("isolated container sink leaked %d events from another container", leaked.Total)
 	}
 }
 

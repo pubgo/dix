@@ -328,7 +328,6 @@ Optional observability for startup and injection troubleshooting. All file/conso
 | `DIX_TRACE_DI` | off | Console step-by-step DI trace (`di_trace ...`) |
 | `DIX_DIAG_FILE` | off | Append `trace` / `error` / `llm` records to JSONL |
 | `DIX_TRACE_FILE` | off | Append trace-only JSONL (falls back to `DIX_DIAG_FILE`) |
-| `DIX_LLM_DIAG_MODE` | `human` | Log mode: `human` / `machine` / `dual` |
 
 ```bash
 export DIX_TRACE_DI=true

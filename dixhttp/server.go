@@ -171,7 +171,7 @@ func (s *Server) HandleErrors(w http.ResponseWriter, r *http.Request) {
 
 // HandleDiagnostics returns records from DIX_DIAG_FILE (JSONL).
 // Query params:
-// - kind: trace|error|llm (optional)
+// - kind: trace|error (optional)
 // - event: trace event fuzzy match (optional)
 // - q: full-text search over record JSON (optional)
 // - limit: optional positive integer, default 200, max 2000
