@@ -346,7 +346,13 @@ If `DIX_DIAG_FILE` is not set, response returns `enabled=false` and empty record
 }
 ```
 
-### GET `/api/trace?operation=provider&status=error&limit=200`
+### GET `/api/trace-tree?trace_id=xxx`
+
+Returns the nested call tree for one trace (`inject` → `inject.param` → `resolve.*` → `provider.*`), assembled server-side from the in-memory sink. `404`-style empty result (`total: 0`) when the trace id is unknown (evicted or never existed).
+
+### GET `/api/trace?operation=provider&status=error&limit=200&container_id=xxx`
+
+`container_id` narrows events to a single container (each container stamps its events with a random id).
 Returns in-memory unified trace events from `dixtrace`.
 
 File sink behavior:
