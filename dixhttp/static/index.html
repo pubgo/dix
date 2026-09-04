@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dix 依赖可视化</title>
+<link rel="stylesheet" href="__DIX_BASE_PATH__/static/css/app.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🔗 <b>Dix</b> 依赖可视化</div>
+  <form id="global-search" class="gsearch">
+    <input id="gsearch-input" type="search" placeholder="搜索类型 / provider…(Enter 跳转检索)" autocomplete="off">
+  </form>
+  <nav class="tabs" id="nav-tabs">
+    <a href="#/overview" data-view="overview">概览</a>
+    <a href="#/graph" data-view="graph">依赖图</a>
+    <a href="#/search" data-view="search">检索</a>
+    <a href="#/trace" data-view="trace">调用链</a>
+    <a href="#/diag" data-view="diag">诊断</a>
+  </nav>
+</header>
+<main id="view" class="view"><div class="loading">加载中…</div></main>
+<script>window.DIX_BASE = "__DIX_BASE_PATH__";</script>
+<script src="__DIX_BASE_PATH__/static/vendor/vis-network.min.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/api.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/views/overview.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/views/graph.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/views/search.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/views/trace.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/views/diag.js"></script>
+<script src="__DIX_BASE_PATH__/static/js/main.js"></script>
+</body>
+</html>

@@ -2,9 +2,10 @@ package dixhttp
 
 import (
 	"bytes"
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"reflect"
 	"strconv"
@@ -16,8 +17,8 @@ import (
 	"github.com/pubgo/dix/v2/dixtrace"
 )
 
-//go:embed template.html
-var htmlTemplate string
+//go:embed static
+var staticFS embed.FS
 
 // Server provides HTTP endpoints to visualize dependency relationships
 type Server struct {
@@ -148,6 +149,10 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
 	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
 	s.mux.HandleFunc(base+"/api/trace-tree", s.HandleTraceTree)
+	staticRoot, err := fs.Sub(staticFS, "static")
+	if err == nil {
+		s.mux.Handle(base+"/static/", http.StripPrefix(base+"/static/", http.FileServer(http.FS(staticRoot))))
+	}
 	s.mux.HandleFunc(base+"/api/search", s.HandleSearch)
 	s.mux.HandleFunc(base+"/api/modules", s.HandleModules)
 	s.mux.HandleFunc(base+"/api/ego", s.HandleEgo)
@@ -316,7 +321,13 @@ func (s *Server) ListenAndServe(addr string) error {
 func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	html := strings.ReplaceAll(htmlTemplate, "__DIX_BASE_PATH__", s.basePath)
+	index, err := fs.ReadFile(staticFS, "static/index.html")
+	if err != nil {
+		http.Error(w, "index not found", http.StatusInternalServerError)
+		return
+	}
+	html := strings.ReplaceAll(string(index), "__DIX_BASE_PATH__", s.basePath)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprint(w, html)
 }
 
