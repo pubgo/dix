@@ -2,6 +2,7 @@ package dixtrace
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -247,5 +248,63 @@ func TestNewContainerID(t *testing.T) {
 	a, b := NewContainerID(), NewContainerID()
 	if a == b || len(a) != 16 {
 		t.Fatalf("container ids must be random 16 hex, got %q %q", a, b)
+	}
+}
+
+func TestQueryTreeStructure(t *testing.T) {
+	ResetForTest()
+	rootCtx, root := BeginSpanCtx(context.Background(), "inject", "c")
+	_, child := BeginSpanCtx(rootCtx, "resolve.value", "c")
+	child.End(errors.New("boom"))
+	root.End(nil)
+
+	traceID, _, _ := root.IDs()
+	tree := QueryTree(traceID)
+	if !tree.Enabled || len(tree.Roots) != 1 {
+		t.Fatalf("tree roots = %d, want 1", len(tree.Roots))
+	}
+	r := tree.Roots[0]
+	if r.Event.Operation != "inject" || len(r.Children) != 1 {
+		t.Fatalf("root op=%s children=%d", r.Event.Operation, len(r.Children))
+	}
+	if r.End == nil || r.End.Status != "ok" {
+		t.Fatal("root end event missing")
+	}
+	kid := r.Children[0]
+	if kid.Event.Operation != "resolve.value" || kid.End == nil || kid.End.Status != "error" {
+		t.Fatalf("child = %+v", kid)
+	}
+	if tree.Total != 2 {
+		t.Fatalf("total = %d, want 2", tree.Total)
+	}
+}
+
+func TestQueryTreeEviction(t *testing.T) {
+	ResetForTest()
+	m := defaultMemorySink
+	m.mu.Lock()
+	m.treeMax = 4
+	m.mu.Unlock()
+
+	var earliestTrace string
+	for i := 0; i < 6; i++ {
+		s := BeginSpan("op", "c")
+		id, _, _ := s.IDs()
+		if i == 0 {
+			earliestTrace = id
+		}
+		s.End(nil)
+	}
+
+	if got := m.QueryTree(earliestTrace); got.Total != 0 || len(got.Roots) != 0 {
+		t.Fatalf("oldest trace should be evicted from tree index, got total=%d", got.Total)
+	}
+}
+
+func TestQueryTreeUnknownTrace(t *testing.T) {
+	ResetForTest()
+	tree := QueryTree("no-such-trace")
+	if !tree.Enabled || tree.Total != 0 || len(tree.Roots) != 0 {
+		t.Fatalf("unknown trace should return empty enabled result, got %+v", tree)
 	}
 }

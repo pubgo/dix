@@ -69,6 +69,21 @@ type ReadResult struct {
 	Records    []Event `json:"records"`
 }
 
+// TreeNode 是调用树节点:Event 为 span.start,End 为 span.end(存在时)。
+type TreeNode struct {
+	Event    Event       `json:"event"`
+	End      *Event      `json:"end,omitempty"`
+	Children []*TreeNode `json:"children"`
+}
+
+// TreeResult 是一次 trace 的调用树。
+type TreeResult struct {
+	Enabled bool        `json:"enabled"`
+	TraceID string      `json:"trace_id"`
+	Total   int         `json:"total"`
+	Roots   []*TreeNode `json:"roots"`
+}
+
 type Sink interface {
 	Write(Event)
 }
@@ -305,18 +320,27 @@ func (t *Tracer) Emit(e Event) {
 	}
 }
 
-// MemorySink 用于 API 查询。
+// MemorySink 用于 API 查询,并增量维护每条 trace 的调用树索引。
 type MemorySink struct {
 	mu     sync.RWMutex
 	max    int
 	events []Event
+
+	treeMax   int                     // 树索引保留的最大 trace 数(FIFO 驱逐)
+	trees     map[string]*treeBuilder // traceID -> 树索引
+	treeOrder []string
 }
 
 func NewMemorySink(max int) *MemorySink {
 	if max <= 0 {
 		max = 5000
 	}
-	return &MemorySink{max: max, events: make([]Event, 0, max)}
+	return &MemorySink{
+		max:     max,
+		events:  make([]Event, 0, max),
+		treeMax: defaultTreeMax,
+		trees:   make(map[string]*treeBuilder),
+	}
 }
 
 func (m *MemorySink) Write(e Event) {
@@ -326,7 +350,102 @@ func (m *MemorySink) Write(e Event) {
 	if len(m.events) > m.max {
 		m.events = m.events[len(m.events)-m.max:]
 	}
+	m.indexTree(e)
 }
+
+const defaultTreeMax = 128
+
+type treeBuilder struct {
+	children  map[string][]string
+	starts    map[string]Event
+	ends      map[string]Event
+	rootOrder []string
+}
+
+// indexTree 增量维护调用树索引:start 建父子关系,end 归档状态。
+func (m *MemorySink) indexTree(e Event) {
+	if e.TraceID == "" || e.SpanID == "" {
+		return
+	}
+	tb, ok := m.trees[e.TraceID]
+	if !ok {
+		tb = &treeBuilder{
+			children: make(map[string][]string),
+			starts:   make(map[string]Event),
+			ends:     make(map[string]Event),
+		}
+		m.trees[e.TraceID] = tb
+		m.treeOrder = append(m.treeOrder, e.TraceID)
+		if len(m.treeOrder) > m.treeMax {
+			old := m.treeOrder[0]
+			m.treeOrder = m.treeOrder[1:]
+			delete(m.trees, old)
+		}
+	}
+	switch e.Event {
+	case "span.start":
+		tb.starts[e.SpanID] = e
+		if e.ParentSpanID == "" {
+			tb.rootOrder = append(tb.rootOrder, e.SpanID)
+		} else {
+			tb.children[e.ParentSpanID] = append(tb.children[e.ParentSpanID], e.SpanID)
+		}
+	case "span.end":
+		tb.ends[e.SpanID] = e
+	}
+}
+
+// QueryTree 组装一次 trace 的调用树;孤儿 span(父已驱逐)按根处理。
+func (m *MemorySink) QueryTree(traceID string) TreeResult {
+	res := TreeResult{Enabled: true, TraceID: traceID, Roots: []*TreeNode{}}
+	m.mu.RLock()
+	tb, ok := m.trees[strings.TrimSpace(traceID)]
+	if !ok {
+		m.mu.RUnlock()
+		return res
+	}
+	starts, children, ends, rootOrder := tb.starts, tb.children, tb.ends, tb.rootOrder
+	total := len(starts)
+	m.mu.RUnlock()
+	res.Total = total
+
+	var build func(id string) *TreeNode
+	build = func(id string) *TreeNode {
+		node := &TreeNode{Event: starts[id], Children: []*TreeNode{}}
+		if e, ok := ends[id]; ok {
+			cp := e
+			node.End = &cp
+		}
+		for _, c := range children[id] {
+			if _, ok := starts[c]; ok {
+				node.Children = append(node.Children, build(c))
+			}
+		}
+		return node
+	}
+	for _, r := range rootOrder {
+		if _, ok := starts[r]; ok {
+			res.Roots = append(res.Roots, build(r))
+		}
+	}
+	return res
+}
+
+// QueryTree 返回该 Tracer 内存 sink 中的调用树;nil 回落全局。
+func (t *Tracer) QueryTree(traceID string) TreeResult {
+	if t == nil {
+		return defaultMemorySink.QueryTree(traceID)
+	}
+	for _, s := range t.sinks {
+		if ms, ok := s.(*MemorySink); ok {
+			return ms.QueryTree(traceID)
+		}
+	}
+	return defaultMemorySink.QueryTree(traceID)
+}
+
+// QueryTree 查询全局内存 sink 中的调用树。
+func QueryTree(traceID string) TreeResult { return defaultMemorySink.QueryTree(traceID) }
 
 func (m *MemorySink) Query(q Query) ReadResult {
 	m.mu.RLock()
@@ -621,6 +740,8 @@ func TraceToAttrs(args ...any) map[string]any {
 func resetDefaultForTest() {
 	defaultMemorySink.mu.Lock()
 	defaultMemorySink.events = defaultMemorySink.events[:0]
+	defaultMemorySink.trees = make(map[string]*treeBuilder)
+	defaultMemorySink.treeOrder = nil
 	defaultMemorySink.mu.Unlock()
 	defaultTracer.seq.Store(0)
 	traceSeq.Store(0)
