@@ -431,6 +431,19 @@ func (m *MemorySink) QueryTree(traceID string) TreeResult {
 	return res
 }
 
+// QueryEvents 查询该 Tracer 内存 sink 中的事件;nil 回落全局。
+func (t *Tracer) QueryEvents(q Query) ReadResult {
+	if t == nil {
+		return defaultMemorySink.Query(q)
+	}
+	for _, s := range t.sinks {
+		if ms, ok := s.(*MemorySink); ok {
+			return ms.Query(q)
+		}
+	}
+	return defaultMemorySink.Query(q)
+}
+
 // QueryTree 返回该 Tracer 内存 sink 中的调用树;nil 回落全局。
 func (t *Tracer) QueryTree(traceID string) TreeResult {
 	if t == nil {

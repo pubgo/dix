@@ -6,6 +6,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/pubgo/dix/v2/dixtrace"
 )
 
 type (
@@ -336,5 +338,70 @@ func TestDixGraphVersionOnObjectCreation(t *testing.T) {
 	}
 	if di.GraphVersion() != v1 {
 		t.Fatal("cached re-injection must not bump version")
+	}
+}
+
+// 容器事件带 containerID;私有缓冲与全局隔离;TraceTree 返回嵌套调用树。
+func TestContainerTraceIsolationAndTree(t *testing.T) {
+	dixtrace.ResetForTest()
+
+	di := New(WithTraceBuffer(64))
+	di.Provide(func() *graphDepA { return &graphDepA{} })
+	if err := di.TryInject(func(a *graphDepA) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+
+	if di.containerID == "" {
+		t.Fatal("container id must be assigned")
+	}
+	res := di.traceTracer.QueryEvents(dixtrace.Query{ContainerID: di.containerID})
+	if res.Total == 0 {
+		t.Fatal("local tracer should hold container events")
+	}
+	traceID := res.Records[0].TraceID
+
+	tree := di.TraceTree(traceID)
+	if !tree.Enabled || len(tree.Roots) == 0 {
+		t.Fatalf("tree roots = %d, want >=1", len(tree.Roots))
+	}
+	// 根为 cycle_check,inject 挂在其下(与既有 trace 链路语义一致)
+	if tree.Roots[0].Event.Operation != "inject.cycle_check" {
+		t.Fatalf("root op = %s, want inject.cycle_check", tree.Roots[0].Event.Operation)
+	}
+	injectFound := false
+	var walk func(n *dixtrace.TreeNode)
+	walk = func(n *dixtrace.TreeNode) {
+		if n.Event.Operation == "inject" {
+			injectFound = true
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	for _, r := range tree.Roots {
+		walk(r)
+	}
+	if !injectFound {
+		t.Fatal("inject span should appear in the tree")
+	}
+
+	// 另一容器的私有缓冲为空(隔离)
+	di2 := New(WithTraceBuffer(64))
+	if got := di2.traceTracer.QueryEvents(dixtrace.Query{}); got.Total != 0 {
+		t.Fatalf("isolated container sink should be empty, got %d", got.Total)
+	}
+}
+
+// 全局容器(默认配置)事件进入全局 sink 且带 containerID。
+func TestDefaultContainerStampsGlobalEvents(t *testing.T) {
+	dixtrace.ResetForTest()
+	di := New()
+	di.Provide(func() *graphDepA { return &graphDepA{} })
+	if err := di.TryInject(func(a *graphDepA) {}); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	res := dixtrace.QueryEvents(dixtrace.Query{ContainerID: di.containerID})
+	if res.Total == 0 {
+		t.Fatal("global events should be stamped with container id")
 	}
 }

@@ -64,6 +64,7 @@ func (dix *Dix) Inject(param any, opts ...Option) any {
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) InjectContext(ctx context.Context, param any, opts ...Option) any {
 	component := describeComponent(param)
+	ctx = dix.withTraceContext(ctx)
 	ctx, cycleSpan := dixtrace.BeginSpanCtx(ctx, "inject.cycle_check", component, "component", component)
 	dep, ok := dix.isCycle()
 	if ok {
@@ -100,6 +101,7 @@ func (dix *Dix) TryInject(param any, opts ...Option) error {
 // NOTE: Dix container is not thread-safe. Do not call Provide/Inject concurrently on the same container.
 func (dix *Dix) TryInjectContext(ctx context.Context, param any, opts ...Option) error {
 	component := describeComponent(param)
+	ctx = dix.withTraceContext(ctx)
 	ctx, cycleSpan := dixtrace.BeginSpanCtx(ctx, "inject.cycle_check", component, "component", component)
 	dep, ok := dix.isCycle()
 	if ok {
