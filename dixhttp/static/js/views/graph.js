@@ -15,7 +15,6 @@ DIX.views = DIX.views || {};
   const state = {
     mode: "modules", layout: "hierarchical", depth: 0, prefix: "", module: "",
     allData: null, runtimeStats: null, focus: null, network: null,
-    loadGuard: null, abortController: null,
   };
 
   const pkgOf = s => (s || "").split(".").slice(0, -1).join(".") || "(anonymous)";
@@ -53,27 +52,15 @@ DIX.views = DIX.views || {};
       <p class="muted" style="margin-top:10px">全局图:绿色实线=产物,黄色虚线=依赖;box=provider,椭圆=类型。单击节点看详情,双击类型节点聚焦。</p>`;
   }
 
-  function beginLoad() {
-    state.loadGuard ||= window.DIXGraphState.createLoadGuard();
-    state.abortController?.abort();
-    const load = state.loadGuard.begin();
-    state.abortController = new AbortController();
-    return { load, signal: state.abortController.signal };
-  }
-
-  function isStale(load) {
-    return !state.loadGuard.isCurrent(load);
-  }
-
-  async function loadRuntimeStats(signal) {
+  async function loadRuntimeStats() {
     if (state.runtimeStats) return;
-    try { state.runtimeStats = await DIX.get("/api/runtime-stats", { limit: 500 }, { signal }); }
+    try { state.runtimeStats = await DIX.get("/api/runtime-stats", { limit: 500 }); }
     catch { state.runtimeStats = []; }
   }
 
-  async function loadProviderData(signal) {
-    if (!state.allData) state.allData = await DIX.get("/api/dependencies", null, { signal });
-    await loadRuntimeStats(signal);
+  async function loadProviderData() {
+    if (!state.allData) state.allData = await DIX.get("/api/dependencies");
+    await loadRuntimeStats();
   }
 
   function statFor(fnName) {
@@ -89,8 +76,8 @@ DIX.views = DIX.views || {};
     return stats.find(s => !s.provider_id && s.function_name === provider.function_name) || null;
   }
 
-  async function loadModuleData(module, signal) {
-    return DIX.get("/api/module", { name: module, limit: 100, edge_limit: 300 }, { signal });
+  async function loadModuleData(module) {
+    return DIX.get("/api/module", { name: module, limit: 100, edge_limit: 300 });
   }
 
   function moduleNodeId(kind, label) {
@@ -349,21 +336,16 @@ DIX.views = DIX.views || {};
   // ---------- 主流程 ----------
   async function redraw() {
     const canvas = document.getElementById("graph-canvas");
-    const request = beginLoad();
-    const options = { signal: request.signal };
     try {
       let graph;
-      if (isStale(request.load)) return;
       if (state.mode === "modules") {
-        graph = await buildModules(options.signal);
-        if (isStale(request.load)) return;
+        graph = await buildModules();
       } else if (state.mode === "module") {
         if (!state.module) {
           canvas.innerHTML = '<p class="muted" style="padding:20px">选择模块后查看有界拓扑。</p>';
           return;
         }
-        const view = await loadModuleData(state.module, options.signal);
-        if (isStale(request.load)) return;
+        const view = await loadModuleData(state.module);
         graph = {
           nodes: view.nodes.map(n => ({
             id: moduleNodeId(n.kind, n.label),
@@ -394,8 +376,7 @@ DIX.views = DIX.views || {};
           canvas.innerHTML = '<p class="muted" style="padding:20px">输入中心类型,或切换到全局/模块图。</p>';
           return;
         }
-        const view = await DIX.get("/api/ego", { center, depth, direction: dir }, options);
-        if (isStale(request.load)) return;
+        const view = await DIX.get("/api/ego", { center, depth, direction: dir });
         graph = {
           nodes: view.nodes.map(n => ({
             id: n.label, label: shortType(n.label), shape: "ellipse", font: { size: 11 },
@@ -405,8 +386,7 @@ DIX.views = DIX.views || {};
           edges: view.edges.map(e => ({ from: e.from, to: e.to, arrows: "to", color: { color: "#9ca3af" } })),
         };
       } else {
-        await loadProviderData(options.signal);
-        if (isStale(request.load)) return;
+        await loadProviderData();
         const built = buildGlobal();
         graph = prune(built.nodes, built.edges);
       }
@@ -418,7 +398,6 @@ DIX.views = DIX.views || {};
       }
       renderNetwork(canvas, bounded.nodes, bounded.edges);
     } catch (err) {
-      if (state.abortController?.signal.aborted && err?.name === "AbortError") return;
       DIX.renderError(canvas, err);
     }
   }

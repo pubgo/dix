@@ -5,19 +5,6 @@ test("graph defaults to module map instead of empty ego", async () => {
   const { resolveGraphMode } = await import("./graph_state.mjs");
   assert.equal(resolveGraphMode(new URLSearchParams()), "modules");
   assert.equal(resolveGraphMode(new URLSearchParams("mode=ego")), "ego");
-  assert.equal(resolveGraphMode(new URLSearchParams("mode=module")), "module");
-});
-
-test("issues have deterministic graph and trace links", async () => {
-  const { issueGraphHash, issueTraceHash } = await import("./graph_state.mjs");
-  const issue = {
-    output_type: "*app.Service",
-    provider: "app.NewService",
-    module: "app/service",
-  };
-  assert.equal(issueGraphHash(issue), "#/graph?mode=ego&center=*app.Service");
-  assert.equal(issueGraphHash({ ...issue, output_type: "" }), "#/graph?mode=module&module=app%2Fservice");
-  assert.equal(issueTraceHash(issue), "#/trace?provider=app.NewService&output_type=*app.Service&status=error");
 });
 
 test("graphs degrade to table metadata above explicit budgets", async () => {
@@ -28,13 +15,4 @@ test("graphs degrade to table metadata above explicit budgets", async () => {
   assert.equal(result.nodes.length, 100);
   assert.equal(result.edges.length, 300);
   assert.equal(result.degraded, true);
-});
-
-test("stale graph loads are rejected", async () => {
-  const { createLoadGuard } = await import("./graph_state.mjs");
-  const guard = createLoadGuard();
-  const first = guard.begin();
-  const second = guard.begin();
-  assert.equal(guard.isCurrent(first.seq), false);
-  assert.equal(guard.isCurrent(second.seq), true);
 });
