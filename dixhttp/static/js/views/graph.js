@@ -19,7 +19,7 @@ DIX.views = DIX.views || {};
   };
 
   const pkgOf = s => (s || "").split(".").slice(0, -1).join(".") || "(anonymous)";
-  const shortType = t => (t || "").replace(/^\*/, "").split(".").pop();
+  const shortType = t => window.DIXGraphState.shortGraphLabel(t);
 
   function toolbarHTML(query) {
     return `
@@ -227,71 +227,101 @@ DIX.views = DIX.views || {};
 
   function renderNetwork(container, nodes, edges) {
     if (state.network) state.network.destroy();
-    const effective = window.DIXGraphState.resolveEffectiveLayout(state.layout, nodes.length);
+    const useStar = state.mode === "modules" && nodes.length >= 2;
+    const effective = useStar
+      ? "star"
+      : window.DIXGraphState.resolveEffectiveLayout(state.layout, nodes.length);
     const hierarchical = effective === "hierarchical";
+    const camera = window.DIXGraphState.resolveCameraStrategy(state.mode, nodes.length);
     const focusId = window.DIXGraphState.pickFocusNodeId(
       nodes,
       edges,
       state.focus || (document.getElementById("g-center") && document.getElementById("g-center").value.trim()) || "",
     );
 
-    // Enlarge labels slightly when the canvas is sparse enough to read them.
-    const sizedNodes = nodes.map(n => ({
-      ...n,
-      font: { ...(n.font || {}), size: Math.max((n.font && n.font.size) || 12, hierarchical ? 14 : 13) },
-    }));
+    let positioned = nodes;
+    if (useStar) {
+      const positions = window.DIXGraphState.layoutStarPositions(nodes, edges);
+      positioned = nodes.map(n => ({
+        ...n,
+        x: positions[n.id]?.x,
+        y: positions[n.id]?.y,
+        fixed: false,
+        font: { ...(n.font || {}), size: 14 },
+        margin: 12,
+        widthConstraint: { maximum: 160 },
+      }));
+    } else {
+      positioned = nodes.map(n => ({
+        ...n,
+        font: { ...(n.font || {}), size: Math.max((n.font && n.font.size) || 12, hierarchical ? 14 : 13) },
+        margin: 10,
+        widthConstraint: hierarchical ? { maximum: 180 } : undefined,
+      }));
+    }
 
     state.network = new vis.Network(container, {
-      nodes: new vis.DataSet(sizedNodes), edges: new vis.DataSet(edges),
+      nodes: new vis.DataSet(positioned), edges: new vis.DataSet(edges),
     }, {
       autoResize: true,
-      layout: hierarchical
-        ? {
-            hierarchical: {
-              direction: "UD",
-              sortMethod: "hubsize",
-              levelSeparation: 140,
-              nodeSpacing: 160,
-              treeSpacing: 200,
-              blockShifting: true,
-              edgeMinimization: true,
-              parentCentralization: true,
-            },
-            improvedLayout: true,
-          }
-        : { improvedLayout: true, randomSeed: 2 },
+      layout: useStar
+        ? { improvedLayout: false }
+        : hierarchical
+          ? {
+              hierarchical: {
+                direction: "UD",
+                sortMethod: "directed",
+                levelSeparation: 160,
+                nodeSpacing: 200,
+                treeSpacing: 220,
+                blockShifting: true,
+                edgeMinimization: true,
+                parentCentralization: true,
+              },
+              improvedLayout: true,
+            }
+          : { improvedLayout: true, randomSeed: 2 },
       edges: {
-        smooth: hierarchical
-          ? { type: "cubicBezier", forceDirection: "vertical", roundness: 0.4 }
-          : { type: "dynamic" },
+        smooth: useStar
+          ? false
+          : hierarchical
+            ? { type: "cubicBezier", forceDirection: "vertical", roundness: 0.45 }
+            : { type: "dynamic" },
       },
-      physics: hierarchical
+      physics: useStar
         ? { enabled: false }
-        : {
-            enabled: true,
-            solver: "forceAtlas2Based",
-            forceAtlas2Based: {
-              gravitationalConstant: -45,
-              centralGravity: 0.01,
-              springLength: 120,
-              springConstant: 0.08,
-              avoidOverlap: 0.8,
+        : hierarchical
+          ? { enabled: false }
+          : {
+              enabled: true,
+              solver: "forceAtlas2Based",
+              forceAtlas2Based: {
+                gravitationalConstant: -45,
+                centralGravity: 0.01,
+                springLength: 120,
+                springConstant: 0.08,
+                avoidOverlap: 0.8,
+              },
+              stabilization: { iterations: 180, fit: false },
             },
-            stabilization: { iterations: 180, fit: false },
-          },
       interaction: { hover: true, tooltipDelay: 120, zoomView: true, dragView: true },
     });
 
-    const focusReadable = () => {
-      if (!state.network || !focusId) return;
-      state.network.focus(focusId, { scale: 1.2, animation: false });
+    const applyCamera = () => {
+      if (!state.network) return;
+      if (camera === "fit" || useStar) {
+        state.network.fit({ animation: false, padding: 64 });
+      } else if (focusId) {
+        state.network.focus(focusId, { scale: 1.15, animation: false });
+      }
+      publishDebug(nodes, edges, effective, useStar ? "fit" : camera);
     };
 
-    if (hierarchical) {
-      setTimeout(focusReadable, 60);
+    if (useStar || hierarchical) {
+      setTimeout(applyCamera, 80);
     } else {
-      state.network.once("stabilizationIterationsDone", focusReadable);
-      setTimeout(focusReadable, 400);
+      state.network.once("stabilizationIterationsDone", applyCamera);
+      setTimeout(applyCamera, 450);
     }
 
     state.network.on("click", params => {
@@ -309,6 +339,27 @@ DIX.views = DIX.views || {};
         redraw();
       }
     });
+  }
+
+  function publishDebug(nodes, edges, effective, camera) {
+    let positions = {};
+    try {
+      positions = state.network ? state.network.getPositions() : {};
+    } catch {
+      positions = {};
+    }
+    const assessment = window.DIXGraphState.assessLayoutMetrics(positions);
+    window.DIXGraphDebug = {
+      mode: state.mode,
+      layout: state.layout,
+      effectiveLayout: effective,
+      camera,
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      positions,
+      assessment,
+      ready: true,
+    };
   }
 
   // ---------- 详情抽屉 ----------

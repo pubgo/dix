@@ -113,3 +113,53 @@ test("pickFocusNodeId prefers explicit center then hub", async () => {
   assert.equal(pickFocusNodeId(nodes, edges, "c"), "c");
   assert.equal(pickFocusNodeId(nodes, edges, ""), "a");
 });
+
+test("shortGraphLabel shortens package paths and types", async () => {
+  const { shortGraphLabel } = await import("./graph_state.mjs");
+  assert.equal(shortGraphLabel("github.com/pubgo/dix/example/http/domain/billing"), "domain/billing");
+  assert.equal(shortGraphLabel("*billing.Config"), "Config");
+  assert.equal(shortGraphLabel("main"), "main");
+});
+
+test("module maps prefer fit camera; dense graphs prefer focus", async () => {
+  const { resolveCameraStrategy } = await import("./graph_state.mjs");
+  assert.equal(resolveCameraStrategy("modules", 11), "fit");
+  assert.equal(resolveCameraStrategy("ego", 40), "focus");
+  assert.equal(resolveCameraStrategy("providers", 8), "fit");
+});
+
+test("assessLayoutMetrics rejects thin-strip layouts", async () => {
+  const { assessLayoutMetrics } = await import("./graph_state.mjs");
+  const thin = {};
+  for (let i = 0; i < 10; i++) thin["n" + i] = { x: i * 40, y: 0 };
+  assert.equal(assessLayoutMetrics(thin).ok, false);
+  assert.equal(assessLayoutMetrics(thin).thin, true);
+
+  const spread = {
+    a: { x: 0, y: 0 },
+    b: { x: 200, y: 0 },
+    c: { x: 0, y: 200 },
+    d: { x: 200, y: 200 },
+    e: { x: 100, y: 100 },
+  };
+  assert.equal(assessLayoutMetrics(spread).ok, true);
+});
+
+test("layoutStarPositions spreads modules around a hub", async () => {
+  const { layoutStarPositions, assessLayoutMetrics } = await import("./graph_state.mjs");
+  const nodes = [
+    { id: "main" },
+    { id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" },
+  ];
+  const edges = [
+    { from: "main", to: "a" },
+    { from: "main", to: "b" },
+    { from: "main", to: "c" },
+    { from: "main", to: "d" },
+    { from: "main", to: "e" },
+  ];
+  const positions = layoutStarPositions(nodes, edges);
+  assert.deepEqual(positions.main, { x: 0, y: 0 });
+  assert.equal(Object.keys(positions).length, 6);
+  assert.equal(assessLayoutMetrics(positions).ok, true);
+});

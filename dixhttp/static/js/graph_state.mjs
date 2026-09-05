@@ -6,6 +6,18 @@ export function resolveGraphMode(query) {
 /** Soft cap for on-canvas readability; denser data stays in hubs/table warnings. */
 export const READABLE_NODE_CAP = 40;
 
+/** Shorten package paths and type names for readable node labels. */
+export function shortGraphLabel(name) {
+  const s = String(name || "").replace(/^\*/, "");
+  if (!s) return "";
+  if (s.includes("/")) {
+    const parts = s.split("/").filter(Boolean);
+    return parts.slice(-2).join("/") || s;
+  }
+  const dotted = s.split(".");
+  return dotted[dotted.length - 1] || s;
+}
+
 export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300 }) {
   if (nodes.length <= budget.nodes && edges.length <= budget.edges) {
     return { nodes, edges, degraded: false };
@@ -41,6 +53,72 @@ export function resolveEffectiveLayout(preferred, nodeCount) {
   }
   // auto (default): small graphs get hierarchy, denser graphs get physics
   return nodeCount > READABLE_NODE_CAP ? "physics" : "hierarchical";
+}
+
+/** Module maps and tiny graphs should fit the canvas; denser views focus a hub. */
+export function resolveCameraStrategy(mode, nodeCount) {
+  if (mode === "modules" || nodeCount <= 12) return "fit";
+  return "focus";
+}
+
+/**
+ * Place a hub at origin and remaining nodes on a circle — readable for module maps.
+ * Returns { [id]: { x, y } }.
+ */
+export function layoutStarPositions(nodes = [], edges = [], opts = {}) {
+  const radius = opts.radius ?? Math.max(260, 40 * Math.max(nodes.length - 1, 1));
+  const hubId = pickFocusNodeId(nodes, edges);
+  const others = nodes.filter((n) => n.id !== hubId);
+  const positions = {};
+  if (hubId) positions[hubId] = { x: 0, y: 0 };
+  const n = Math.max(others.length, 1);
+  others.forEach((node, i) => {
+    const angle = (2 * Math.PI * i) / n - Math.PI / 2;
+    positions[node.id] = {
+      x: Math.cos(angle) * radius,
+      y: Math.sin(angle) * radius,
+    };
+  });
+  return positions;
+}
+
+/**
+ * Judge whether node positions are a readable 2D spread (not a hairline).
+ * positions: { [id]: { x, y } }
+ */
+export function assessLayoutMetrics(positions, opts = {}) {
+  const maxAspect = opts.maxAspect ?? 6;
+  const minSpan = opts.minSpan ?? 80;
+  const ids = Object.keys(positions || {});
+  if (ids.length === 0) {
+    return { ok: false, reason: "empty", nodeCount: 0, aspect: 0, spanX: 0, spanY: 0, thin: false };
+  }
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const id of ids) {
+    const p = positions[id];
+    if (!p) continue;
+    minX = Math.min(minX, p.x);
+    maxX = Math.max(maxX, p.x);
+    minY = Math.min(minY, p.y);
+    maxY = Math.max(maxY, p.y);
+  }
+  const spanX = Math.max(0, maxX - minX);
+  const spanY = Math.max(0, maxY - minY);
+  const major = Math.max(spanX, spanY, 1);
+  const minor = Math.max(Math.min(spanX, spanY), 1);
+  const aspect = major / minor;
+  const thin = ids.length >= 5 && aspect > maxAspect;
+  const tooSmall = ids.length >= 5 && Math.min(spanX, spanY) < minSpan && aspect > 3;
+  const ok = !thin && !tooSmall;
+  return {
+    ok,
+    reason: ok ? "" : (thin ? "thin-strip" : "too-small-spread"),
+    nodeCount: ids.length,
+    aspect,
+    spanX,
+    spanY,
+    thin,
+  };
 }
 
 export function createLoadGuard() {
@@ -121,8 +199,8 @@ export function filterTraceRecords(records = [], filter = {}) {
 
 if (typeof window !== "undefined") {
   window.DIXGraphState = {
-    resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP,
-    resolveEffectiveLayout, pickFocusNodeId,
+    resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP, shortGraphLabel,
+    resolveEffectiveLayout, resolveCameraStrategy, layoutStarPositions, assessLayoutMetrics, pickFocusNodeId,
     createLoadGuard, rankHubNodes,
     issueGraphHash, issueTraceHash, matchTraceRecord, filterTraceRecords,
   };
