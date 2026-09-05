@@ -201,7 +201,6 @@ DIX.views = DIX.views || {};
     });
     state.network.once("afterDrawing", () => {
       state.network.fit({ padding: 30 });
-      if (state.network.getScale() < 0.9) state.network.moveTo({ scale: 0.9, offset: { x: 0, y: 0 } });
     });
     state.network.on("click", params => {
       const id = params.nodes && params.nodes[0];

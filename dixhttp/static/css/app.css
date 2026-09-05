@@ -64,7 +64,26 @@ button.btn {
 }
 button.btn.ghost { background: var(--card); color: var(--brand); }
 
-#graph-canvas { height: 560px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.graph-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  align-items: stretch;
+}
+
+#graph-canvas {
+  height: clamp(420px, calc(100vh - 220px), 900px);
+  min-width: 300px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+@media (max-width: 900px) {
+  .graph-layout { grid-template-columns: minmax(0, 1fr); }
+  #graph-canvas { height: 70vh; min-height: 420px; }
+  #g-detail { max-height: 45vh; overflow: auto; }
+}
+
 .tree, .tree ul { list-style: none; padding-left: 18px; }
 .tree > li { padding-left: 0; }
 .tree .node-line { display: flex; gap: 8px; align-items: baseline; padding: 4px 6px; border-radius: 6px; }

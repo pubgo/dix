@@ -793,7 +793,7 @@ git commit -m "feat(dixhttp): default graph to bounded module map"
 - Consumes: module-first UI and graph budgets.
 - Produces: stable graph canvas sizing and an HTTP smoke test proving `/next` defaults to module assets.
 
-- [ ] **Step 1: Write the failing HTTP/UI smoke test**
+- [x] **Step 1: Write the failing HTTP/UI smoke test**
 
 Create `dixhttp/http_scale_e2e_test.go`:
 
@@ -826,7 +826,7 @@ func TestNextGraphDefaultsToModuleFirstAssets(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run smoke test and verify RED or baseline**
+- [x] **Step 2: Run smoke test and verify RED or baseline**
 
 Run:
 
@@ -836,7 +836,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: this route already serves the assets and should pass; if it fails, fix routing before UI CSS work.
 
-- [ ] **Step 3: Lock canvas geometry**
+- [x] **Step 3: Lock canvas geometry**
 
 Update `app.css`:
 
@@ -861,7 +861,7 @@ Update `app.css`:
 
 Apply `class="graph-layout"` to the graph grid and use `minmax(0, 1fr)` for all toolbar inputs that can overflow.
 
-- [ ] **Step 4: Run automated checks**
+- [x] **Step 4: Run automated checks**
 
 Run:
 
@@ -871,7 +871,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: all checks pass.
 
-- [ ] **Step 5: Run the scale fixture manually**
+- [x] **Step 5: Run the scale fixture manually**
 
 Run:
 
@@ -887,7 +887,7 @@ http://127.0.0.1:18099/next#/graph
 
 Confirm module map is visible, no full dependency request occurs on first render, and the canvas remains usable at 700px viewport width. Stop the fixture after verification.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add dixhttp/http_scale_e2e_test.go dixhttp/static/css/app.css dixhttp/static/js/views/graph.js
