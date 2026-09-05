@@ -72,3 +72,11 @@ test("filterTraceRecords keeps matching provider and status", async () => {
   });
   assert.deepEqual(filtered.map((r) => r.trace_id), ["aa"]);
 });
+
+test("provider drawer can build trace hash from node identity", async () => {
+  const { issueTraceHash } = await import("./graph_state.mjs");
+  assert.equal(
+    issueTraceHash({ provider: "app.NewService", output_type: "*app.Service", severity: "error" }),
+    "#/trace?provider=app.NewService&output_type=*app.Service&status=error"
+  );
+});

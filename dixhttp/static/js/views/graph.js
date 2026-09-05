@@ -269,27 +269,42 @@ DIX.views = DIX.views || {};
   function providerDetail(box, d) {
     const p = d.provider || {};
     const st = statForProvider(p);
+    const fnName = p.function_name || d.label || "";
+    const outputType = p.output_type || (p.output_types && p.output_types[0]) || d.label || "";
     box.innerHTML = `
       <h3>Provider</h3>
-      <p class="mono">${DIX.esc(p.function_name || d.label)}</p>
+      <p class="mono">${DIX.esc(fnName)}</p>
       <p class="muted mono">${DIX.esc(p.function_pkg || "")}${p.function_file ? " @ " + DIX.esc(p.function_file.split("/").pop()) + ":" + (p.function_line || "") : ""}</p>
       <p><b>输出:</b> ${(p.output_types && p.output_types.length ? p.output_types : [p.output_type]).filter(Boolean).map(t => '<span class="chip mono">' + DIX.esc(t) + '</span>').join("")}</p>
       <p><b>输入:</b> ${(p.input_types || []).map(t => '<span class="chip mono">' + DIX.esc(t) + '</span>').join("") || '<span class="muted">无</span>'}</p>
       ${st ? '<p><b>执行:</b> ' + st.call_count + ' 次,平均 ' + (st.average_duration / 1e6).toFixed(2) + ' ms' + (st.last_error ? ' <span class="err-text">最近错误: ' + DIX.esc(st.last_error) + '</span>' : '') + '</p>' : '<p class="muted">尚未执行。</p>'}
-      <p><button class="btn ghost" id="d-locate">在全局图中定位</button></p>`;
+      <p>
+        <button class="btn ghost" id="d-locate">在全局图中定位</button>
+        <button class="btn ghost" id="d-trace">查看解析链路</button>
+      </p>`;
     document.getElementById("d-locate").onclick = () => {
       state.mode = "providers";
       document.getElementById("g-mode").value = "providers";
       state.focus = p.output_type || d.label;
       redraw();
     };
+    document.getElementById("d-trace").onclick = () => {
+      location.hash = window.DIXGraphState.issueTraceHash({
+        provider: fnName,
+        output_type: outputType,
+        severity: "error",
+      });
+    };
   }
 
   function typeDetail(box, d) {
     const label = d.label;
-    const producers = (state.allData.providers || []).filter(p =>
+    const allProviders = (state.allData && state.allData.providers) || [];
+    const allObjects = (state.allData && state.allData.objects) || [];
+    const producers = allProviders.filter(p =>
       (p.output_types || []).includes(label) || p.output_type === label);
-    const objects = (state.allData.objects || []).filter(o => o.type === label);
+    const objects = allObjects.filter(o => o.type === label);
+    const providerFn = (d.provider && d.provider.function_name) || (producers[0] && producers[0].function_name) || "";
     box.innerHTML = `
       <h3>类型</h3>
       <p class="mono">${DIX.esc(label)}</p>
@@ -301,6 +316,7 @@ DIX.views = DIX.views || {};
       <p>
         <button class="btn ghost" id="d-ego">以此为中心(邻域)</button>
         <button class="btn ghost" id="d-focus">聚焦全图(类型依赖)</button>
+        <button class="btn ghost" id="d-trace">查看解析链路</button>
       </p>`;
 
     box.querySelectorAll(".chip.click").forEach(chip => {
@@ -325,6 +341,13 @@ DIX.views = DIX.views || {};
       document.getElementById("g-mode").value = "types";
       state.focus = label;
       redraw();
+    };
+    document.getElementById("d-trace").onclick = () => {
+      location.hash = window.DIXGraphState.issueTraceHash({
+        provider: providerFn,
+        output_type: label,
+        severity: "error",
+      });
     };
   }
 
