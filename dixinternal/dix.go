@@ -70,6 +70,9 @@ type Dix struct {
 	initializer map[reflect.Value]bool
 	timedOut    map[reflect.Value]bool
 	graph       *Graph
+	// registrationSeq identifies one top-level Provide call. Struct field
+	// projections reuse it; distinct calls to the same closure source do not.
+	registrationSeq uint64
 
 	// containerID 标识本容器(随机 16 hex),trace 事件携带它实现多容器隔离。
 	containerID string
@@ -1117,7 +1120,7 @@ func (dix *Dix) inject(ctx context.Context, param any, opts ...Option) (err erro
 }
 
 // handleProvide registers a provider function for a specific output type
-func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs []*providerInputType) error {
+func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs []*providerInputType, registrationID uint64) error {
 	traceFnName := GetFnTraceName(fnVal)
 	dix.emitDIEvent("provide.register.start",
 		"provider", traceFnName,
@@ -1139,7 +1142,7 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 		}
 	}
 
-	provider := &providerFn{fn: fnVal, inputList: inputs, hasError: hasError}
+	provider := &providerFn{fn: fnVal, inputList: inputs, hasError: hasError, registrationID: registrationID}
 
 	// Register based on output kind
 	switch outType.Kind() {
@@ -1195,7 +1198,7 @@ func (dix *Dix) handleProvide(fnVal reflect.Value, outType reflect.Type, inputs 
 			dix.emitDIEvent("provide.register.struct_field.start", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String())
 
 			// Recursive call
-			if err := dix.handleProvide(fnVal, field.Type, inputs); err != nil {
+			if err := dix.handleProvide(fnVal, field.Type, inputs, registrationID); err != nil {
 				dix.emitDIEvent("provide.register.struct_field.failed", "provider", traceFnName, "declared_output_type", outType.String(), "field", field.Name, "field_type", field.Type.String(), "error", err)
 				return err
 			}
@@ -1360,7 +1363,8 @@ func (dix *Dix) provide(param any) {
 		inputs = append(inputs, parsedInputs...)
 	}
 
-	if err := dix.handleProvide(fnVal, typ.Out(0), inputs); err != nil {
+	dix.registrationSeq++
+	if err := dix.handleProvide(fnVal, typ.Out(0), inputs, dix.registrationSeq); err != nil {
 		dix.emitDIEvent("provide.register.failed", "provider", traceFnName, "declared_output_type", typ.Out(0).String(), "error", err)
 		panic(err)
 	}

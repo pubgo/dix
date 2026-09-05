@@ -34,7 +34,7 @@
 - Consumes: private `providerFn`, `Dix.handleProvide`, and `Dix.provide`.
 - Produces: `providerFn.registrationID uint64`; `handleProvide(fnVal reflect.Value, outType reflect.Type, inputs []*providerInputType, registrationID uint64) error`.
 
-- [ ] **Step 1: Write the failing identity tests**
+- [x] **Step 1: Write the failing identity tests**
 
 Create `dixinternal/provider_identity_test.go`:
 
@@ -55,8 +55,8 @@ type identityAggregate struct {
 
 func TestStructProviderOutputsShareRegistrationID(t *testing.T) {
 	di := New()
-	di.Provide(func() *identityAggregate {
-		return &identityAggregate{A: &identityA{}, B: &identityB{}}
+	di.Provide(func() identityAggregate {
+		return identityAggregate{A: &identityA{}, B: &identityB{}}
 	})
 
 	ids := make(map[string]uint64)
@@ -91,7 +91,7 @@ func TestDistinctClosureRegistrationsHaveDistinctRegistrationIDs(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the focused test and verify RED**
+- [x] **Step 2: Run the focused test and verify RED**
 
 Run:
 
@@ -101,7 +101,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: compilation fails because `registrationID` and the new `handleProvide` signature do not exist.
 
-- [ ] **Step 3: Implement registration identity**
+- [x] **Step 3: Implement registration identity**
 
 In `dixinternal/provider.go`, add the field:
 
@@ -132,7 +132,7 @@ if err := dix.handleProvide(fnVal, typ.Out(0), inputs, dix.registrationSeq); err
 
 Add `registrationSeq uint64` beside `graph` in the private `Dix` struct. Container writes are documented single-threaded, so no atomic is required.
 
-- [ ] **Step 4: Run the focused test and verify GREEN**
+- [x] **Step 4: Run the focused test and verify GREEN**
 
 Run:
 
@@ -142,7 +142,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: both tests pass.
 
-- [ ] **Step 5: Run the root race suite**
+- [x] **Step 5: Run the root race suite**
 
 Run:
 
@@ -152,7 +152,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: all packages pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add dixinternal/provider.go dixinternal/dix.go dixinternal/provider_identity_test.go
@@ -198,8 +198,8 @@ type projectionAggregate struct {
 
 func TestDependenciesPreserveRegistrationAndOutputIdentity(t *testing.T) {
 	container := dix.New()
-	dix.Provide(container, func() *projectionAggregate {
-		return &projectionAggregate{A: &projectionOutputA{}, B: &projectionOutputB{}}
+	dix.Provide(container, func() projectionAggregate {
+		return projectionAggregate{A: &projectionOutputA{}, B: &projectionOutputB{}}
 	})
 
 	server := NewServer(container)
