@@ -76,6 +76,7 @@ export function issueGraphHash(issue = {}) {
 
 export function issueTraceHash(issue = {}) {
   const params = new URLSearchParams();
+  if (issue.trace_id) params.set("trace_id", issue.trace_id);
   if (issue.provider) params.set("provider", issue.provider);
   if (issue.output_type) params.set("output_type", issue.output_type);
   params.set("status", issue.severity === "slow" ? "slow" : "error");

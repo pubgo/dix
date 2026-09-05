@@ -93,6 +93,24 @@ func TestBuildIssuesMergesErrorsAndSlowProviders(t *testing.T) {
 	}
 }
 
+func TestBuildIssuesPropagatesTraceID(t *testing.T) {
+	recent := []dixinternal.RecentError{{
+		ErrorType:          "provider_error",
+		Message:            "boom",
+		TraceID:            "abc123",
+		OutputType:         "*app.Service",
+		ProviderFunction:   "app.NewService",
+		OccurredAtUnixNano: 1,
+	}}
+	issues := buildIssues(nil, recent, nil, 0, 10)
+	if len(issues) != 1 {
+		t.Fatalf("issues = %+v", issues)
+	}
+	if issues[0].TraceID != "abc123" {
+		t.Fatalf("trace id = %q", issues[0].TraceID)
+	}
+}
+
 func TestBuildIssuesLimitsAndSortsStably(t *testing.T) {
 	base := time.Now().UnixNano()
 	recent := make([]dixinternal.RecentError, 0, 4)

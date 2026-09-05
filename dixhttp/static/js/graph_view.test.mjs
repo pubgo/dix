@@ -40,6 +40,10 @@ test("issues have deterministic graph and trace links", async () => {
     issueTraceHash({ ...issue, severity: "slow" }),
     "#/trace?provider=app.NewService&output_type=*app.Service&status=slow"
   );
+  assert.equal(
+    issueTraceHash({ ...issue, trace_id: "abc123" }),
+    "#/trace?trace_id=abc123&provider=app.NewService&output_type=*app.Service&status=error"
+  );
 });
 
 test("resolveGraphMode accepts module drilldown", async () => {

@@ -108,6 +108,7 @@ type recentErrorRecord struct {
 	Message          string
 	RootCause        string
 	Hint             string
+	TraceID          string
 	TimedOut         bool
 	Duration         time.Duration
 	Timeout          time.Duration

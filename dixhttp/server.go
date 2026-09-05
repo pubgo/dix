@@ -424,6 +424,7 @@ type IssueInfo struct {
 	Title              string `json:"title"`
 	RootCause          string `json:"root_cause,omitempty"`
 	Hint               string `json:"hint,omitempty"`
+	TraceID            string `json:"trace_id,omitempty"`
 	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano,omitempty"`
 }
 
@@ -493,6 +494,7 @@ func buildIssues(details []dixinternal.ProviderDetails, recent []dixinternal.Rec
 			Title:              item.ErrorType,
 			RootCause:          item.RootCause,
 			Hint:               item.Hint,
+			TraceID:            item.TraceID,
 			OccurredAtUnixNano: item.OccurredAtUnixNano,
 		}
 		if issue.Title == "" {

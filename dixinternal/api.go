@@ -203,6 +203,7 @@ type RecentError struct {
 	Message            string        `json:"message"`
 	RootCause          string        `json:"root_cause,omitempty"`
 	Hint               string        `json:"hint,omitempty"`
+	TraceID            string        `json:"trace_id,omitempty"`
 	TimedOut           bool          `json:"timed_out,omitempty"`
 	Duration           time.Duration `json:"duration,omitempty"`
 	Timeout            time.Duration `json:"timeout,omitempty"`
@@ -345,6 +346,7 @@ func (dix *Dix) GetRecentErrors(limit int) []RecentError {
 			Message:            r.Message,
 			RootCause:          r.RootCause,
 			Hint:               r.Hint,
+			TraceID:            r.TraceID,
 			TimedOut:           r.TimedOut,
 			Duration:           r.Duration,
 			Timeout:            r.Timeout,
