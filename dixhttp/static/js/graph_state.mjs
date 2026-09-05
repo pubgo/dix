@@ -3,6 +3,9 @@ export function resolveGraphMode(query) {
   return ["modules", "module", "ego", "providers", "types"].includes(mode) ? mode : "modules";
 }
 
+/** Soft cap for on-canvas readability; denser data stays in hubs/table warnings. */
+export const READABLE_NODE_CAP = 40;
+
 export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300 }) {
   if (nodes.length <= budget.nodes && edges.length <= budget.edges) {
     return { nodes, edges, degraded: false };
@@ -30,6 +33,16 @@ export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300
   };
 }
 
+export function resolveEffectiveLayout(preferred, nodeCount) {
+  const choice = (preferred || "auto").trim() || "auto";
+  if (choice === "physics") return "physics";
+  if (choice === "hierarchical") {
+    return nodeCount > READABLE_NODE_CAP ? "physics" : "hierarchical";
+  }
+  // auto (default): small graphs get hierarchy, denser graphs get physics
+  return nodeCount > READABLE_NODE_CAP ? "physics" : "hierarchical";
+}
+
 export function createLoadGuard() {
   let current = 0;
   return {
@@ -54,6 +67,13 @@ export function rankHubNodes(nodes, edges, limit = 10) {
     .map((node) => ({ id: node.id, degree: degree.get(node.id) || 0 }))
     .sort((a, b) => b.degree - a.degree || String(a.id).localeCompare(String(b.id)))
     .slice(0, limit);
+}
+
+export function pickFocusNodeId(nodes = [], edges = [], preferredId = "") {
+  if (preferredId && nodes.some(node => node.id === preferredId)) return preferredId;
+  const hubs = rankHubNodes(nodes, edges, 1);
+  if (hubs.length) return hubs[0].id;
+  return nodes[0] ? nodes[0].id : null;
 }
 
 
@@ -101,7 +121,9 @@ export function filterTraceRecords(records = [], filter = {}) {
 
 if (typeof window !== "undefined") {
   window.DIXGraphState = {
-    resolveGraphMode, applyGraphBudget, createLoadGuard, rankHubNodes,
+    resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP,
+    resolveEffectiveLayout, pickFocusNodeId,
+    createLoadGuard, rankHubNodes,
     issueGraphHash, issueTraceHash, matchTraceRecord, filterTraceRecords,
   };
 }

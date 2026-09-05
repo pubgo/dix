@@ -13,7 +13,7 @@ DIX.views = DIX.views || {};
   };
 
   const state = {
-    mode: "modules", layout: "hierarchical", depth: 0, prefix: "", module: "",
+    mode: "modules", layout: "auto", depth: 0, prefix: "", module: "",
     allData: null, runtimeStats: null, focus: null, network: null,
     loadGuard: null, abortController: null,
   };
@@ -37,7 +37,11 @@ DIX.views = DIX.views || {};
           <select id="g-depth-ego"><option value="1">1 跳</option><option value="2" selected>2 跳</option><option value="3">3 跳</option><option value="4">4 跳</option><option value="5">5 跳</option></select>
           <select id="g-dir"><option value="both">双向</option><option value="deps">依赖</option><option value="dependents">被依赖</option></select>
         </span>
-        <select id="g-layout"><option value="hierarchical">层级布局</option><option value="physics">物理布局</option></select>
+        <select id="g-layout">
+          <option value="auto" selected>自动布局</option>
+          <option value="hierarchical">层级布局</option>
+          <option value="physics">物理布局</option>
+        </select>
         <select id="g-depth-all"><option value="0">深度:全部</option><option value="1">1 跳</option><option value="2">2 跳</option><option value="3">3 跳</option><option value="5">5 跳</option></select>
         <input type="text" id="g-prefix" placeholder="前缀过滤(包/类型)" value="${DIX.esc(query.get("prefix") || "")}" style="min-width:180px">
         <button class="btn" type="submit">绘制</button>
@@ -223,20 +227,73 @@ DIX.views = DIX.views || {};
 
   function renderNetwork(container, nodes, edges) {
     if (state.network) state.network.destroy();
-    const hierarchical = state.layout === "hierarchical";
+    const effective = window.DIXGraphState.resolveEffectiveLayout(state.layout, nodes.length);
+    const hierarchical = effective === "hierarchical";
+    const focusId = window.DIXGraphState.pickFocusNodeId(
+      nodes,
+      edges,
+      state.focus || (document.getElementById("g-center") && document.getElementById("g-center").value.trim()) || "",
+    );
+
+    // Enlarge labels slightly when the canvas is sparse enough to read them.
+    const sizedNodes = nodes.map(n => ({
+      ...n,
+      font: { ...(n.font || {}), size: Math.max((n.font && n.font.size) || 12, hierarchical ? 14 : 13) },
+    }));
+
     state.network = new vis.Network(container, {
-      nodes: new vis.DataSet(nodes), edges: new vis.DataSet(edges),
+      nodes: new vis.DataSet(sizedNodes), edges: new vis.DataSet(edges),
     }, {
+      autoResize: true,
       layout: hierarchical
-        ? { hierarchical: { direction: "LR", sortMethod: "hubsize" }, improvedLayout: true }
-        : { improvedLayout: true },
-      edges: { smooth: hierarchical ? { type: "cubicBezier", roundness: 0.4 } : false },
-      physics: { enabled: !hierarchical, stabilization: { iterations: 150 } },
-      interaction: { hover: true },
+        ? {
+            hierarchical: {
+              direction: "UD",
+              sortMethod: "hubsize",
+              levelSeparation: 140,
+              nodeSpacing: 160,
+              treeSpacing: 200,
+              blockShifting: true,
+              edgeMinimization: true,
+              parentCentralization: true,
+            },
+            improvedLayout: true,
+          }
+        : { improvedLayout: true, randomSeed: 2 },
+      edges: {
+        smooth: hierarchical
+          ? { type: "cubicBezier", forceDirection: "vertical", roundness: 0.4 }
+          : { type: "dynamic" },
+      },
+      physics: hierarchical
+        ? { enabled: false }
+        : {
+            enabled: true,
+            solver: "forceAtlas2Based",
+            forceAtlas2Based: {
+              gravitationalConstant: -45,
+              centralGravity: 0.01,
+              springLength: 120,
+              springConstant: 0.08,
+              avoidOverlap: 0.8,
+            },
+            stabilization: { iterations: 180, fit: false },
+          },
+      interaction: { hover: true, tooltipDelay: 120, zoomView: true, dragView: true },
     });
-    setTimeout(() => {
-      if (state.network) state.network.redraw();
-    }, 100);
+
+    const focusReadable = () => {
+      if (!state.network || !focusId) return;
+      state.network.focus(focusId, { scale: 1.2, animation: false });
+    };
+
+    if (hierarchical) {
+      setTimeout(focusReadable, 60);
+    } else {
+      state.network.once("stabilizationIterationsDone", focusReadable);
+      setTimeout(focusReadable, 400);
+    }
+
     state.network.on("click", params => {
       const id = params.nodes && params.nodes[0];
       const node = id !== undefined ? nodes.find(n => n.id === id) : null;
@@ -439,14 +496,23 @@ DIX.views = DIX.views || {};
         const built = buildGlobal();
         graph = prune(built.nodes, built.edges);
       }
-      const bounded = window.DIXGraphState.applyGraphBudget(graph.nodes, graph.edges, budgets[state.mode]);
+      const apiBounded = window.DIXGraphState.applyGraphBudget(graph.nodes, graph.edges, budgets[state.mode]);
+      const cap = window.DIXGraphState.READABLE_NODE_CAP;
+      const bounded = window.DIXGraphState.applyGraphBudget(
+        apiBounded.nodes,
+        apiBounded.edges,
+        { nodes: cap, edges: cap * 3 },
+      );
       const warning = document.getElementById("g-budget");
-      const overBudget = bounded.degraded || graph.truncated;
+      const overBudget = bounded.degraded || apiBounded.degraded || graph.truncated;
       warning.style.display = overBudget ? "block" : "none";
       if (overBudget) {
         const hubs = window.DIXGraphState.rankHubNodes(bounded.nodes, bounded.edges, 8);
+        const layoutNote = window.DIXGraphState.resolveEffectiveLayout(state.layout, bounded.nodes.length) === "physics"
+          ? "当前自动使用物理布局以便分散节点。"
+          : "";
         warning.innerHTML =
-          `<p>图规模超过展示预算（保留 ${bounded.nodes.length} 节点 / ${bounded.edges.length} 边）。请缩小模块、降低跳数，或使用检索定位具体类型。</p>` +
+          `<p>图规模超过可读预算（画布保留 ${bounded.nodes.length} 节点 / ${bounded.edges.length} 边）。${layoutNote}请缩小模块、降低跳数，或用检索定位具体类型。</p>` +
           (hubs.length
             ? `<table class="tbl"><tr><th>枢纽节点</th><th class="num">度数</th></tr>` +
               hubs.map(h => `<tr><td class="mono">${DIX.esc(h.id)}</td><td class="num">${h.degree}</td></tr>`).join("") +
@@ -466,7 +532,7 @@ DIX.views = DIX.views || {};
 
       state.mode = window.DIXGraphState.resolveGraphMode(query);
       document.getElementById("g-mode").value = state.mode;
-      state.layout = query.get("layout") || "hierarchical";
+      state.layout = query.get("layout") || "auto";
       document.getElementById("g-layout").value = state.layout;
       state.prefix = query.get("prefix") || "";
       document.getElementById("g-prefix").value = state.prefix;

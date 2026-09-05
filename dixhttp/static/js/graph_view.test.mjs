@@ -84,3 +84,32 @@ test("provider drawer can build trace hash from node identity", async () => {
     "#/trace?provider=app.NewService&output_type=*app.Service&status=error"
   );
 });
+
+test("large graphs switch hierarchical preference to physics", async () => {
+  const { resolveEffectiveLayout, READABLE_NODE_CAP } = await import("./graph_state.mjs");
+  assert.equal(resolveEffectiveLayout("hierarchical", READABLE_NODE_CAP), "hierarchical");
+  assert.equal(resolveEffectiveLayout("hierarchical", READABLE_NODE_CAP + 1), "physics");
+  assert.equal(resolveEffectiveLayout("physics", 5), "physics");
+  assert.equal(resolveEffectiveLayout("auto", 10), "hierarchical");
+  assert.equal(resolveEffectiveLayout("auto", READABLE_NODE_CAP + 5), "physics");
+});
+
+test("display soft-cap keeps graphs readable", async () => {
+  const { applyGraphBudget, READABLE_NODE_CAP } = await import("./graph_state.mjs");
+  const nodes = Array.from({ length: 80 }, (_, i) => ({ id: String(i) }));
+  const edges = Array.from({ length: 120 }, (_, i) => ({ from: String(i % 80), to: String((i + 1) % 80) }));
+  const result = applyGraphBudget(nodes, edges, { nodes: READABLE_NODE_CAP, edges: READABLE_NODE_CAP * 3 });
+  assert.ok(result.nodes.length <= READABLE_NODE_CAP);
+  assert.equal(result.degraded, true);
+});
+
+test("pickFocusNodeId prefers explicit center then hub", async () => {
+  const { pickFocusNodeId } = await import("./graph_state.mjs");
+  const nodes = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const edges = [
+    { from: "a", to: "b" },
+    { from: "a", to: "c" },
+  ];
+  assert.equal(pickFocusNodeId(nodes, edges, "c"), "c");
+  assert.equal(pickFocusNodeId(nodes, edges, ""), "a");
+});
