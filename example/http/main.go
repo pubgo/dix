@@ -100,6 +100,17 @@ type Application struct {
 	Plugins   []string
 }
 
+// ScaleFixtureA/B/C 用于把 HTTP 示例稳定推到接近真实项目的规模,
+// 同时为依赖可视化的大图/模块图测试提供确定的 provider 数量。
+type ScaleFixtureA struct{ Name string }
+type ScaleFixtureB struct{ Name string }
+type ScaleFixtureC struct{ Name string }
+type ScaleFixture struct {
+	A *ScaleFixtureA
+	B *ScaleFixtureB
+	C *ScaleFixtureC
+}
+
 // ==================== HTTP 服务器 ====================
 
 func startVisualizationServer(server *dixhttp.Server) error {
@@ -255,6 +266,13 @@ func buildContainer() *dix.Dix {
 
 	// 基础组件
 	dix.Provide(di, func() Logger { return &ConsoleLogger{Prefix: "app"} })
+	dix.Provide(di, func() ScaleFixture {
+		return ScaleFixture{
+			A: &ScaleFixtureA{Name: "a"},
+			B: &ScaleFixtureB{Name: "b"},
+			C: &ScaleFixtureC{Name: "c"},
+		}
+	})
 
 	// 十个域模块:每域五层链路(配置→客户端→仓储→服务→处理器)+ 多区域连接
 	analytics.Providers(di)

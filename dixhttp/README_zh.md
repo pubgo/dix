@@ -4,9 +4,25 @@
 
 [English](./README.md)
 
+## 规模优先工作流
+
+新界面按“渐进披露”组织：
+
+```text
+模块地图 -> 模块详情 -> 类型/Provider 详情 -> 邻域图 / 调用链
+```
+
+- 依赖图默认进入**模块地图**，不再默认渲染全局 provider 大图。
+- 模块地图限制为最多 100 个节点、300 条边。
+- 全局视图限制为最多 150 个节点、400 条边。
+- 邻域图默认 2 跳，最多支持 5 跳。
+- Object 默认作为类型/Provider 详情和模块计数中的状态展示，不默认渲染为节点。
+- 超过预算时保留关联最多的节点，并显示密度警告，引导用户检索或缩小模块范围。
+- `/api/dependencies` 是全局/旧视图的兼容全量数据接口；默认模块地图不会预加载它。
+
 ## 功能特性
 
-- 📊 **交互式可视化** - 使用 vis.js + Tailwind CSS + Alpine.js 构建现代化界面
+- 📊 **交互式可视化** - 使用原生 JS、本地 CSS 和 vis-network 构建无构建现代化界面
 - 🔍 **全局模糊搜索** - 快速搜索类型名或函数名，直接查看依赖关系
 - 📦 **按包分组** - 左侧可折叠面板，按包过滤查看依赖
 - 🔄 **双向依赖追踪** - 同时展示依赖（上游）和被依赖（下游）关系
@@ -305,7 +321,7 @@ dixhttp.RegisterGroupRules(
 ```
 
 ### GET `/api/dependencies?package=xxx&limit=100`
-返回依赖关系数据，支持按包过滤
+返回全局/旧视图使用的全量依赖数据，支持包过滤。规模优先的模块图和邻域图优先使用各自的有界接口。
 
 ```json
 {
@@ -443,11 +459,8 @@ dixhttp.RegisterGroupRules(
 ## 技术栈
 
 - **后端**: Go 标准库 `net/http`
-- **前端框架**: 
-  - [Tailwind CSS](https://tailwindcss.com/) - 样式
-  - [Alpine.js](https://alpinejs.dev/) - 响应式交互
-  - [vis-network](https://visjs.github.io/vis-network/) - 图形渲染
-- **模板**: Go embed 嵌入单文件 HTML
+- **前端**: 原生 JS、本地 CSS 和 [vis-network](https://visjs.github.io/vis-network/) 图形渲染
+- **静态资源**: Go embed 本地文件；无构建步骤，无 CDN 依赖
 
 ## 适用场景
 

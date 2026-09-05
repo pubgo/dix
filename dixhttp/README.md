@@ -11,15 +11,31 @@ This module provides an HTTP server to visualize dependency relationships in the
 | 视图(hash 路由) | 主任务 | 数据源 |
 | --- | --- | --- |
 | 概览 `#/overview` | 全局状态一览 | `/api/stats`、`/api/errors` |
-| 依赖图 `#/graph` | 模块列表 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/search`、`/api/ego` |
+| 依赖图 `#/graph` | 模块地图(默认) + 模块内视图 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/search`、`/api/ego`;全局视图才使用 `/api/dependencies` |
 | 检索 `#/search` | 服务端检索 + 状态过滤,一键跳转依赖图 | `/api/search` |
 | 调用链 `#/trace` | trace 列表(错误优先)+ 嵌套调用树 | `/api/trace`、`/api/trace-tree` |
 | 诊断 `#/diag` | 最近注入错误 + provider 启动耗时 | `/api/errors`、`/api/runtime-stats` |
 
 
+## Scale-first graph workflow
+
+The graph is organized around progressive disclosure:
+
+```text
+Module map  ->  module detail  ->  type / provider detail  ->  ego graph / trace
+```
+
+- The default graph mode is the module map, not a global provider dump.
+- Module map is bounded to 100 nodes and 300 edges.
+- Module/global views are bounded to 150 nodes and 400 edges.
+- Ego graph uses depth 2 by default and supports up to depth 5.
+- Objects are shown as state in type/provider details and module counts; they are not rendered as nodes by default.
+- When a view exceeds its budget, the UI keeps the highest-connectivity nodes and shows a density warning directing you to search or narrow the module.
+- `/api/dependencies` is a compatibility/full-data endpoint for global and legacy views; it is not loaded by the default module map.
+
 ## Features
 
-- 📊 **Interactive Visualization** - Modern UI built with vis.js + Tailwind CSS + Alpine.js
+- 📊 **Interactive Visualization** - Modern no-build UI built with vanilla JS, local CSS, and vis-network
 - 🔍 **Global Fuzzy Search** - Quickly search for type names or function names to view dependencies
 - 📦 **Package Grouping** - Collapsible left panel to browse by package
 - 🔄 **Bidirectional Dependency Tracking** - Show both upstream (dependencies) and downstream (dependents)
@@ -425,7 +441,7 @@ Returns package list
 ```
 
 ### GET `/api/dependencies?package=xxx&limit=100`
-Returns dependency data, supports package filtering
+Returns full dependency data for global/legacy views and package filtering. New scale-first module and ego views use their own bounded endpoints first.
 
 ```json
 {
@@ -476,11 +492,8 @@ Returns backend-registered group rules (used as UI defaults)
 ## Tech Stack
 
 - **Backend**: Go standard library `net/http`
-- **Frontend**: 
-  - [Tailwind CSS](https://tailwindcss.com/) - Styling
-  - [Alpine.js](https://alpinejs.dev/) - Reactive interactions
-  - [vis-network](https://visjs.github.io/vis-network/) - Graph rendering
-- **Template**: Go embed single-file HTML
+- **Frontend**: vanilla JS, local CSS, and [vis-network](https://visjs.github.io/vis-network/) for graph rendering
+- **Assets**: Go-embedded local files; no build step and no CDN dependency
 
 ## Use Cases
 
