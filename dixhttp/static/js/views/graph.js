@@ -199,9 +199,9 @@ DIX.views = DIX.views || {};
       physics: { enabled: !hierarchical, stabilization: { iterations: 150 } },
       interaction: { hover: true },
     });
-    state.network.once("afterDrawing", () => {
-      state.network.fit({ padding: 30 });
-    });
+    setTimeout(() => {
+      if (state.network) state.network.redraw();
+    }, 100);
     state.network.on("click", params => {
       const id = params.nodes && params.nodes[0];
       const node = id !== undefined ? nodes.find(n => n.id === id) : null;
