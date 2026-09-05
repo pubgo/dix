@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixinternal"
@@ -150,6 +151,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
 	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
 	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
+	s.mux.HandleFunc(base+"/api/issues", s.HandleIssues)
 	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
 	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
 	s.mux.HandleFunc(base+"/api/trace-tree", s.HandleTraceTree)
@@ -390,6 +392,159 @@ func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, stats)
+}
+
+// IssueInfo is one actionable diagnostic item with a stable link back to the graph/trace.
+type IssueInfo struct {
+	Severity           string `json:"severity"`
+	Kind               string `json:"kind"`
+	ProviderID         string `json:"provider_id,omitempty"`
+	Provider           string `json:"provider,omitempty"`
+	OutputType         string `json:"output_type,omitempty"`
+	Module             string `json:"module,omitempty"`
+	Title              string `json:"title"`
+	RootCause          string `json:"root_cause,omitempty"`
+	Hint               string `json:"hint,omitempty"`
+	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano,omitempty"`
+}
+
+// HandleIssues merges injection failures, provider failures, and slow providers
+// into one issue-first diagnostic feed.
+func (s *Server) HandleIssues(w http.ResponseWriter, r *http.Request) {
+	details, _ := s.cachedGraphInputs()
+	issues := buildIssues(
+		details,
+		s.dix.GetRecentErrors(atoiOr(r.URL.Query().Get("error_limit"), 100)),
+		s.dix.GetProviderRuntimeStats(),
+		s.dix.Option().SlowProviderThreshold,
+		atoiOr(r.URL.Query().Get("limit"), 100),
+	)
+	writeJSON(w, issues)
+}
+
+// buildIssues projects raw diagnostic records into a bounded, stable issue list.
+func buildIssues(details []dixinternal.ProviderDetails, recent []dixinternal.RecentError, stats []dixinternal.ProviderRuntimeStats, slowThreshold time.Duration, limit int) []IssueInfo {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	providerByID := make(map[string]dixinternal.ProviderDetails, len(details))
+	providerByFnOutput := make(map[string]dixinternal.ProviderDetails, len(details))
+	for _, detail := range details {
+		if detail.ProviderID != "" {
+			providerByID[detail.ProviderID] = detail
+		}
+		providerByFnOutput[detail.FunctionName+"\x00"+detail.OutputType] = detail
+	}
+
+	lookup := func(provider, output string) (dixinternal.ProviderDetails, bool) {
+		if provider != "" {
+			if detail, ok := providerByFnOutput[provider+"\x00"+output]; ok {
+				return detail, true
+			}
+		}
+		if output != "" {
+			for _, detail := range details {
+				if detail.OutputType == output && (provider == "" || detail.FunctionName == provider) {
+					return detail, true
+				}
+			}
+		}
+		return dixinternal.ProviderDetails{}, false
+	}
+
+	issues := make([]IssueInfo, 0, len(recent)+len(stats))
+	seenError := make(map[string]bool, len(recent))
+	for _, item := range recent {
+		key := item.ErrorType + "\x00" + item.Component + "\x00" + item.Stage + "\x00" +
+			item.ProviderFunction + "\x00" + item.OutputType + "\x00" + item.RootCause + "\x00" + item.Message
+		if seenError[key] {
+			continue
+		}
+		seenError[key] = true
+
+		issue := IssueInfo{
+			Severity:           "error",
+			Kind:               "inject_error",
+			Provider:           item.ProviderFunction,
+			OutputType:         item.OutputType,
+			Title:              item.ErrorType,
+			RootCause:          item.RootCause,
+			Hint:               item.Hint,
+			OccurredAtUnixNano: item.OccurredAtUnixNano,
+		}
+		if issue.Title == "" {
+			issue.Title = "inject error"
+		}
+		if detail, ok := lookup(item.ProviderFunction, item.OutputType); ok {
+			issue.ProviderID = detail.ProviderID
+			issue.Module = detail.OutputPkg
+		}
+		issues = append(issues, issue)
+	}
+
+	seenProvider := make(map[string]bool, len(stats))
+	for _, stat := range stats {
+		identity := stat.ProviderID
+		if identity == "" {
+			identity = stat.FunctionName + "\x00" + stat.OutputType
+		}
+		if seenProvider[identity] {
+			continue
+		}
+
+		isError := stat.LastError != ""
+		isSlow := slowThreshold > 0 &&
+			(stat.LastDuration > slowThreshold || (stat.CallCount > 0 && stat.AverageDuration > slowThreshold))
+		if !isError && !isSlow {
+			continue
+		}
+		seenProvider[identity] = true
+
+		detail, ok := providerByID[stat.ProviderID]
+		if !ok {
+			detail, _ = lookup(stat.FunctionName, stat.OutputType)
+		}
+		issue := IssueInfo{
+			Severity:           "slow",
+			Kind:               "provider_slow",
+			ProviderID:         stat.ProviderID,
+			Provider:           stat.FunctionName,
+			OutputType:         stat.OutputType,
+			Module:             detail.OutputPkg,
+			Title:              "slow provider",
+			RootCause:          stat.LastError,
+			OccurredAtUnixNano: stat.LastRunAtUnixNano,
+		}
+		if isError {
+			issue.Severity = "error"
+			issue.Kind = "provider_error"
+			issue.Title = "provider error"
+			issue.RootCause = stat.LastError
+		}
+		issues = append(issues, issue)
+	}
+
+	severityRank := map[string]int{"error": 0, "slow": 1}
+	sort.Slice(issues, func(i, j int) bool {
+		if severityRank[issues[i].Severity] != severityRank[issues[j].Severity] {
+			return severityRank[issues[i].Severity] < severityRank[issues[j].Severity]
+		}
+		if issues[i].OccurredAtUnixNano != issues[j].OccurredAtUnixNano {
+			return issues[i].OccurredAtUnixNano > issues[j].OccurredAtUnixNano
+		}
+		if issues[i].Kind != issues[j].Kind {
+			return issues[i].Kind < issues[j].Kind
+		}
+		return issues[i].Title < issues[j].Title
+	})
+	if len(issues) > limit {
+		issues = issues[:limit]
+	}
+	return issues
 }
 
 // HandleRuntimeStats returns provider runtime stats for startup/perf diagnosis.
