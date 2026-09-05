@@ -6,7 +6,7 @@ DIX.views = DIX.views || {};
 (function () {
   const budgets = {
     modules: { nodes: 100, edges: 300 },
-    module: { nodes: 100, edges: 300 },
+    module: { nodes: 150, edges: 400 },
     ego: { nodes: 100, edges: 300 },
     providers: { nodes: 150, edges: 400 },
     types: { nodes: 150, edges: 400 },
@@ -97,7 +97,7 @@ DIX.views = DIX.views || {};
   }
 
   async function loadModuleData(module, signal) {
-    return DIX.get("/api/module", { name: module, limit: 100, edge_limit: 300 }, { signal });
+    return DIX.get("/api/module", { name: module, limit: 150, edge_limit: 400 }, { signal });
   }
 
   function moduleNodeId(kind, label) {

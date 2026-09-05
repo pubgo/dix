@@ -25,3 +25,24 @@ test("stale graph loads are rejected by sequence", async () => {
   assert.equal(guard.isCurrent(first.seq), false);
   assert.equal(guard.isCurrent(second.seq), true);
 });
+
+test("issues have deterministic graph and trace links", async () => {
+  const { issueGraphHash, issueTraceHash } = await import("./graph_state.mjs");
+  const issue = {
+    output_type: "*app.Service",
+    provider: "app.NewService",
+    module: "app/service",
+  };
+  assert.equal(issueGraphHash(issue), "#/graph?mode=ego&center=*app.Service");
+  assert.equal(issueGraphHash({ ...issue, output_type: "" }), "#/graph?mode=module&module=app%2Fservice");
+  assert.equal(issueTraceHash(issue), "#/trace?provider=app.NewService&output_type=*app.Service&status=error");
+  assert.equal(
+    issueTraceHash({ ...issue, severity: "slow" }),
+    "#/trace?provider=app.NewService&output_type=*app.Service&status=slow"
+  );
+});
+
+test("resolveGraphMode accepts module drilldown", async () => {
+  const { resolveGraphMode } = await import("./graph_state.mjs");
+  assert.equal(resolveGraphMode(new URLSearchParams("mode=module")), "module");
+});
