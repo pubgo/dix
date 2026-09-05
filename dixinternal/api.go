@@ -164,14 +164,16 @@ func (dix *Dix) GetObjects() map[reflect.Type]map[string][]reflect.Value {
 
 // ProviderDetails contains detailed information about a provider
 type ProviderDetails struct {
-	OutputType   string
-	OutputPkg    string
-	FunctionName string
-	FunctionPkg  string
-	FunctionFile string
-	FunctionLine int
-	InputTypes   []string
-	InputPkgs    []string
+	OutputType     string   `json:"output_type"`
+	OutputPkg      string   `json:"output_pkg"`
+	FunctionName   string   `json:"function_name"`
+	FunctionPkg    string   `json:"function_pkg"`
+	FunctionFile   string   `json:"function_file"`
+	FunctionLine   int      `json:"function_line"`
+	InputTypes     []string `json:"input_types"`
+	InputPkgs      []string `json:"input_pkgs"`
+	RegistrationID uint64   `json:"registration_id"`
+	ProviderID     string   `json:"provider_id"`
 }
 
 // ProviderRuntimeStats contains provider runtime metrics for diagnostics.
@@ -238,14 +240,16 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 				inputPkgs = append(inputPkgs, resolveTypePkgPath(input.typ))
 			}
 			details = append(details, ProviderDetails{
-				OutputType:   outputType.String(),
-				OutputPkg:    resolveTypePkgPath(outputType),
-				FunctionName: fnName,
-				FunctionPkg:  resolveFuncPkgPath(fnName),
-				FunctionFile: fnFile,
-				FunctionLine: fnLine,
-				InputTypes:   inputTypes,
-				InputPkgs:    inputPkgs,
+				OutputType:     outputType.String(),
+				OutputPkg:      resolveTypePkgPath(outputType),
+				FunctionName:   fnName,
+				FunctionPkg:    resolveFuncPkgPath(fnName),
+				FunctionFile:   fnFile,
+				FunctionLine:   fnLine,
+				InputTypes:     inputTypes,
+				InputPkgs:      inputPkgs,
+				RegistrationID: providerFn.registrationID,
+				ProviderID:     fmt.Sprintf("provider_%d_%s", providerFn.registrationID, outputType.String()),
 			})
 		}
 	}

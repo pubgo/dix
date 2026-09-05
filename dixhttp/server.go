@@ -663,23 +663,9 @@ func buildDependencyData(details []dixinternal.ProviderDetails, objects map[refl
 		Edges:     []EdgeInfo{},
 	}
 
-	data.Providers = aggregateProviderInfos(details, pkgFilter, limit)
-
-	for _, provider := range data.Providers {
-		outputTypes := provider.OutputTypes
-		if len(outputTypes) == 0 && provider.OutputType != "" {
-			outputTypes = []string{provider.OutputType}
-		}
-		for _, outputType := range outputTypes {
-			for _, inputTypeStr := range provider.InputTypes {
-				data.Edges = append(data.Edges, EdgeInfo{
-					From: inputTypeStr,
-					To:   outputType,
-					Type: "provider",
-				})
-			}
-		}
-	}
+	providerEdges, providers := aggregateProviderInfos(details, pkgFilter, limit)
+	data.Providers = providers
+	data.Edges = append(data.Edges, providerEdges...)
 
 	// Extract object information using the cached objects table
 	for outputType, groupsMap := range objects {
@@ -717,11 +703,13 @@ func buildDependencyData(details []dixinternal.ProviderDetails, objects map[refl
 	return data
 }
 
-func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter string, limit int) []ProviderInfo {
+func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter string, limit int) ([]EdgeInfo, []ProviderInfo) {
 	type providerBucket struct {
-		provider   ProviderInfo
-		outputSeen map[string]bool
-		inputSeen  map[string]bool
+		provider       ProviderInfo
+		details        []dixinternal.ProviderDetails
+		outputSeen     map[string]bool
+		inputSeen      map[string]bool
+		providerIDSeen map[string]bool
 	}
 
 	buckets := make(map[string]*providerBucket)
@@ -740,19 +728,22 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 		if !exists {
 			bucket = &providerBucket{
 				provider: ProviderInfo{
-					ID:           "provider_" + key,
-					OutputType:   detail.OutputType,
-					OutputPkg:    detail.OutputPkg,
-					FunctionName: detail.FunctionName,
-					FunctionPkg:  detail.FunctionPkg,
-					FunctionFile: detail.FunctionFile,
-					FunctionLine: detail.FunctionLine,
-					OutputTypes:  make([]string, 0, 4),
-					InputTypes:   make([]string, 0, 8),
-					InputPkgs:    make([]string, 0, 8),
+					ID:             "provider_registration_" + key,
+					RegistrationID: detail.RegistrationID,
+					ProviderIDs:    make([]string, 0, 4),
+					OutputType:     detail.OutputType,
+					OutputPkg:      detail.OutputPkg,
+					FunctionName:   detail.FunctionName,
+					FunctionPkg:    detail.FunctionPkg,
+					FunctionFile:   detail.FunctionFile,
+					FunctionLine:   detail.FunctionLine,
+					OutputTypes:    make([]string, 0, 4),
+					InputTypes:     make([]string, 0, 8),
+					InputPkgs:      make([]string, 0, 8),
 				},
-				outputSeen: make(map[string]bool),
-				inputSeen:  make(map[string]bool),
+				outputSeen:     make(map[string]bool),
+				inputSeen:      make(map[string]bool),
+				providerIDSeen: make(map[string]bool),
 			}
 			buckets[key] = bucket
 			order = append(order, key)
@@ -765,6 +756,12 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 				bucket.provider.OutputType = out
 			}
 		}
+
+		if detail.ProviderID != "" && !bucket.providerIDSeen[detail.ProviderID] {
+			bucket.providerIDSeen[detail.ProviderID] = true
+			bucket.provider.ProviderIDs = append(bucket.provider.ProviderIDs, detail.ProviderID)
+		}
+		bucket.details = append(bucket.details, detail)
 
 		for i, in := range detail.InputTypes {
 			in = strings.TrimSpace(in)
@@ -783,18 +780,46 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 	}
 
 	providers := make([]ProviderInfo, 0, len(order))
+	edges := make([]EdgeInfo, 0, len(details)*2)
+	edgeSeen := make(map[string]bool, len(details)*2)
 	for _, key := range order {
-		providers = append(providers, buckets[key].provider)
+		bucket := buckets[key]
+		providers = append(providers, bucket.provider)
+
+		for _, detail := range bucket.details {
+			var outputTypes []string
+			if len(outputTypes) == 0 && detail.OutputType != "" {
+				outputTypes = []string{detail.OutputType}
+			}
+			for _, outputType := range outputTypes {
+				for _, inputType := range detail.InputTypes {
+					inputType = strings.TrimSpace(inputType)
+					outputType = strings.TrimSpace(outputType)
+					if inputType == "" || outputType == "" {
+						continue
+					}
+					edgeKey := inputType + "\x00" + outputType
+					if edgeSeen[edgeKey] {
+						continue
+					}
+					edgeSeen[edgeKey] = true
+					edges = append(edges, EdgeInfo{From: inputType, To: outputType, Type: "provider"})
+				}
+			}
+		}
 	}
 
 	if limit > 0 && len(providers) > limit {
 		providers = providers[:limit]
 	}
 
-	return providers
+	return edges, providers
 }
 
 func providerAggregateKey(detail dixinternal.ProviderDetails) string {
+	if detail.RegistrationID != 0 {
+		return fmt.Sprintf("registration_%d", detail.RegistrationID)
+	}
 	if detail.FunctionFile != "" && detail.FunctionLine > 0 {
 		return fmt.Sprintf("%s:%d", detail.FunctionFile, detail.FunctionLine)
 	}
@@ -868,16 +893,18 @@ type DependencyData struct {
 
 // ProviderInfo contains information about a provider
 type ProviderInfo struct {
-	ID           string   `json:"id"`
-	OutputType   string   `json:"output_type"`
-	OutputTypes  []string `json:"output_types,omitempty"`
-	OutputPkg    string   `json:"output_pkg"`
-	FunctionName string   `json:"function_name"`
-	FunctionPkg  string   `json:"function_pkg"`
-	FunctionFile string   `json:"function_file"`
-	FunctionLine int      `json:"function_line"`
-	InputTypes   []string `json:"input_types"`
-	InputPkgs    []string `json:"input_pkgs"`
+	ID             string   `json:"id"`
+	RegistrationID uint64   `json:"registration_id"`
+	ProviderIDs    []string `json:"provider_ids"`
+	OutputType     string   `json:"output_type"`
+	OutputTypes    []string `json:"output_types,omitempty"`
+	OutputPkg      string   `json:"output_pkg"`
+	FunctionName   string   `json:"function_name"`
+	FunctionPkg    string   `json:"function_pkg"`
+	FunctionFile   string   `json:"function_file"`
+	FunctionLine   int      `json:"function_line"`
+	InputTypes     []string `json:"input_types"`
+	InputPkgs      []string `json:"input_pkgs"`
 }
 
 // ObjectInfo contains information about an object instance

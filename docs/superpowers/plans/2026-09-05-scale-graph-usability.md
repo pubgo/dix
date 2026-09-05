@@ -170,9 +170,9 @@ git commit -m "feat(dixinternal): add provider registration identity"
 
 **Interfaces:**
 - Consumes: `providerFn.registrationID` from Task 1.
-- Produces: `ProviderDetails.ProviderID string`, `ProviderInfo.ProviderID string`, and `providerAggregateKey(detail dixinternal.ProviderDetails) string`.
+- Produces: `ProviderDetails.ProviderID string`, `ProviderInfo.ProviderIDs []string`, and `providerAggregateKey(detail dixinternal.ProviderDetails) string`.
 
-- [ ] **Step 1: Write the failing API projection test**
+- [x] **Step 1: Write the failing API projection test**
 
 Create `dixhttp/server_provider_identity_test.go`:
 
@@ -214,20 +214,25 @@ func TestDependenciesPreserveRegistrationAndOutputIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	registrationIDs := map[string]bool{}
+	registrationIDs := map[uint64]bool{}
 	providerIDs := map[string]bool{}
 	for _, provider := range response.Providers {
-		if provider.RegistrationID == "" || provider.ProviderID == "" {
+		if provider.OutputType != "*dixhttp.projectionOutputA" && provider.OutputType != "*dixhttp.projectionOutputB" {
+			continue
+		}
+		if provider.RegistrationID == 0 || len(provider.ProviderIDs) == 0 {
 			t.Fatalf("provider identities must not be empty: %+v", provider)
 		}
 		registrationIDs[provider.RegistrationID] = true
-		providerIDs[provider.ProviderID] = true
+		for _, providerID := range provider.ProviderIDs {
+			providerIDs[providerID] = true
+		}
 	}
 	if len(registrationIDs) != 1 {
 		t.Fatalf("one struct registration should produce one registration_id, got %v", registrationIDs)
 	}
 	if len(providerIDs) != 2 {
-		t.Fatalf("two outputs should produce two provider_ids, got %v", providerIDs)
+		t.Fatalf("two outputs should produce two provider IDs, got %v", providerIDs)
 	}
 }
 
@@ -245,10 +250,19 @@ func TestDistinctSameLineRegistrationsDoNotCartesianProductEdges(t *testing.T) {
 	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if len(response.Providers) != 2 {
-		t.Fatalf("expected distinct provider nodes, got %d", len(response.Providers))
+	targetCount := 0
+	for _, provider := range response.Providers {
+		if provider.OutputType == "*dixhttp.projectionOutputA" {
+			targetCount++
+		}
+	}
+	if targetCount != 2 {
+		t.Fatalf("expected distinct provider nodes, got %d", targetCount)
 	}
 	for _, provider := range response.Providers {
+		if provider.OutputType != "*dixhttp.projectionOutputA" {
+			continue
+		}
 		if len(provider.InputTypes)*len(provider.OutputTypes) > 1 {
 			t.Fatalf("unrelated input/output pairs created a Cartesian product: %+v", provider)
 		}
@@ -256,7 +270,7 @@ func TestDistinctSameLineRegistrationsDoNotCartesianProductEdges(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the focused HTTP test and verify RED**
+- [x] **Step 2: Run the focused HTTP test and verify RED**
 
 Run:
 
@@ -266,7 +280,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: compilation fails because `RegistrationID` and `ProviderID` do not exist.
 
-- [ ] **Step 3: Project and aggregate by registration identity**
+- [x] **Step 3: Project and aggregate by registration identity**
 
 In `dixinternal.ProviderDetails`, add:
 
@@ -285,9 +299,11 @@ providerID := fmt.Sprintf("provider_%d_%s", registrationID, outputType.String())
 In `dixhttp.ProviderInfo`, add:
 
 ```go
-RegistrationID uint64 `json:"registration_id"`
-ProviderID     string `json:"provider_id"`
+RegistrationID uint64   `json:"registration_id"`
+ProviderIDs    []string `json:"provider_ids"`
 ```
+
+A logical registration with multiple outputs must expose one concrete `provider_id` per output in `ProviderIDs`. It cannot use a single `provider_id` without losing runtime-state correlation.
 
 Change the aggregate bucket key to:
 
@@ -310,11 +326,11 @@ func providerAggregateKey(detail dixinternal.ProviderDetails) string {
 }
 ```
 
-Copy both identities into `ProviderInfo`. Use `detail.ProviderID` for the output-specific node. Edge generation must iterate actual detail input/output pairs while accumulating bucket metadata; it must not regenerate from merged `InputTypes × OutputTypes`.
+Copy `RegistrationID` into `ProviderInfo`, and collect every output-specific `detail.ProviderID` into `ProviderIDs`. Edge generation must iterate actual detail input/output pairs while accumulating bucket metadata; it must not regenerate from merged `InputTypes × OutputTypes`.
 
 Refactor the bucket to retain raw `dixinternal.ProviderDetails` values so edge building can preserve exact relationships.
 
-- [ ] **Step 4: Run the focused HTTP test and verify GREEN**
+- [x] **Step 4: Run the focused HTTP test and verify GREEN**
 
 Run:
 
@@ -324,7 +340,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: both tests pass.
 
-- [ ] **Step 5: Run existing dependency regression tests**
+- [x] **Step 5: Run existing dependency regression tests**
 
 Run:
 
@@ -334,7 +350,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: pass, including the existing multi-output aggregation test.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add dixinternal/api.go dixhttp/server.go dixhttp/server_provider_identity_test.go
@@ -353,7 +369,7 @@ git commit -m "fix(dixhttp): preserve provider identity and dependency edges"
 
 **Interfaces:**
 - Consumes: `providerFn.registrationID`.
-- Produces: `ProviderRuntimeStats.RegistrationID uint64`, `ProviderRuntimeStats.ProviderID string`, and `statForProvider(provider ProviderInfo)`.
+- Produces: `ProviderRuntimeStats.RegistrationID uint64`, `ProviderRuntimeStats.ProviderID string`, and `statForProvider(provider ProviderInfo) ProviderRuntimeStats | null`.
 
 - [ ] **Step 1: Write the failing runtime identity test**
 
@@ -447,10 +463,12 @@ Update the graph JS stat lookup to use:
 
 ```js
 function statForProvider(provider) {
-  return (state.runtimeStats || []).find(s =>
-    (s.provider_id && provider.provider_id && s.provider_id === provider.provider_id) ||
-    (!s.provider_id && s.function_name === provider.function_name)
-  ) || null;
+  const stats = state.runtimeStats || [];
+  for (const providerID of provider.provider_ids || []) {
+    const exact = stats.find(s => s.provider_id === providerID);
+    if (exact) return exact;
+  }
+  return stats.find(s => !s.provider_id && s.function_name === provider.function_name) || null;
 }
 ```
 
