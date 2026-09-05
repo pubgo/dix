@@ -10,10 +10,10 @@ This module provides an HTTP server to visualize dependency relationships in the
 
 | 视图(hash 路由) | 主任务 | 数据源 |
 | --- | --- | --- |
-| 概览 `#/overview` | 全局状态一览 | `/api/stats`、`/api/errors` |
-| 依赖图 `#/graph` | 模块地图(默认) + 模块内视图 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/search`、`/api/ego`;全局视图才使用 `/api/dependencies` |
+| 概览 `#/overview` | 全局状态一览 + Issues 诊断流 | `/api/stats`、`/api/issues` |
+| 依赖图 `#/graph` | 模块地图(默认) + 模块内视图 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/module`、`/api/search`、`/api/ego`;全局视图才使用 `/api/dependencies` |
 | 检索 `#/search` | 服务端检索 + 状态过滤,一键跳转依赖图 | `/api/search` |
-| 调用链 `#/trace` | trace 列表(错误优先)+ 嵌套调用树 | `/api/trace`、`/api/trace-tree` |
+| 调用链 `#/trace` | trace 列表(错误优先)+ 嵌套调用树;支持从 Issue/图节点预过滤 | `/api/trace`、`/api/trace-tree` |
 | 诊断 `#/diag` | 最近注入错误 + provider 启动耗时 | `/api/errors`、`/api/runtime-stats` |
 
 
@@ -27,11 +27,13 @@ Module map  ->  module detail  ->  type / provider detail  ->  ego graph / trace
 
 - The default graph mode is the module map, not a global provider dump.
 - Module map is bounded to 100 nodes and 300 edges.
-- Module/global views are bounded to 150 nodes and 400 edges.
+- Module drill-down is bounded to 150 nodes and 400 edges; advanced global providers/types views use the same 150/400 caps.
 - Ego graph uses depth 2 by default and supports up to depth 5.
 - Objects are shown as state in type/provider details and module counts; they are not rendered as nodes by default.
-- When a view exceeds its budget, the UI keeps the highest-connectivity nodes and shows a density warning directing you to search or narrow the module.
+- When a view exceeds its budget, the UI keeps the highest-connectivity nodes, shows a density warning, and lists hub nodes so you can narrow scope or search.
+- Overview Issues jump to a bounded ego/module graph or a filtered Trace view (`#/trace?provider=...&output_type=...`); graph drawers can open the same Trace filter.
 - `/api/dependencies` is a compatibility/full-data endpoint for global and legacy views; it is not loaded by the default module map.
+- Legacy `/` UI remains available alongside `/next`.
 
 ## Features
 
