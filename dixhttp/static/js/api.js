@@ -3,7 +3,7 @@ window.DIX = window.DIX || {};
 (function () {
   const base = window.DIX_BASE || "";
 
-  DIX.get = async function (path, params) {
+  DIX.get = async function (path, params, options = {}) {
     let url = base + path;
     if (params) {
       const qs = new URLSearchParams();
@@ -13,7 +13,7 @@ window.DIX = window.DIX || {};
       const q = qs.toString();
       if (q) url += "?" + q;
     }
-    const resp = await fetch(url);
+    const resp = await fetch(url, { signal: options.signal });
     if (!resp.ok) {
       const text = await resp.text();
       throw new Error(resp.status + " " + text.slice(0, 200));

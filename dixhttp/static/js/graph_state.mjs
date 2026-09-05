@@ -30,6 +30,19 @@ export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300
   };
 }
 
+export function createLoadGuard() {
+  let current = 0;
+  return {
+    begin() {
+      current += 1;
+      return { seq: current };
+    },
+    isCurrent(seq) {
+      return seq === current;
+    },
+  };
+}
+
 
 export function issueGraphHash(issue = {}) {
   const params = new URLSearchParams();
@@ -57,5 +70,5 @@ export function issueTraceHash(issue = {}) {
 }
 
 if (typeof window !== "undefined") {
-  window.DIXGraphState = { resolveGraphMode, applyGraphBudget, issueGraphHash, issueTraceHash };
+  window.DIXGraphState = { resolveGraphMode, applyGraphBudget, createLoadGuard, issueGraphHash, issueTraceHash };
 }

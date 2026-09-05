@@ -16,3 +16,12 @@ test("graphs degrade to table metadata above explicit budgets", async () => {
   assert.equal(result.edges.length, 300);
   assert.equal(result.degraded, true);
 });
+
+test("stale graph loads are rejected by sequence", async () => {
+  const { createLoadGuard } = await import("./graph_state.mjs");
+  const guard = createLoadGuard();
+  const first = guard.begin();
+  const second = guard.begin();
+  assert.equal(guard.isCurrent(first.seq), false);
+  assert.equal(guard.isCurrent(second.seq), true);
+});
