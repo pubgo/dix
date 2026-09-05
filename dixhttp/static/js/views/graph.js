@@ -6,13 +6,14 @@ DIX.views = DIX.views || {};
 (function () {
   const budgets = {
     modules: { nodes: 100, edges: 300 },
+    module: { nodes: 100, edges: 300 },
     ego: { nodes: 100, edges: 300 },
     providers: { nodes: 150, edges: 400 },
     types: { nodes: 150, edges: 400 },
   };
 
   const state = {
-    mode: "modules", layout: "hierarchical", depth: 0, prefix: "",
+    mode: "modules", layout: "hierarchical", depth: 0, prefix: "", module: "",
     allData: null, runtimeStats: null, focus: null, network: null,
   };
 
@@ -26,8 +27,10 @@ DIX.views = DIX.views || {};
           <option value="ego">邻域子图</option>
           <option value="providers">全局 · Providers</option>
           <option value="types">全局 · 类型依赖</option>
-          <option value="modules">模块图</option>
+          <option value="modules">模块地图</option>
+          <option value="module">模块下钻</option>
         </select>
+        <input type="text" id="g-module" placeholder="模块包路径" value="${DIX.esc(query.get("module") || "")}" style="min-width:260px;display:none">
         <span id="g-ego-controls" style="display:inline-flex;gap:8px">
           <input type="text" id="g-center" placeholder="中心类型" value="${DIX.esc(query.get("center") || "")}" style="min-width:260px">
           <select id="g-depth-ego"><option value="1">1 跳</option><option value="2" selected>2 跳</option><option value="3">3 跳</option><option value="4">4 跳</option><option value="5">5 跳</option></select>
@@ -71,6 +74,18 @@ DIX.views = DIX.views || {};
       if (exact) return exact;
     }
     return stats.find(s => !s.provider_id && s.function_name === provider.function_name) || null;
+  }
+
+  async function loadModuleData(module) {
+    return DIX.get("/api/module", { name: module, limit: 100, edge_limit: 300 });
+  }
+
+  function moduleNodeId(kind, label) {
+    return kind + ":" + label;
+  }
+
+  function moduleEndpointId(edge, field) {
+    return moduleNodeId(edge[field + "Kind"] || "type", edge[field]);
   }
 
   // ---------- 全局图构建(移植自旧版 renderGraph) ----------
@@ -300,7 +315,15 @@ DIX.views = DIX.views || {};
       <p class="mono">${DIX.esc(m.name)}</p>
       <p>类型 ${m.type_count} · provider ${m.provider_count} · 对象 ${m.object_count}</p>
       <p><b>依赖模块:</b> ${(m.depends_on || []).map(x => '<span class="chip mono">' + DIX.esc(shortType(x)) + '</span>').join("") || '<span class="muted">无</span>'}</p>
-      <p><button class="btn ghost" id="d-prefix">在全局图中按此模块过滤</button></p>`;
+      <p><button class="btn" id="d-drill">下钻模块拓扑</button></p><p><button class="btn ghost" id="d-prefix">在全局图中按此模块过滤</button></p>`;
+    document.getElementById("d-drill").onclick = () => {
+      state.mode = "module";
+      state.module = m.name;
+      document.getElementById("g-mode").value = "module";
+      document.getElementById("g-module").value = m.name;
+      syncGraphHash();
+      redraw();
+    };
     document.getElementById("d-prefix").onclick = () => {
       state.mode = "providers";
       document.getElementById("g-mode").value = "providers";
@@ -317,6 +340,34 @@ DIX.views = DIX.views || {};
       let graph;
       if (state.mode === "modules") {
         graph = await buildModules();
+      } else if (state.mode === "module") {
+        if (!state.module) {
+          canvas.innerHTML = '<p class="muted" style="padding:20px">选择模块后查看有界拓扑。</p>';
+          return;
+        }
+        const view = await loadModuleData(state.module);
+        graph = {
+          nodes: view.nodes.map(n => ({
+            id: moduleNodeId(n.kind, n.label),
+            label: (n.kind === "provider" ? "⚡ " : "") + shortType(n.label),
+            shape: n.kind === "provider" ? "box" : "ellipse",
+            font: { size: 11 },
+            color: n.external
+              ? { background: "#f8fafc", border: "#94a3b8", borderDashes: true }
+              : n.kind === "provider"
+                ? { background: "#eef0ff", border: "#4f5ce5" }
+                : { background: "#bfdbfe", border: "#3b82f6" },
+            title: n.label + (n.external ? "\n(external)" : ""),
+            data: { kind: n.kind, label: n.label, pkg: n.pkg, provider: n.provider },
+          })),
+          edges: view.edges.map(e => ({
+            from: moduleEndpointId(e, "from"),
+            to: moduleEndpointId(e, "to"),
+            arrows: "to", color: { color: e.from_kind === "provider" ? "#22c55e" : "#9ca3af" },
+          })),
+          truncated: view.truncated,
+          summary: view,
+        };
       } else if (state.mode === "ego") {
         const center = document.getElementById("g-center").value.trim();
         const depth = document.getElementById("g-depth-ego").value;
@@ -341,8 +392,8 @@ DIX.views = DIX.views || {};
       }
       const bounded = window.DIXGraphState.applyGraphBudget(graph.nodes, graph.edges, budgets[state.mode]);
       const warning = document.getElementById("g-budget");
-      warning.style.display = bounded.degraded ? "block" : "none";
-      if (bounded.degraded) {
+      warning.style.display = (bounded.degraded || graph.truncated) ? "block" : "none";
+      if (bounded.degraded || graph.truncated) {
         warning.textContent = "图规模超过展示预算，已保留关联最多的节点；请缩小模块、降低跳数，或使用检索定位具体类型。";
       }
       renderNetwork(canvas, bounded.nodes, bounded.edges);
@@ -361,13 +412,16 @@ DIX.views = DIX.views || {};
       document.getElementById("g-layout").value = state.layout;
       state.prefix = query.get("prefix") || "";
       document.getElementById("g-prefix").value = state.prefix;
+      state.module = query.get("module") || "";
+      document.getElementById("g-module").value = state.module;
       state.depth = Number(query.get("depth")) || 0;
       document.getElementById("g-depth-all").value = String(state.depth);
       if (query.get("dir")) document.getElementById("g-dir").value = query.get("dir");
 
       document.getElementById("g-mode").addEventListener("change", () => {
         state.mode = document.getElementById("g-mode").value;
-        document.getElementById("g-ego-controls").style.display = state.mode === "ego" ? "inline-flex" : "none";
+        updateModeControls();
+        syncGraphHash();
         redraw();
       });
       document.getElementById("g-layout").addEventListener("change", () => {
@@ -376,6 +430,11 @@ DIX.views = DIX.views || {};
       });
       document.getElementById("g-depth-all").addEventListener("change", () => {
         state.depth = Number(document.getElementById("g-depth-all").value);
+        redraw();
+      });
+      document.getElementById("g-module").addEventListener("change", () => {
+        state.module = document.getElementById("g-module").value;
+        syncGraphHash();
         redraw();
       });
       document.getElementById("g-prefix").addEventListener("change", () => {
@@ -391,10 +450,36 @@ DIX.views = DIX.views || {};
       document.getElementById("g-form").addEventListener("submit", ev => {
         ev.preventDefault();
         state.mode = document.getElementById("g-mode").value;
+        state.module = document.getElementById("g-module").value;
+        syncGraphHash();
         redraw();
       });
 
-      document.getElementById("g-ego-controls").style.display = state.mode === "ego" ? "inline-flex" : "none";
+      function updateModeControls() {
+        document.getElementById("g-ego-controls").style.display = state.mode === "ego" ? "inline-flex" : "none";
+        document.getElementById("g-module").style.display = state.mode === "module" ? "inline-flex" : "none";
+      }
+
+      function syncGraphHash() {
+        const query = new URLSearchParams();
+        query.set("mode", state.mode);
+        if (state.mode === "module" && state.module) query.set("module", state.module);
+        if (state.mode === "ego") {
+          const center = document.getElementById("g-center").value.trim();
+          if (center) query.set("center", center);
+          query.set("depth", document.getElementById("g-depth-ego").value);
+          query.set("dir", document.getElementById("g-dir").value);
+        }
+        if (state.mode === "providers" || state.mode === "types") {
+          if (state.prefix) query.set("prefix", state.prefix);
+          if (state.depth) query.set("depth", String(state.depth));
+        }
+        query.set("layout", state.layout);
+        history.replaceState(null, "", "#/graph?" + query.toString());
+      }
+
+      updateModeControls();
+      syncGraphHash();
       await redraw();
     },
   };

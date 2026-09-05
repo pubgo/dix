@@ -1,6 +1,6 @@
 export function resolveGraphMode(query) {
   const mode = (query.get("mode") || "").trim();
-  return ["modules", "ego", "providers", "types"].includes(mode) ? mode : "modules";
+  return ["modules", "module", "ego", "providers", "types"].includes(mode) ? mode : "modules";
 }
 
 export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300 }) {
@@ -30,6 +30,32 @@ export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300
   };
 }
 
+
+export function issueGraphHash(issue = {}) {
+  const params = new URLSearchParams();
+  if (issue.output_type) {
+    params.set("mode", "ego");
+    params.set("center", issue.output_type);
+  } else if (issue.module) {
+    params.set("mode", "module");
+    params.set("module", issue.module);
+  } else if (issue.provider) {
+    params.set("mode", "providers");
+    params.set("prefix", issue.provider);
+  } else {
+    params.set("mode", "modules");
+  }
+  return "#/graph?" + params.toString();
+}
+
+export function issueTraceHash(issue = {}) {
+  const params = new URLSearchParams();
+  if (issue.provider) params.set("provider", issue.provider);
+  if (issue.output_type) params.set("output_type", issue.output_type);
+  params.set("status", issue.severity === "slow" ? "slow" : "error");
+  return "#/trace?" + params.toString();
+}
+
 if (typeof window !== "undefined") {
-  window.DIXGraphState = { resolveGraphMode, applyGraphBudget };
+  window.DIXGraphState = { resolveGraphMode, applyGraphBudget, issueGraphHash, issueTraceHash };
 }

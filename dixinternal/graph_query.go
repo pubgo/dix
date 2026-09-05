@@ -357,7 +357,12 @@ func (dix *Dix) ModuleView(name string, nodeLimit, edgeLimit int) ModuleDetailVi
 		if !keep[item.from.ID] || !keep[item.to.ID] {
 			continue
 		}
-		view.Edges = append(view.Edges, GraphEdge{From: item.from.Label, To: item.to.Label})
+		view.Edges = append(view.Edges, GraphEdge{
+			From:     item.from.Label,
+			To:       item.to.Label,
+			FromKind: nodeKindName(item.from.Kind),
+			ToKind:   nodeKindName(item.to.Kind),
+		})
 	}
 
 	appendDeps := func(target *[]ModuleDependency, source map[string]int) {
@@ -373,8 +378,10 @@ func (dix *Dix) ModuleView(name string, nodeLimit, edgeLimit int) ModuleDetailVi
 
 // GraphEdge 是邻域子图里的一条声明依赖边(类型 label 表示)。
 type GraphEdge struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	FromKind string `json:"from_kind,omitempty"`
+	ToKind   string `json:"to_kind,omitempty"`
 }
 
 // GraphView 是邻域子图:节点摘要 + 声明边。
