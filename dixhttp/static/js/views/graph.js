@@ -4,8 +4,15 @@ window.DIX = window.DIX || {};
 DIX.views = DIX.views || {};
 
 (function () {
+  const budgets = {
+    modules: { nodes: 100, edges: 300 },
+    ego: { nodes: 100, edges: 300 },
+    providers: { nodes: 150, edges: 400 },
+    types: { nodes: 150, edges: 400 },
+  };
+
   const state = {
-    mode: "ego", layout: "hierarchical", depth: 0, prefix: "",
+    mode: "modules", layout: "hierarchical", depth: 0, prefix: "",
     allData: null, runtimeStats: null, focus: null, network: null,
   };
 
@@ -32,19 +39,25 @@ DIX.views = DIX.views || {};
         <button class="btn" type="submit">绘制</button>
         <button class="btn ghost" type="button" id="g-reset">重置</button>
       </form>
-      <div class="grid" style="grid-template-columns: 1fr 320px; align-items:start">
-        <div id="graph-canvas"></div>
+      <div class="graph-layout">
+        <div>
+          <div id="g-budget" class="card muted" style="display:none;margin-bottom:10px"></div>
+          <div id="graph-canvas"></div>
+        </div>
         <div class="card" id="g-detail"><h3>节点详情</h3><div class="muted">点击图中节点查看详情。</div></div>
       </div>
       <p class="muted" style="margin-top:10px">全局图:绿色实线=产物,黄色虚线=依赖;box=provider,椭圆=类型。单击节点看详情,双击类型节点聚焦。</p>`;
   }
 
-  async function loadData() {
+  async function loadRuntimeStats() {
+    if (state.runtimeStats) return;
+    try { state.runtimeStats = await DIX.get("/api/runtime-stats", { limit: 500 }); }
+    catch { state.runtimeStats = []; }
+  }
+
+  async function loadProviderData() {
     if (!state.allData) state.allData = await DIX.get("/api/dependencies");
-    if (!state.runtimeStats) {
-      try { state.runtimeStats = await DIX.get("/api/runtime-stats", { limit: 500 }); }
-      catch { state.runtimeStats = []; }
-    }
+    await loadRuntimeStats();
   }
 
   function statFor(fnName) {
@@ -302,7 +315,6 @@ DIX.views = DIX.views || {};
   async function redraw() {
     const canvas = document.getElementById("graph-canvas");
     try {
-      await loadData(); // 详情抽屉也依赖 allData,所有模式都预载
       let graph;
       if (state.mode === "modules") {
         graph = await buildModules();
@@ -324,10 +336,17 @@ DIX.views = DIX.views || {};
           edges: view.edges.map(e => ({ from: e.from, to: e.to, arrows: "to", color: { color: "#9ca3af" } })),
         };
       } else {
+        await loadProviderData();
         const built = buildGlobal();
         graph = prune(built.nodes, built.edges);
       }
-      renderNetwork(canvas, graph.nodes, graph.edges);
+      const bounded = window.DIXGraphState.applyGraphBudget(graph.nodes, graph.edges, budgets[state.mode]);
+      const warning = document.getElementById("g-budget");
+      warning.style.display = bounded.degraded ? "block" : "none";
+      if (bounded.degraded) {
+        warning.textContent = "图规模超过展示预算，已保留关联最多的节点；请缩小模块、降低跳数，或使用检索定位具体类型。";
+      }
+      renderNetwork(canvas, bounded.nodes, bounded.edges);
     } catch (err) {
       DIX.renderError(canvas, err);
     }
@@ -337,7 +356,7 @@ DIX.views = DIX.views || {};
     async render(el, query) {
       el.innerHTML = toolbarHTML(query);
 
-      state.mode = query.get("mode") || "ego";
+      state.mode = window.DIXGraphState.resolveGraphMode(query);
       document.getElementById("g-mode").value = state.mode;
       state.layout = query.get("layout") || "hierarchical";
       document.getElementById("g-layout").value = state.layout;

@@ -676,7 +676,7 @@ git commit -m "fix(dixhttp): correct graph projection state and modules"
 - Consumes: `/api/modules`, `/api/ego`, and identity-aware `ProviderInfo`.
 - Produces: `resolveGraphMode(query)`, `applyGraphBudget(nodes, edges, budget)`, and module-first graph state.
 
-- [ ] **Step 1: Write failing pure JS view tests**
+- [x] **Step 1: Write failing pure JS view tests**
 
 Create `dixhttp/static/js/graph_view.test.mjs`:
 
@@ -693,7 +693,7 @@ test("graph defaults to module map instead of empty ego", async () => {
 test("graphs degrade to table metadata above explicit budgets", async () => {
   const { applyGraphBudget } = await import("./graph_state.mjs");
   const nodes = Array.from({ length: 101 }, (_, i) => ({ id: String(i) }));
-  const edges = Array.from({ length: 301 }, (_, i) => ({ from: "0", to: String(i + 1) }));
+  const edges = Array.from({ length: 301 }, (_, i) => ({ from: String(i % 100), to: String((i + 1) % 100) }));
   const result = applyGraphBudget(nodes, edges, { nodes: 100, edges: 300 });
   assert.equal(result.nodes.length, 100);
   assert.equal(result.edges.length, 300);
@@ -701,7 +701,7 @@ test("graphs degrade to table metadata above explicit budgets", async () => {
 });
 ```
 
-- [ ] **Step 2: Run JS tests and verify RED**
+- [x] **Step 2: Run JS tests and verify RED**
 
 Run:
 
@@ -711,7 +711,7 @@ node --test dixhttp/static/js/graph_view.test.mjs
 
 Expected: module resolution fails because `graph_state.mjs` does not exist.
 
-- [ ] **Step 3: Extract and implement pure graph state helpers**
+- [x] **Step 3: Extract and implement pure graph state helpers**
 
 Create `dixhttp/static/js/graph_state.mjs`:
 
@@ -749,11 +749,11 @@ Create a browser adapter `dixhttp/static/js/graph_state.js` that exposes the sam
 
 Update `views/graph.js` to import/use these helpers, default the select control to `modules`, and render a visible density warning when `degraded` is true.
 
-- [ ] **Step 4: Remove eager full dependencies loading**
+- [x] **Step 4: Remove eager full dependencies loading**
 
 Change `loadData()` so only providers/types detail views request `/api/dependencies`; module and ego views must not preload it. Request runtime stats in parallel and cache by provider identity. The graph draw path must use `/api/modules` for module mode and `/api/ego` for ego mode.
 
-- [ ] **Step 5: Run JS tests**
+- [x] **Step 5: Run JS tests**
 
 Run:
 
@@ -763,7 +763,7 @@ node --test dixhttp/static/js/graph_view.test.mjs
 
 Expected: both tests pass.
 
-- [ ] **Step 6: Run Go tests**
+- [x] **Step 6: Run Go tests**
 
 Run:
 
@@ -773,7 +773,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: all packages pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add dixhttp/static/js/graph_state.mjs dixhttp/static/js/graph_state.js dixhttp/static/js/views/graph.js dixhttp/static/js/graph_view.test.mjs
