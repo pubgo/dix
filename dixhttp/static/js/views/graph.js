@@ -418,9 +418,17 @@ DIX.views = DIX.views || {};
       }
       const bounded = window.DIXGraphState.applyGraphBudget(graph.nodes, graph.edges, budgets[state.mode]);
       const warning = document.getElementById("g-budget");
-      warning.style.display = (bounded.degraded || graph.truncated) ? "block" : "none";
-      if (bounded.degraded || graph.truncated) {
-        warning.textContent = "图规模超过展示预算，已保留关联最多的节点；请缩小模块、降低跳数，或使用检索定位具体类型。";
+      const overBudget = bounded.degraded || graph.truncated;
+      warning.style.display = overBudget ? "block" : "none";
+      if (overBudget) {
+        const hubs = window.DIXGraphState.rankHubNodes(bounded.nodes, bounded.edges, 8);
+        warning.innerHTML =
+          `<p>图规模超过展示预算（保留 ${bounded.nodes.length} 节点 / ${bounded.edges.length} 边）。请缩小模块、降低跳数，或使用检索定位具体类型。</p>` +
+          (hubs.length
+            ? `<table class="tbl"><tr><th>枢纽节点</th><th class="num">度数</th></tr>` +
+              hubs.map(h => `<tr><td class="mono">${DIX.esc(h.id)}</td><td class="num">${h.degree}</td></tr>`).join("") +
+              `</table>`
+            : "");
       }
       renderNetwork(canvas, bounded.nodes, bounded.edges);
     } catch (err) {

@@ -46,3 +46,14 @@ test("resolveGraphMode accepts module drilldown", async () => {
   const { resolveGraphMode } = await import("./graph_state.mjs");
   assert.equal(resolveGraphMode(new URLSearchParams("mode=module")), "module");
 });
+
+test("rankHubNodes returns highest-degree nodes first", async () => {
+  const { rankHubNodes } = await import("./graph_state.mjs");
+  const nodes = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  const edges = [
+    { from: "a", to: "b" },
+    { from: "a", to: "c" },
+    { from: "b", to: "c" },
+  ];
+  assert.deepEqual(rankHubNodes(nodes, edges, 2).map((h) => h.id), ["a", "b"]);
+});

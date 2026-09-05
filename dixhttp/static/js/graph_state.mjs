@@ -43,6 +43,19 @@ export function createLoadGuard() {
   };
 }
 
+export function rankHubNodes(nodes, edges, limit = 10) {
+  const degree = new Map();
+  for (const node of nodes) degree.set(node.id, 0);
+  for (const edge of edges) {
+    degree.set(edge.from, (degree.get(edge.from) || 0) + 1);
+    degree.set(edge.to, (degree.get(edge.to) || 0) + 1);
+  }
+  return [...nodes]
+    .map((node) => ({ id: node.id, degree: degree.get(node.id) || 0 }))
+    .sort((a, b) => b.degree - a.degree || String(a.id).localeCompare(String(b.id)))
+    .slice(0, limit);
+}
+
 
 export function issueGraphHash(issue = {}) {
   const params = new URLSearchParams();
@@ -70,5 +83,5 @@ export function issueTraceHash(issue = {}) {
 }
 
 if (typeof window !== "undefined") {
-  window.DIXGraphState = { resolveGraphMode, applyGraphBudget, createLoadGuard, issueGraphHash, issueTraceHash };
+  window.DIXGraphState = { resolveGraphMode, applyGraphBudget, createLoadGuard, rankHubNodes, issueGraphHash, issueTraceHash };
 }
