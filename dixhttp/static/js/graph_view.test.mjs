@@ -57,3 +57,18 @@ test("rankHubNodes returns highest-degree nodes first", async () => {
   ];
   assert.deepEqual(rankHubNodes(nodes, edges, 2).map((h) => h.id), ["a", "b"]);
 });
+
+test("filterTraceRecords keeps matching provider and status", async () => {
+  const { filterTraceRecords } = await import("./graph_state.mjs");
+  const records = [
+    { trace_id: "aa", provider_function: "app.NewA", output_type: "*A", status: "error" },
+    { trace_id: "bb", provider_function: "app.NewB", output_type: "*B", status: "ok" },
+    { trace_id: "cc", provider_function: "app.NewA", output_type: "*A", status: "ok" },
+  ];
+  const filtered = filterTraceRecords(records, {
+    provider: "app.NewA",
+    output_type: "*A",
+    status: "error",
+  });
+  assert.deepEqual(filtered.map((r) => r.trace_id), ["aa"]);
+});

@@ -82,6 +82,25 @@ export function issueTraceHash(issue = {}) {
   return "#/trace?" + params.toString();
 }
 
+export function matchTraceRecord(rec = {}, filter = {}) {
+  if (filter.trace_id && rec.trace_id !== filter.trace_id) return false;
+  const provider = rec.provider_function || rec.provider || "";
+  if (filter.provider && provider !== filter.provider) return false;
+  if (filter.output_type && rec.output_type !== filter.output_type) return false;
+  if (filter.status === "error" && rec.status !== "error") return false;
+  if (filter.status === "slow") {
+    return true;
+  }
+  return true;
+}
+
+export function filterTraceRecords(records = [], filter = {}) {
+  return records.filter((rec) => matchTraceRecord(rec, filter));
+}
+
 if (typeof window !== "undefined") {
-  window.DIXGraphState = { resolveGraphMode, applyGraphBudget, createLoadGuard, rankHubNodes, issueGraphHash, issueTraceHash };
+  window.DIXGraphState = {
+    resolveGraphMode, applyGraphBudget, createLoadGuard, rankHubNodes,
+    issueGraphHash, issueTraceHash, matchTraceRecord, filterTraceRecords,
+  };
 }
