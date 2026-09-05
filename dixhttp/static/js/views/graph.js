@@ -51,6 +51,15 @@ DIX.views = DIX.views || {};
     return (state.runtimeStats || []).find(s => s.function_name === fnName) || null;
   }
 
+  function statForProvider(provider) {
+    const stats = state.runtimeStats || [];
+    for (const providerID of provider.provider_ids || []) {
+      const exact = stats.find(s => s.provider_id === providerID);
+      if (exact) return exact;
+    }
+    return stats.find(s => !s.provider_id && s.function_name === provider.function_name) || null;
+  }
+
   // ---------- 全局图构建(移植自旧版 renderGraph) ----------
   function buildGlobal() {
     if (!state.allData) return { nodes: [], edges: [] };
@@ -71,7 +80,7 @@ DIX.views = DIX.views || {};
       providers.forEach(p => {
         if (!nodeMap.has(p.id)) {
           nodeMap.set(p.id, true);
-          const st = statFor(p.function_name);
+          const st = statForProvider(p);
           const isErr = !!(st && st.last_error);
           nodes.push({
             id: p.id, label: shortType(p.output_type || p.function_name),
@@ -212,7 +221,7 @@ DIX.views = DIX.views || {};
 
   function providerDetail(box, d) {
     const p = d.provider || {};
-    const st = statFor(p.function_name);
+    const st = statForProvider(p);
     box.innerHTML = `
       <h3>Provider</h3>
       <p class="mono">${DIX.esc(p.function_name || d.label)}</p>

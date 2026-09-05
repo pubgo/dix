@@ -371,7 +371,7 @@ git commit -m "fix(dixhttp): preserve provider identity and dependency edges"
 - Consumes: `providerFn.registrationID`.
 - Produces: `ProviderRuntimeStats.RegistrationID uint64`, `ProviderRuntimeStats.ProviderID string`, and `statForProvider(provider ProviderInfo) ProviderRuntimeStats | null`.
 
-- [ ] **Step 1: Write the failing runtime identity test**
+- [x] **Step 1: Write the failing runtime identity test**
 
 Create `dixinternal/runtime_stats_identity_test.go`:
 
@@ -388,7 +388,7 @@ type runtimeTarget struct{ Name string }
 func TestRuntimeStatsIncludeConcreteProviderIdentity(t *testing.T) {
 	di := New()
 	di.Provide(func() *runtimeTarget { return &runtimeTarget{Name: "ready"} })
-	_, _ = di.TryInject(func(*runtimeTarget) {})
+	_ = di.TryInject(func(*runtimeTarget) {})
 
 	stats := di.GetProviderRuntimeStats()
 	for _, stat := range stats {
@@ -427,7 +427,7 @@ func TestRuntimeStatsDoNotDeduplicateDistinctClosures(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run the focused runtime test and verify RED**
+- [x] **Step 2: Run the focused runtime test and verify RED**
 
 Run:
 
@@ -437,7 +437,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: compilation fails because identity fields do not exist.
 
-- [ ] **Step 3: Emit concrete identity fields**
+- [x] **Step 3: Emit concrete identity fields**
 
 Add fields to `ProviderRuntimeStats`:
 
@@ -474,7 +474,7 @@ function statForProvider(provider) {
 
 Use this helper in provider detail and error coloring. Keep the fallback only for stale cached responses.
 
-- [ ] **Step 4: Run the focused runtime test and verify GREEN**
+- [x] **Step 4: Run the focused runtime test and verify GREEN**
 
 Run:
 
@@ -484,7 +484,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: both tests pass.
 
-- [ ] **Step 5: Run race tests**
+- [x] **Step 5: Run race tests**
 
 Run:
 
@@ -494,7 +494,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: all packages pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add dixinternal/api.go dixhttp/static/js/views/graph.js dixinternal/runtime_stats_identity_test.go

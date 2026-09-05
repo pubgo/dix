@@ -180,6 +180,8 @@ type ProviderDetails struct {
 type ProviderRuntimeStats struct {
 	FunctionName      string        `json:"function_name"`
 	OutputType        string        `json:"output_type"`
+	RegistrationID    uint64        `json:"registration_id"`
+	ProviderID        string        `json:"provider_id"`
 	CallCount         int           `json:"call_count"`
 	TotalDuration     time.Duration `json:"total_duration"`
 	AverageDuration   time.Duration `json:"average_duration"`
@@ -260,23 +262,29 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 // This is helpful for startup latency diagnosis.
 func (dix *Dix) GetProviderRuntimeStats() []ProviderRuntimeStats {
 	stats := make([]ProviderRuntimeStats, 0, len(dix.providers))
-	seen := make(map[reflect.Value]bool)
+	seen := make(map[string]bool)
 
 	for _, providerList := range dix.providers {
 		for _, p := range providerList {
-			if p == nil || seen[p.fn] {
+			if p == nil {
 				continue
 			}
-			seen[p.fn] = true
 
 			outputType := ""
 			if p.output != nil && p.output.typ != nil {
 				outputType = p.output.typ.String()
 			}
+			identity := fmt.Sprintf("%d:%s", p.registrationID, outputType)
+			if seen[identity] {
+				continue
+			}
+			seen[identity] = true
 
 			item := ProviderRuntimeStats{
-				FunctionName: GetFnName(p.fn),
-				OutputType:   outputType,
+				FunctionName:   GetFnName(p.fn),
+				OutputType:     outputType,
+				RegistrationID: p.registrationID,
+				ProviderID:     fmt.Sprintf("provider_%d_%s", p.registrationID, outputType),
 			}
 
 			if s, ok := dix.providerStats[p.fn]; ok && s != nil {
