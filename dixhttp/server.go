@@ -162,6 +162,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/next", s.HandleNextIndex)
 	s.mux.HandleFunc(base+"/api/search", s.HandleSearch)
 	s.mux.HandleFunc(base+"/api/modules", s.HandleModules)
+	s.mux.HandleFunc(base+"/api/module", s.HandleModule)
 	s.mux.HandleFunc(base+"/api/ego", s.HandleEgo)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
@@ -291,6 +292,24 @@ func (s *Server) HandleSearch(w http.ResponseWriter, r *http.Request) {
 // HandleModules 返回模块级聚合视图(含跨模块依赖)。
 func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.dix.ModuleGraph())
+}
+
+// HandleModule returns a bounded provider/type topology for one module.
+// Query params:
+// - name: exact module/package path (required)
+// - limit: max nodes, default 100, max 500
+// - edge_limit: max edges, default 300, max 1000
+func (s *Server) HandleModule(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, s.dix.ModuleView(
+		name,
+		atoiOr(r.URL.Query().Get("limit"), 100),
+		atoiOr(r.URL.Query().Get("edge_limit"), 300),
+	))
 }
 
 // HandleEgo 返回以 center 为中心的 N 跳邻域子图。

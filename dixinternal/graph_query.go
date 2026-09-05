@@ -18,6 +18,7 @@ type SearchHit struct {
 	Label    string `json:"label"`
 	Pkg      string `json:"pkg,omitempty"`
 	Group    string `json:"group,omitempty"`
+	External bool   `json:"external,omitempty"`
 	State    string `json:"state,omitempty"` // instantiated|error|slow
 	Provider string `json:"provider,omitempty"`
 }
@@ -194,6 +195,180 @@ func (dix *Dix) ModuleGraph() []ModuleInfo {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
+}
+
+// ModuleDependency is an aggregated cross-module relationship.
+type ModuleDependency struct {
+	Name      string `json:"name"`
+	EdgeCount int    `json:"edge_count"`
+}
+
+// ModuleDetailView is a bounded topology projection for one module.
+type ModuleDetailView struct {
+	Name          string             `json:"name"`
+	TypeCount     int                `json:"type_count"`
+	ProviderCount int                `json:"provider_count"`
+	ObjectCount   int                `json:"object_count"`
+	DependsOn     []ModuleDependency `json:"depends_on,omitempty"`
+	DependedOnBy  []ModuleDependency `json:"depended_on_by,omitempty"`
+	Nodes         []SearchHit        `json:"nodes"`
+	Edges         []GraphEdge        `json:"edges"`
+	Truncated     bool               `json:"truncated"`
+}
+
+// ModuleView returns providers, produced outputs, declared dependencies, and
+// external dependency types for one module. Results are deterministically
+// bounded so a large module cannot force an unrenderable response.
+func (dix *Dix) ModuleView(name string, nodeLimit, edgeLimit int) ModuleDetailView {
+	if nodeLimit <= 0 {
+		nodeLimit = 100
+	}
+	if nodeLimit > 500 {
+		nodeLimit = 500
+	}
+	if edgeLimit <= 0 {
+		edgeLimit = 300
+	}
+	if edgeLimit > 1000 {
+		edgeLimit = 1000
+	}
+
+	view := ModuleDetailView{Name: name, Nodes: []SearchHit{}, Edges: []GraphEdge{}}
+	g := dix.graph
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+
+	instantiated := make(map[reflect.Type]bool)
+	for key := range g.nIndex {
+		if key.kind == NodeObject {
+			instantiated[key.typ] = true
+		}
+	}
+
+	type edgeRef struct {
+		edge     *Edge
+		from, to Node
+	}
+	var edges []edgeRef
+	degree := make(map[NodeID]int)
+	dependsOn := make(map[string]int)
+	dependedOnBy := make(map[string]int)
+
+	for _, node := range g.nodes {
+		if node.Pkg != name {
+			continue
+		}
+		switch node.Kind {
+		case NodeType:
+			view.TypeCount++
+		case NodeProvider:
+			view.ProviderCount++
+		case NodeObject:
+			view.ObjectCount++
+		}
+	}
+
+	for _, edge := range g.eIndex {
+		if edge.Kind != EdgeProduced && edge.Kind != EdgeDeclared {
+			continue
+		}
+		from, to := g.nodes[edge.From], g.nodes[edge.To]
+		if from.Pkg != name && to.Pkg != name {
+			continue
+		}
+		edges = append(edges, edgeRef{edge: edge, from: from, to: to})
+		degree[edge.From]++
+		degree[edge.To]++
+
+		if edge.Kind != EdgeDeclared {
+			continue
+		}
+		if from.Pkg == name && to.Pkg != name {
+			dependsOn[to.Pkg]++
+		} else if to.Pkg == name && from.Pkg != name {
+			dependedOnBy[from.Pkg]++
+		}
+	}
+
+	sort.Slice(edges, func(i, j int) bool {
+		left, right := edges[i], edges[j]
+		if left.from.Label != right.from.Label {
+			return left.from.Label < right.from.Label
+		}
+		if left.to.Label != right.to.Label {
+			return left.to.Label < right.to.Label
+		}
+		return left.edge.Kind < right.edge.Kind
+	})
+	if len(edges) > edgeLimit {
+		edges = edges[:edgeLimit]
+		view.Truncated = true
+	}
+
+	incident := make(map[NodeID]Node, nodeLimit)
+	for _, item := range edges {
+		incident[item.from.ID] = item.from
+		incident[item.to.ID] = item.to
+	}
+	nodes := make([]Node, 0, len(incident))
+	for _, node := range incident {
+		nodes = append(nodes, node)
+	}
+	kindRank := map[NodeKind]int{NodeProvider: 0, NodeType: 1, NodeObject: 2}
+	sort.Slice(nodes, func(i, j int) bool {
+		left, right := nodes[i], nodes[j]
+		if kindRank[left.Kind] != kindRank[right.Kind] {
+			return kindRank[left.Kind] < kindRank[right.Kind]
+		}
+		if degree[left.ID] != degree[right.ID] {
+			return degree[left.ID] > degree[right.ID]
+		}
+		return left.Label < right.Label
+	})
+	if len(nodes) > nodeLimit {
+		nodes = nodes[:nodeLimit]
+		view.Truncated = true
+	}
+	keep := make(map[NodeID]bool, len(nodes))
+	for _, node := range nodes {
+		keep[node.ID] = true
+	}
+
+	for _, node := range nodes {
+		hit := SearchHit{
+			ID:       uint32(node.ID),
+			Kind:     nodeKindName(node.Kind),
+			Label:    node.Label,
+			Pkg:      node.Pkg,
+			Group:    node.Group,
+			External: node.Pkg != name,
+		}
+		if node.Provider != nil {
+			hit.Provider = GetFnName(node.Provider.fn)
+			hit.State = dix.providerState(node.Provider)
+		}
+		if node.Kind == NodeType && instantiated[node.Type] {
+			hit.State = "instantiated"
+		}
+		view.Nodes = append(view.Nodes, hit)
+	}
+
+	for _, item := range edges {
+		if !keep[item.from.ID] || !keep[item.to.ID] {
+			continue
+		}
+		view.Edges = append(view.Edges, GraphEdge{From: item.from.Label, To: item.to.Label})
+	}
+
+	appendDeps := func(target *[]ModuleDependency, source map[string]int) {
+		for depName, count := range source {
+			*target = append(*target, ModuleDependency{Name: depName, EdgeCount: count})
+		}
+		sort.Slice(*target, func(i, j int) bool { return (*target)[i].Name < (*target)[j].Name })
+	}
+	appendDeps(&view.DependsOn, dependsOn)
+	appendDeps(&view.DependedOnBy, dependedOnBy)
+	return view
 }
 
 // GraphEdge 是邻域子图里的一条声明依赖边(类型 label 表示)。
