@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -413,45 +414,44 @@ func (s *Server) HandleRuntimeStats(w http.ResponseWriter, r *http.Request) {
 // HandlePackages returns list of packages for navigation
 func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	providerDetails, _ := s.cachedGraphInputs()
+	packages := buildPackageInfos(providerDetails)
+	writeJSON(w, packages)
+}
 
-	// Group by package
+// buildPackageInfos groups provider outputs by their resolved package path.
+func buildPackageInfos(details []dixinternal.ProviderDetails) []PackageInfo {
 	packageMap := make(map[string]*PackageInfo)
-	for _, detail := range providerDetails {
-		pkg := extractPackage(detail.OutputType)
+	for _, detail := range details {
+		pkg := detail.OutputPkg
 		if pkg == "" {
 			pkg = "(anonymous)"
 		}
 
-		if _, exists := packageMap[pkg]; !exists {
-			packageMap[pkg] = &PackageInfo{
-				Name:          pkg,
-				ProviderCount: 0,
-				Types:         make([]string, 0),
-			}
+		packageInfo, exists := packageMap[pkg]
+		if !exists {
+			packageInfo = &PackageInfo{Name: pkg, Types: make([]string, 0)}
+			packageMap[pkg] = packageInfo
 		}
 
-		packageMap[pkg].ProviderCount++
-
-		// Track unique types
+		packageInfo.ProviderCount++
 		found := false
-		for _, t := range packageMap[pkg].Types {
-			if t == detail.OutputType {
+		for _, typ := range packageInfo.Types {
+			if typ == detail.OutputType {
 				found = true
 				break
 			}
 		}
 		if !found {
-			packageMap[pkg].Types = append(packageMap[pkg].Types, detail.OutputType)
+			packageInfo.Types = append(packageInfo.Types, detail.OutputType)
 		}
 	}
 
-	// Convert to slice
 	packages := make([]PackageInfo, 0, len(packageMap))
 	for _, pkg := range packageMap {
 		packages = append(packages, *pkg)
 	}
-
-	writeJSON(w, packages)
+	sort.Slice(packages, func(i, j int) bool { return packages[i].Name < packages[j].Name })
+	return packages
 }
 
 // HandlePackageDetails returns details for a specific package

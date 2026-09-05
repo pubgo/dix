@@ -516,7 +516,7 @@ git commit -m "fix(dixinternal): identify runtime stats by provider output"
 - Consumes: `Graph` nodes/edges and cached provider details.
 - Produces: accurate `ModuleGraph`, `EgoGraph` instantiated state, `ResolvedTopN`, and `PackageInfo`.
 
-- [ ] **Step 1: Write failing projection tests**
+- [x] **Step 1: Write failing projection tests**
 
 Create `dixinternal/graph_query_projection_test.go`:
 
@@ -532,6 +532,7 @@ type packageTarget struct{}
 
 func TestEgoInstantiatedUsesObjectNodes(t *testing.T) {
 	di := New()
+	di.graph.node(NodeType, reflect.TypeOf(&packageTarget{}), "", nil)
 	view := di.EgoGraph("*dixinternal.packageTarget", 1, "both")
 	for _, node := range view.Nodes {
 		if node.Label == "*dixinternal.packageTarget" && node.State == "instantiated" {
@@ -540,7 +541,7 @@ func TestEgoInstantiatedUsesObjectNodes(t *testing.T) {
 	}
 
 	di.Provide(func() *packageTarget { return &packageTarget{} })
-	di.addObject(reflect.TypeOf(&packageTarget{}), "")
+	di.graph.addObject(reflect.TypeOf(&packageTarget{}), "")
 	view = di.EgoGraph("*dixinternal.packageTarget", 1, "both")
 	instantiated := false
 	for _, node := range view.Nodes {
@@ -600,7 +601,7 @@ func TestPackageInfoUsesResolvedOutputPackage(t *testing.T) {
 
 Add the required import `github.com/pubgo/dix/v2/dixinternal` to the HTTP test.
 
-- [ ] **Step 2: Run focused projection tests and verify RED**
+- [x] **Step 2: Run focused projection tests and verify RED**
 
 Run:
 
@@ -610,7 +611,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: ego/state and aggregation/package helper failures.
 
-- [ ] **Step 3: Fix the three projections**
+- [x] **Step 3: Fix the three projections**
 
 In `EgoGraph`, build an instantiated set from object nodes before creating nodes:
 
@@ -646,7 +647,7 @@ func buildPackageInfos(details []dixinternal.ProviderDetails) []PackageInfo
 
 Use `detail.OutputPkg` when non-empty and `(anonymous)` when empty. Do not call `extractPackage(detail.OutputType)` for provider package grouping. Return rows sorted by `Name` so API output and tests are deterministic.
 
-- [ ] **Step 4: Run focused projection tests and verify GREEN**
+- [x] **Step 4: Run focused projection tests and verify GREEN**
 
 Run:
 
@@ -656,7 +657,7 @@ unset GOROOT; export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin; go test 
 
 Expected: all focused tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add dixinternal/graph_query.go dixhttp/server.go dixinternal/graph_query_projection_test.go dixhttp/server_packages_test.go

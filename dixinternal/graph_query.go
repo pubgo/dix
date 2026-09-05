@@ -49,6 +49,7 @@ func (dix *Dix) SearchNodes(q, kind, module, state string, limit int) []SearchHi
 
 	g := dix.graph
 	g.mu.RLock()
+
 	defer g.mu.RUnlock()
 
 	// 已实例化类型集合:存在 Object 节点 (type, group) 即视为实例化
@@ -225,6 +226,15 @@ func (dix *Dix) EgoGraph(center string, depth int, direction string) GraphView {
 	g := dix.graph
 	g.mu.RLock()
 
+	// Ego visibility is not instantiation. Build the object-bearing set while
+	// the graph lock is held and project it after traversal.
+	instantiated := make(map[reflect.Type]bool)
+	for key := range g.nIndex {
+		if key.kind == NodeObject {
+			instantiated[key.typ] = true
+		}
+	}
+
 	type dEdge struct {
 		from, to reflect.Type
 	}
@@ -284,7 +294,11 @@ func (dix *Dix) EgoGraph(center string, depth int, direction string) GraphView {
 		view.Edges = append(view.Edges, GraphEdge{From: label(e.from), To: label(e.to)})
 	}
 	for t := range seen {
-		view.Nodes = append(view.Nodes, SearchHit{Kind: "type", Label: label(t), Pkg: resolveTypePkgPath(t), State: "instantiated"})
+		state := ""
+		if instantiated[t] {
+			state = "instantiated"
+		}
+		view.Nodes = append(view.Nodes, SearchHit{Kind: "type", Label: label(t), Pkg: resolveTypePkgPath(t), State: state})
 	}
 	sort.Slice(view.Nodes, func(i, j int) bool { return view.Nodes[i].Label < view.Nodes[j].Label })
 	sort.Slice(view.Edges, func(i, j int) bool {
@@ -310,11 +324,15 @@ func (dix *Dix) ResolvedTopN(n int) []ResolvedCount {
 	g := dix.graph
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	counts := make([]ResolvedCount, 0, 8)
+	countsByType := make(map[string]int64)
 	for _, e := range g.eIndex {
 		if e.Kind == EdgeResolved && e.Count > 0 {
-			counts = append(counts, ResolvedCount{Type: g.nodes[e.To].Type.String(), Count: e.Count})
+			countsByType[g.nodes[e.To].Type.String()] += e.Count
 		}
+	}
+	counts := make([]ResolvedCount, 0, len(countsByType))
+	for typ, count := range countsByType {
+		counts = append(counts, ResolvedCount{Type: typ, Count: count})
 	}
 	sort.Slice(counts, func(i, j int) bool {
 		if counts[i].Count != counts[j].Count {
