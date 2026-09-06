@@ -518,6 +518,10 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 },
 
                 // Methods
+                graphHelpers() {
+                    return window.DIXGraphState || null;
+                },
+
                 async init() {
                     this.loadLocalState();
                     await this.loadGroupRules();
