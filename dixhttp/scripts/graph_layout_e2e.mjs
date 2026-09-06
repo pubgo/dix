@@ -11,12 +11,13 @@ import { layoutStarPositions, assessLayoutMetrics, shortGraphLabel, resolveCamer
 const BASE = process.env.DIX_E2E_BASE || "http://127.0.0.1:18099";
 
 async function main() {
-  const health = await fetch(`${BASE}/next`);
-  if (!health.ok) throw new Error(`demo server not reachable at ${BASE}/next (${health.status})`);
+  const health = await fetch(`${BASE}/`);
+  if (!health.ok) throw new Error(`demo server not reachable at ${BASE}/ (${health.status})`);
 
   const html = await health.text();
-  if (!html.includes("graph_state.mjs")) throw new Error("/next HTML missing graph_state.mjs");
-  if (!html.includes("graph.js")) throw new Error("/next HTML missing graph.js");
+  if (!html.includes("graph_state.mjs")) throw new Error("/ HTML missing graph_state.mjs");
+  if (!html.includes("legacy/app.js")) throw new Error("/ HTML missing legacy/app.js");
+  if (!html.includes("模块地图")) throw new Error("/ HTML missing module map control");
 
   const modules = await (await fetch(`${BASE}/api/modules`)).json();
   if (!Array.isArray(modules) || modules.length < 3) {

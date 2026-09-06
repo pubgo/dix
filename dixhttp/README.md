@@ -4,37 +4,32 @@ This module provides an HTTP server to visualize dependency relationships in the
 
 [中文文档](./README_zh.md)
 
-## UI 信息架构(五视图)
+## UI 信息架构
 
-前端为无构建的本地静态资源(`static/`:原生 JS + 自绘 CSS + 本地 vendored vis-network,**零 CDN 依赖**),按任务组织为五个视图:
+主界面为 legacy `/`（Alpine + vis-network + 本地静态资源）。面向 DI **架构审查**：包/模块边界、Providers、类型依赖、业务分组聚合。
 
-| 视图(hash 路由) | 主任务 | 数据源 |
-| --- | --- | --- |
-| 概览 `#/overview` | 全局状态一览 + Issues 诊断流 | `/api/stats`、`/api/issues` |
-| 依赖图 `#/graph` | 模块地图(默认) + 模块内视图 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/module`、`/api/search`、`/api/ego`;全局视图才使用 `/api/dependencies` |
-| 检索 `#/search` | 服务端检索 + 状态过滤,一键跳转依赖图 | `/api/search` |
-| 调用链 `#/trace` | trace 列表(错误优先)+ 嵌套调用树;支持从 Issue/图节点预过滤 | `/api/trace`、`/api/trace-tree` |
-| 诊断 `#/diag` | 最近注入错误 + provider 启动耗时 | `/api/errors`、`/api/runtime-stats` |
+| 能力 | 说明 |
+| --- | --- |
+| Providers / 类型依赖 | 现有全局构图；默认仍可进 Providers |
+| 模块地图 | `/api/modules` 跨模块边界总览；双击下钻到包前缀过滤的 Providers |
+| 包范围侧栏 | 选择包以缩小架构切片（前缀过滤） |
+| 按分组聚合 | `dix.groupRules.v1` / `/api/group-rules` |
+| 规模提示 | 超可读预算时横幅建议换粒度，列出耦合枢纽，最后才 Top-K 裁点 |
+| Trace / 诊断 | 页内弹层；排障主路径仍是调用链 |
 
+Object（已创建实例）默认不作为架构画布节点，只在统计/详情中展示。
 
 ## Scale-first graph workflow
 
-The graph is organized around progressive disclosure:
-
 ```text
-Module map  ->  module detail  ->  type / provider detail  ->  ego graph / trace
+Module map / group aggregate  ->  scoped Providers or Types  ->  detail / Trace
 ```
 
-- The default graph mode is the module map, not a global provider dump.
-- Module map is bounded to 100 nodes and 300 edges.
-- Module drill-down is bounded to 150 nodes and 400 edges; advanced global providers/types views use the same 150/400 caps.
-- Ego graph uses depth 2 by default and supports up to depth 5.
-- Objects are shown as state in type/provider details and module counts; they are not rendered as nodes by default.
-- When a view exceeds its budget, the UI keeps the highest-connectivity nodes, shows a density warning, and lists hub nodes so you can narrow scope or search.
-- Overview Issues jump to a bounded ego/module graph or a filtered Trace view (`#/trace?provider=...&output_type=...`); graph drawers can open the same Trace filter.
-- `/api/dependencies` is a compatibility/full-data endpoint for global and legacy views; it is not loaded by the default module map.
-- Legacy `/` UI remains available alongside `/next`.
-
+- The default graph mode remains Providers (legacy habit); crowding is handled by semantic prompts, hubs, short labels, readable layout, then truncation.
+- Module map is bounded by module count; Providers/Types use a soft on-canvas readability cap (~40 nodes) with hub listing.
+- Objects are shown as state in details and counts; they are not rendered as architecture nodes by default.
+- `/api/dependencies` remains the full-data endpoint for Providers/Types views.
+- Visualization UI entry is `/` only (`/next` removed).
 ## Features
 
 - 📊 **Interactive Visualization** - Modern no-build UI built with vanilla JS, local CSS, and vis-network

@@ -1,4 +1,4 @@
-// Legacy workbench helpers ported into /next (group rules, aggregate, export).
+// Shared helpers for legacy architecture visualization (labels, budget, groups, export).
 
 export const GROUP_RULES_STORAGE_KEY = "dix.groupRules.v1";
 

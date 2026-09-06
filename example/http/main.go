@@ -2,8 +2,8 @@
 //
 // 【原理】构造真实项目规模的容器(十个域模块 + 泛型插件/工作器族,
 // 约 200 个 provider、300 个对象),并触发多类可诊断错误,用于:
-//   - 体验五视图 UI(概览/依赖图/检索/调用链/诊断)的交互流程;
-//   - 验证大规模下"模块下钻 + 邻域子图 + 服务端检索"的可用性。
+//   - 验证 legacy `/` UI（模块地图、Providers/类型、分组聚合、密度提示）;
+//   - 验证大规模下「包范围 + 模块边界 + Trace 诊断」的可用性。
 //
 // 入门请先看 example/inject-func 与 example/inject-struct。
 //
@@ -137,7 +137,7 @@ func startVisualizationServer(server *dixhttp.Server) error {
 	}
 
 	log.Printf("🚀 Starting HTTP server on http://%s", displayAddr)
-	log.Printf("📊 Open http://%s in your browser: overview / graph / search / trace / diag", displayAddr)
+	log.Printf("📊 Open http://%s in your browser (legacy DI architecture UI)", displayAddr)
 	log.Println("📡 API endpoints:")
 	log.Println("   - GET /api/dependencies - JSON data of dependencies")
 	log.Println("   - GET /api/modules      - module-level aggregation")

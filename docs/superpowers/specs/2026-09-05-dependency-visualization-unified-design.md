@@ -1,6 +1,7 @@
 # Dependency Visualization Unified Design
 
-> Status: approved for planning · Approach: evolve `/next` five-view shell  
+> Status: superseded by `2026-09-06-legacy-first-architecture-viz-design.md`  
+> Approach was: evolve `/next` five-view shell — product direction moved to legacy-first.  
 > Date: 2026-09-05 · Branch context: `codex/scale-graph-usability`  
 > Related: `docs/superpowers/specs/2026-09-04-graph-trace-redesign-design.md`,  
 > `docs/superpowers/specs/2026-09-05-scale-graph-usability-design.md`

@@ -133,13 +133,13 @@ func NewServerWithOptions(di *dix.Dix, opts ...ServerOption) *Server {
 // setupRoutes configures all HTTP routes
 func (s *Server) setupRoutes() {
 	base := s.basePath
-	indexPath := "/"
+	indexPath := "/{$}"
 	if base != "" {
-		indexPath = base + "/"
+		indexPath = base + "/{$}"
 		// Redirect /base -> /base/
 		s.mux.HandleFunc(base, func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == base {
-				http.Redirect(w, r, indexPath, http.StatusMovedPermanently)
+				http.Redirect(w, r, base+"/", http.StatusMovedPermanently)
 				return
 			}
 			http.NotFound(w, r)
@@ -159,7 +159,6 @@ func (s *Server) setupRoutes() {
 	if err == nil {
 		s.mux.Handle(base+"/static/", http.StripPrefix(base+"/static/", http.FileServer(http.FS(staticRoot))))
 	}
-	s.mux.HandleFunc(base+"/next", s.HandleNextIndex)
 	s.mux.HandleFunc(base+"/api/search", s.HandleSearch)
 	s.mux.HandleFunc(base+"/api/modules", s.HandleModules)
 	s.mux.HandleFunc(base+"/api/module", s.HandleModule)
@@ -331,18 +330,6 @@ func atoiOr(s string, def int) int {
 		return v
 	}
 	return def
-}
-
-// HandleNextIndex 服务五视图实验版 UI(/next)。
-func (s *Server) HandleNextIndex(w http.ResponseWriter, r *http.Request) {
-	index, err := fs.ReadFile(staticFS, "static/index.html")
-	if err != nil {
-		http.Error(w, "index not found", http.StatusInternalServerError)
-		return
-	}
-	html := strings.ReplaceAll(string(index), "__DIX_BASE_PATH__", s.basePath)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, html)
 }
 
 // ServeHTTP implements http.Handler interface
