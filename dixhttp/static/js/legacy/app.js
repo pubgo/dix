@@ -1077,6 +1077,11 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
 
                 async selectPackage(pkgName) {
                     this.currentPackage = pkgName;
+                    this.filterPrefix = pkgName || '';
+                    // Package scope applies to Providers/Types architecture views.
+                    if (this.currentView === 'modules' && pkgName) {
+                        this.currentView = 'providers';
+                    }
                     await this.loadDependencies();
                 },
 

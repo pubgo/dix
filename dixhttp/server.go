@@ -832,10 +832,10 @@ func buildDependencyData(details []dixinternal.ProviderDetails, objects map[refl
 
 	// Extract object information using the cached objects table
 	for outputType, groupsMap := range objects {
-		// Apply package filter if specified
+		// Apply package filter if specified (align with sidebar OutputPkg names)
 		if pkgFilter != "" {
 			pkg := extractPackage(outputType.String())
-			if pkg != pkgFilter {
+			if !packagePathMatchesFilter(pkg, pkgFilter) {
 				continue
 			}
 		}
@@ -879,11 +879,8 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 	order := make([]string, 0, len(details))
 
 	for _, detail := range details {
-		if pkgFilter != "" {
-			pkg := extractPackage(detail.OutputType)
-			if pkg != pkgFilter {
-				continue
-			}
+		if pkgFilter != "" && !providerMatchesPackageFilter(detail, pkgFilter) {
+			continue
 		}
 
 		key := providerAggregateKey(detail)
@@ -1086,6 +1083,42 @@ type EdgeInfo struct {
 }
 
 // Helper functions
+
+// providerMatchesPackageFilter aligns /api/packages sidebar names (OutputPkg)
+// with /api/dependencies?package= filtering. extractPackage(OutputType) alone is
+// wrong for module paths like github.com/.../domain/analytics vs type "analytics.Client".
+func providerMatchesPackageFilter(detail dixinternal.ProviderDetails, pkgFilter string) bool {
+	if pkgFilter == "" {
+		return true
+	}
+	if detail.OutputPkg != "" && packagePathMatchesFilter(detail.OutputPkg, pkgFilter) {
+		return true
+	}
+	if detail.FunctionPkg != "" && packagePathMatchesFilter(detail.FunctionPkg, pkgFilter) {
+		return true
+	}
+	return packagePathMatchesFilter(extractPackage(detail.OutputType), pkgFilter)
+}
+
+func packagePathMatchesFilter(pkg, pkgFilter string) bool {
+	if pkgFilter == "" {
+		return true
+	}
+	if pkg == "" {
+		return false
+	}
+	if pkg == pkgFilter {
+		return true
+	}
+	// Allow suffix / prefix matches when one side is a path fragment.
+	if strings.HasSuffix(pkg, "/"+pkgFilter) || strings.HasSuffix(pkgFilter, "/"+pkg) {
+		return true
+	}
+	if strings.Contains(pkg, pkgFilter) || strings.Contains(pkgFilter, pkg) {
+		return true
+	}
+	return false
+}
 
 func extractPackage(typeName string) string {
 	// Handle pointer types
