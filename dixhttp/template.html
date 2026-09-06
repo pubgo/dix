@@ -295,6 +295,16 @@
                             </div>
                         </div>
                     </details>
+                    <button @click="fitGraph()"
+                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
+                        :disabled="!network">
+                        <span>⛶</span> 适应全图
+                    </button>
+                    <button @click="focusHubNode()"
+                        class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1"
+                        :disabled="!network">
+                        <span>◎</span> 聚焦枢纽
+                    </button>
                     <button @click="resetView()"
                         class="px-3 py-1.5 text-sm border border-gray-300 rounded-lg bg-white hover:bg-gray-50 transition flex items-center gap-1">
                         <span>🔄</span> 重置
@@ -1266,9 +1276,9 @@
     </div>
 
     <script>window.DIX_BASE = "__DIX_BASE_PATH__";</script>
-    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_state.mjs?v=legacy-arch2"></script>
-    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_workbench.mjs?v=legacy-arch2"></script>
-    <script src="__DIX_BASE_PATH__/static/js/legacy/app.js?v=legacy-arch3"></script>
+    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_state.mjs?v=legacy-arch4"></script>
+    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_workbench.mjs?v=legacy-arch4"></script>
+    <script src="__DIX_BASE_PATH__/static/js/legacy/app.js?v=legacy-arch4"></script>
 </body>
 
 </html>

@@ -117,14 +117,29 @@ test("pickFocusNodeId prefers explicit center then hub", async () => {
 test("shortGraphLabel shortens package paths and types", async () => {
   const { shortGraphLabel } = await import("./graph_state.mjs");
   assert.equal(shortGraphLabel("github.com/pubgo/dix/example/http/domain/billing"), "domain/billing");
-  assert.equal(shortGraphLabel("*billing.Config"), "Config");
+  assert.equal(shortGraphLabel("*billing.Config"), "billing.Config");
   assert.equal(shortGraphLabel("main"), "main");
+});
+
+test("labelLodVisibleIds keeps hubs when zoomed out", async () => {
+  const { labelLodVisibleIds } = await import("./graph_state.mjs");
+  const nodes = [{ id: "hub" }, { id: "a" }, { id: "b" }, { id: "c" }];
+  const edges = [
+    { from: "hub", to: "a" },
+    { from: "hub", to: "b" },
+    { from: "hub", to: "c" },
+  ];
+  const zoomedOut = labelLodVisibleIds(nodes, edges, 0.4, { hubLimit: 2 });
+  assert.equal(zoomedOut.has("hub"), true);
+  assert.equal(zoomedOut.size <= 2, true);
+  const zoomedIn = labelLodVisibleIds(nodes, edges, 1.0, { hubLimit: 2 });
+  assert.equal(zoomedIn.size, 4);
 });
 
 test("module maps prefer fit camera; dense graphs prefer focus", async () => {
   const { resolveCameraStrategy } = await import("./graph_state.mjs");
   assert.equal(resolveCameraStrategy("modules", 11), "fit");
-  assert.equal(resolveCameraStrategy("ego", 40), "focus");
+  assert.equal(resolveCameraStrategy("ego", 40), "fit");
   assert.equal(resolveCameraStrategy("providers", 8), "fit");
 });
 

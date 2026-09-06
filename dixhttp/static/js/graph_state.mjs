@@ -6,7 +6,11 @@ export function resolveGraphMode(query) {
 /** Soft cap for on-canvas readability; denser data stays in hubs/table warnings. */
 export const READABLE_NODE_CAP = 40;
 
-/** Shorten package paths and type names for readable node labels. */
+/**
+ * Shorten package paths and type names for readable node labels.
+ * Keep a package/type qualifier (e.g. analytics.Service) so many "Service"
+ * nodes do not become indistinguishable when zoomed out.
+ */
 export function shortGraphLabel(name) {
   const s = String(name || "").replace(/^\*/, "");
   if (!s) return "";
@@ -14,8 +18,23 @@ export function shortGraphLabel(name) {
     const parts = s.split("/").filter(Boolean);
     return parts.slice(-2).join("/") || s;
   }
-  const dotted = s.split(".");
+  const dotted = s.split(".").filter(Boolean);
+  if (dotted.length >= 2) {
+    return dotted.slice(-2).join(".");
+  }
   return dotted[dotted.length - 1] || s;
+}
+
+/** Pick which node ids keep visible labels at a given zoom scale. */
+export function labelLodVisibleIds(nodes = [], edges = [], scale = 1, opts = {}) {
+  const hubLimit = opts.hubLimit ?? 12;
+  const hideBelow = opts.hideBelow ?? 0.62;
+  const ids = nodes.map((n) => n.id);
+  if (scale >= hideBelow || ids.length <= hubLimit) {
+    return new Set(ids);
+  }
+  const hubs = rankHubNodes(nodes, edges, hubLimit).map((h) => h.id);
+  return new Set(hubs);
 }
 
 export function applyGraphBudget(nodes, edges, budget = { nodes: 100, edges: 300 }) {
@@ -55,10 +74,11 @@ export function resolveEffectiveLayout(preferred, nodeCount) {
   return nodeCount > READABLE_NODE_CAP ? "physics" : "hierarchical";
 }
 
-/** Module maps and tiny graphs should fit the canvas; denser views focus a hub. */
+/** Architecture views prefer fit so the whole slice is visible; label LOD keeps hubs readable when zoomed out. */
 export function resolveCameraStrategy(mode, nodeCount) {
-  if (mode === "modules" || nodeCount <= 12) return "fit";
-  return "focus";
+  if (mode === "modules") return "fit";
+  if (nodeCount <= 20) return "fit";
+  return "fit";
 }
 
 /**
@@ -219,7 +239,7 @@ export function filterTraceRecords(records = [], filter = {}) {
 
 if (typeof window !== "undefined") {
   window.DIXGraphState = {
-    resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP, shortGraphLabel,
+    resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP, shortGraphLabel, labelLodVisibleIds,
     resolveEffectiveLayout, resolveCameraStrategy, layoutStarPositions, assessLayoutMetrics, pickFocusNodeId,
     createLoadGuard, rankHubNodes, buildModuleMapGraph,
     issueGraphHash, issueTraceHash, matchTraceRecord, filterTraceRecords,

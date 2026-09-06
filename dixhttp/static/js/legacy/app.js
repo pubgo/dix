@@ -1711,12 +1711,6 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     }
 
                     const container = document.getElementById('network');
-                    const data = {
-                        nodes: new vis.DataSet(ns),
-                        edges: new vis.DataSet(es)
-                    };
-                    this.lastGraphData = data;
-
                     const preferred = this.currentLayout === 'force' ? 'physics' : 'hierarchical';
                     const effective = helpers && helpers.resolveEffectiveLayout
                         ? helpers.resolveEffectiveLayout(preferred, ns.length)
@@ -1725,6 +1719,17 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                         this.densityWarning.message += ' 已自动改用分散布局。';
                     }
                     const options = this.getNetworkOptions(effective);
+                    const fontSize = ns.length <= 12 ? 15 : ns.length <= 24 ? 13 : 11;
+                    ns = ns.map(n => ({
+                        ...n,
+                        font: { ...(n.font || {}), size: Math.max((n.font && n.font.size) || 0, fontSize) },
+                        data: { ...(n.data || {}), displayLabel: n.label },
+                    }));
+                    const data = {
+                        nodes: new vis.DataSet(ns),
+                        edges: new vis.DataSet(es)
+                    };
+                    this.lastGraphData = data;
 
                     if (this.network) {
                         this.network.destroy();
@@ -1733,19 +1738,9 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     this.network = new vis.Network(container, data, options);
 
                     const applyCamera = () => {
-                        if (!this.network || !helpers) return;
-                        const mode = this.currentView === 'modules' ? 'modules' : 'providers';
-                        const camera = helpers.resolveCameraStrategy
-                            ? helpers.resolveCameraStrategy(mode, ns.length)
-                            : 'fit';
-                        const focusId = helpers.pickFocusNodeId
-                            ? helpers.pickFocusNodeId(ns, es, this.filterPrefix || this.focusedType || '')
-                            : null;
-                        if (camera === 'fit') {
-                            this.network.fit({ animation: false, padding: 48 });
-                        } else if (focusId) {
-                            this.network.focus(focusId, { scale: 1.1, animation: false });
-                        }
+                        if (!this.network) return;
+                        this.network.fit({ animation: false, padding: 56 });
+                        this.applyLabelLod();
                     };
                     if (effective === 'hierarchical') {
                         setTimeout(applyCamera, 80);
@@ -1753,6 +1748,7 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                         this.network.once('stabilizationIterationsDone', applyCamera);
                         setTimeout(applyCamera, 450);
                     }
+                    this.network.on('zoom', () => this.applyLabelLod());
 
                     // Click event
                     this.network.on('click', params => {
@@ -1793,16 +1789,17 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                         : layoutOverride === 'physics' || layoutOverride === 'force' || layoutOverride === false
                             ? false
                             : this.currentLayout === 'hierarchical';
-                    const levelSeparation = 120;
-                    const nodeSpacing = 150;
-                    const treeSpacing = 150;
+                    const levelSeparation = 150;
+                    const nodeSpacing = 180;
+                    const treeSpacing = 200;
                     return {
                         nodes: {
                             shape: 'box',
                             font: { size: 12, face: 'system-ui, sans-serif' },
                             borderWidth: 2,
                             shadow: { enabled: true, size: 5, x: 2, y: 2 },
-                            margin: 8
+                            margin: 10,
+                            widthConstraint: { maximum: 160 },
                         },
                         edges: {
                             width: 1.5,
@@ -1812,17 +1809,20 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                         },
                         physics: {
                             enabled: !isHierarchical,
-                            stabilization: { iterations: 150 },
+                            stabilization: { iterations: 180 },
                             barnesHut: {
-                                gravitationalConstant: -2000,
-                                springLength: 150
+                                gravitationalConstant: -3500,
+                                springLength: 180,
+                                springConstant: 0.04,
+                                avoidOverlap: 0.8,
                             }
                         },
                         interaction: {
                             hover: true,
                             tooltipDelay: 100,
                             zoomView: true,
-                            dragView: true
+                            dragView: true,
+                            multiselect: false,
                         },
                         layout: isHierarchical ? {
                             hierarchical: {
@@ -1837,6 +1837,56 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                             hierarchical: { enabled: false }
                         }
                     };
+                },
+
+                applyLabelLod() {
+                    if (!this.network || !this.lastGraphData || !this.lastGraphData.nodes) return;
+                    const helpers = this.graphHelpers();
+                    if (!helpers || !helpers.labelLodVisibleIds) return;
+                    let scale = 1;
+                    try {
+                        scale = this.network.getScale();
+                    } catch {
+                        scale = 1;
+                    }
+                    const nodes = this.lastGraphData.nodes.get();
+                    const edges = this.lastGraphData.edges.get();
+                    const visible = helpers.labelLodVisibleIds(nodes, edges, scale, { hubLimit: 12, hideBelow: 0.7 });
+                    const updates = nodes.map(n => {
+                        const full = (n.data && n.data.displayLabel) || n.label || '';
+                        const show = visible.has(n.id);
+                        return {
+                            id: n.id,
+                            label: show ? full : '·',
+                            font: {
+                                ...(n.font || {}),
+                                size: show ? Math.max((n.font && n.font.size) || 12, 11) : 9,
+                            },
+                        };
+                    });
+                    this.lastGraphData.nodes.update(updates);
+                },
+
+                fitGraph() {
+                    if (!this.network) return;
+                    this.network.fit({ animation: { duration: 280, easingFunction: 'easeInOutQuad' }, padding: 56 });
+                    setTimeout(() => this.applyLabelLod(), 300);
+                },
+
+                focusHubNode() {
+                    if (!this.network || !this.lastGraphData) return;
+                    const helpers = this.graphHelpers();
+                    const nodes = this.lastGraphData.nodes.get();
+                    const edges = this.lastGraphData.edges.get();
+                    const focusId = helpers && helpers.pickFocusNodeId
+                        ? helpers.pickFocusNodeId(nodes, edges, this.filterPrefix || this.focusedType || '')
+                        : (nodes[0] && nodes[0].id);
+                    if (!focusId) return;
+                    this.network.focus(focusId, {
+                        scale: 1.2,
+                        animation: { duration: 280, easingFunction: 'easeInOutQuad' },
+                    });
+                    setTimeout(() => this.applyLabelLod(), 300);
                 },
 
                 async focusOnType(typeName) {
