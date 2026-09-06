@@ -36,6 +36,7 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 mermaidSvg: '',
                 mermaidError: '',
                 lastGraphData: null,
+                densityWarning: { show: false, message: '', hubs: [], suggestModules: false, suggestAggregate: false },
                 expandedGroups: [],
                 runtimeStats: [],
                 runtimeStatsLoading: false,
@@ -1662,21 +1663,70 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     // Create network
                     const aggregated = this.aggregateByGroups(nodes, edges);
                     const filteredByPrefix = this.filterByPrefix(aggregated.nodes, aggregated.edges);
+                    let ns = filteredByPrefix.nodes;
+                    let es = filteredByPrefix.edges;
+
+                    const helpers = this.graphHelpers();
+                    const cap = helpers && helpers.READABLE_NODE_CAP ? helpers.READABLE_NODE_CAP : 40;
+                    const over = ns.length > cap || es.length > cap * 3;
+                    this.densityWarning = {
+                        show: over,
+                        message: over
+                            ? `图规模过大（${ns.length} 节点 / ${es.length} 边）。建议先看模块地图或按分组聚合审查组织；下列为耦合枢纽。`
+                            : '',
+                        hubs: over && helpers && helpers.rankHubNodes ? helpers.rankHubNodes(ns, es, 8) : [],
+                        suggestModules: over && this.currentView !== 'modules',
+                        suggestAggregate: over && !this.aggregateGroups && (this.groupRules || []).length > 0,
+                    };
+                    if (over && helpers && helpers.applyGraphBudget) {
+                        const bounded = helpers.applyGraphBudget(ns, es, { nodes: cap, edges: cap * 3 });
+                        ns = bounded.nodes;
+                        es = bounded.edges;
+                    }
 
                     const container = document.getElementById('network');
                     const data = {
-                        nodes: new vis.DataSet(filteredByPrefix.nodes),
-                        edges: new vis.DataSet(filteredByPrefix.edges)
+                        nodes: new vis.DataSet(ns),
+                        edges: new vis.DataSet(es)
                     };
                     this.lastGraphData = data;
 
-                    const options = this.getNetworkOptions();
+                    const preferred = this.currentLayout === 'force' ? 'physics' : 'hierarchical';
+                    const effective = helpers && helpers.resolveEffectiveLayout
+                        ? helpers.resolveEffectiveLayout(preferred, ns.length)
+                        : (this.currentLayout === 'force' ? 'physics' : 'hierarchical');
+                    if (over && effective === 'physics' && this.currentLayout === 'hierarchical') {
+                        this.densityWarning.message += ' 已自动改用分散布局。';
+                    }
+                    const options = this.getNetworkOptions(effective);
 
                     if (this.network) {
                         this.network.destroy();
                     }
 
                     this.network = new vis.Network(container, data, options);
+
+                    const applyCamera = () => {
+                        if (!this.network || !helpers) return;
+                        const mode = this.currentView === 'modules' ? 'modules' : 'providers';
+                        const camera = helpers.resolveCameraStrategy
+                            ? helpers.resolveCameraStrategy(mode, ns.length)
+                            : 'fit';
+                        const focusId = helpers.pickFocusNodeId
+                            ? helpers.pickFocusNodeId(ns, es, this.filterPrefix || this.focusedType || '')
+                            : null;
+                        if (camera === 'fit') {
+                            this.network.fit({ animation: false, padding: 48 });
+                        } else if (focusId) {
+                            this.network.focus(focusId, { scale: 1.1, animation: false });
+                        }
+                    };
+                    if (effective === 'hierarchical') {
+                        setTimeout(applyCamera, 80);
+                    } else {
+                        this.network.once('stabilizationIterationsDone', applyCamera);
+                        setTimeout(applyCamera, 450);
+                    }
 
                     // Click event
                     this.network.on('click', params => {
@@ -1711,8 +1761,12 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     });
                 },
 
-                getNetworkOptions(forceHierarchical = false) {
-                    const isHierarchical = forceHierarchical || this.currentLayout === 'hierarchical';
+                getNetworkOptions(layoutOverride = null) {
+                    const isHierarchical = layoutOverride === 'hierarchical' || layoutOverride === true
+                        ? true
+                        : layoutOverride === 'physics' || layoutOverride === 'force' || layoutOverride === false
+                            ? false
+                            : this.currentLayout === 'hierarchical';
                     const levelSeparation = 120;
                     const nodeSpacing = 150;
                     const treeSpacing = 150;

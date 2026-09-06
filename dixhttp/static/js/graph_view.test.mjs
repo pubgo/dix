@@ -157,6 +157,25 @@ test("buildModuleMapGraph uses modules not objects as nodes", async () => {
   assert.match(nodes[0].label, /2p\/5o/);
 });
 
+test("layoutStarPositions spreads modules around a hub", async () => {
+  const { layoutStarPositions, assessLayoutMetrics } = await import("./graph_state.mjs");
+  const nodes = [
+    { id: "main" },
+    { id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" },
+  ];
+  const edges = [
+    { from: "main", to: "a" },
+    { from: "main", to: "b" },
+    { from: "main", to: "c" },
+    { from: "main", to: "d" },
+    { from: "main", to: "e" },
+  ];
+  const positions = layoutStarPositions(nodes, edges);
+  assert.deepEqual(positions.main, { x: 0, y: 0 });
+  assert.equal(Object.keys(positions).length, 6);
+  assert.equal(assessLayoutMetrics(positions).ok, true);
+});
+
 test("aggregateByGroups collapses matching providers", async () => {
   const { aggregateByGroups, matchGroup, filterByPrefix, buildMermaidSource } = await import("./graph_workbench.mjs");
   const rules = [{ name: "billing", prefixes: ["billing"] }];

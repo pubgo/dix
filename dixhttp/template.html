@@ -95,7 +95,7 @@
                 <!-- Collapse Toggle Button -->
                 <div class="p-2 border-b border-gray-200 bg-gray-50 flex items-center"
                     :class="sidebarCollapsed ? 'justify-center' : 'justify-between'">
-                    <h3 x-show="!sidebarCollapsed" class="text-sm font-semibold text-gray-600 pl-2">📦 包列表</h3>
+                    <h3 x-show="!sidebarCollapsed" class="text-sm font-semibold text-gray-600 pl-2">📦 包范围</h3>
                     <button @click="sidebarCollapsed = !sidebarCollapsed"
                         class="p-1.5 hover:bg-gray-200 rounded transition"
                         :title="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'">
@@ -117,7 +117,7 @@
                     <div class="flex flex-col flex-1 overflow-hidden">
                         <div class="p-4 border-b border-gray-200">
                             <div class="relative">
-                                <input type="text" x-model="packageSearch" placeholder="搜索包名..."
+                                <input type="text" x-model="packageSearch" placeholder="选择包以缩小架构切片…"
                                     class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition">
                                 <span class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
                             </div>
@@ -348,8 +348,40 @@
                 </div>
 
                 <!-- Graph Container -->
-                <div class="flex-1 relative">
-                    <div id="network" class="w-full h-full"></div>
+                <div class="flex-1 relative flex flex-col min-h-0">
+                    <div x-show="densityWarning.show" x-cloak
+                        class="mx-4 mt-2 p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-900 flex-shrink-0">
+                        <p x-text="densityWarning.message"></p>
+                        <div class="mt-2 flex flex-wrap gap-2">
+                            <button type="button" class="px-2 py-1 text-xs border rounded bg-white"
+                                x-show="densityWarning.suggestModules"
+                                @click="switchView('modules')">切换到模块地图</button>
+                            <button type="button" class="px-2 py-1 text-xs border rounded bg-white"
+                                x-show="densityWarning.suggestAggregate && !aggregateGroups"
+                                @click="aggregateGroups = true; saveLocalState(); renderGraph()">开启按分组聚合</button>
+                        </div>
+                        <table class="mt-2 w-full text-xs" x-show="densityWarning.hubs.length">
+                            <thead>
+                                <tr>
+                                    <th class="text-left">耦合枢纽</th>
+                                    <th class="text-right">度数</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template x-for="h in densityWarning.hubs" :key="h.id">
+                                    <tr>
+                                        <td class="font-mono truncate max-w-[28rem]">
+                                            <button type="button" class="underline text-left"
+                                                @click="filterPrefix = h.id; renderGraph()"
+                                                x-text="h.id"></button>
+                                        </td>
+                                        <td class="text-right" x-text="h.degree"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="network" class="w-full flex-1 min-h-0"></div>
                     <!-- Loading Overlay -->
                     <div x-show="loading" x-cloak
                         class="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
