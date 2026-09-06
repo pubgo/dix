@@ -17,6 +17,7 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 currentLayout: 'hierarchical',
                 currentDepth: '2',
                 allData: null,
+                modulesData: null,
                 selectedNode: null,
                 network: null,
                 focusedType: null,
@@ -1087,11 +1088,24 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     }
                 },
 
-                switchView(view) {
+                async switchView(view) {
                     this.currentView = view;
                     this.focusedType = null;
                     this.focusedGraph = null;
+                    if (view === 'modules') {
+                        await this.loadModulesData();
+                    }
                     this.renderGraph();
+                },
+
+                async loadModulesData() {
+                    try {
+                        const res = await fetch(apiUrl('/api/modules'));
+                        this.modulesData = await res.json();
+                    } catch (e) {
+                        console.error('加载模块地图失败:', e);
+                        this.modulesData = [];
+                    }
                 },
 
                 resetView() {
@@ -1459,7 +1473,78 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     });
                 },
 
+                renderModulesGraph() {
+                    const helpers = this.graphHelpers();
+                    if (!helpers || !helpers.buildModuleMapGraph) {
+                        console.warn('[dix] graph helpers unavailable for module map');
+                        return;
+                    }
+                    this.focusedType = null;
+                    this.focusedGraph = null;
+                    this.focusedGroup = null;
+
+                    let { nodes, edges } = helpers.buildModuleMapGraph(this.modulesData || []);
+                    const filteredByPrefix = this.filterByPrefix(nodes, edges);
+                    nodes = filteredByPrefix.nodes;
+                    edges = filteredByPrefix.edges;
+
+                    if (nodes.length >= 2 && helpers.layoutStarPositions) {
+                        const positions = helpers.layoutStarPositions(nodes, edges);
+                        nodes = nodes.map(n => ({
+                            ...n,
+                            x: positions[n.id]?.x,
+                            y: positions[n.id]?.y,
+                            fixed: false,
+                        }));
+                    }
+
+                    const container = document.getElementById('network');
+                    const data = {
+                        nodes: new vis.DataSet(nodes),
+                        edges: new vis.DataSet(edges),
+                    };
+                    this.lastGraphData = data;
+
+                    const options = this.getNetworkOptions(false);
+                    options.physics = { enabled: false };
+                    options.layout = { improvedLayout: false, hierarchical: { enabled: false } };
+                    options.edges = { ...(options.edges || {}), smooth: false };
+
+                    if (this.network) {
+                        this.network.destroy();
+                    }
+                    this.network = new vis.Network(container, data, options);
+
+                    this.network.on('click', params => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            const node = data.nodes.get(nodeId);
+                            this.selectedNode = node;
+                        }
+                    });
+                    this.network.on('doubleClick', params => {
+                        if (params.nodes.length > 0) {
+                            const nodeId = params.nodes[0];
+                            const node = data.nodes.get(nodeId);
+                            if (node && node.data && node.data.type === 'module') {
+                                this.filterPrefix = (node.data.module && node.data.module.name) || node.id;
+                                this.switchView('providers');
+                            }
+                        }
+                    });
+
+                    setTimeout(() => {
+                        if (this.network) {
+                            this.network.fit({ animation: false, padding: 48 });
+                        }
+                    }, 80);
+                },
+
                 renderGraph() {
+                    if (this.currentView === 'modules') {
+                        this.renderModulesGraph();
+                        return;
+                    }
                     if (!this.allData) return;
 
                     this.focusedType = null;
@@ -1612,6 +1697,11 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                             const node = data.nodes.get(nodeId);
                             if (node && node.data && node.data.type === 'group') {
                                 this.toggleGroupExpand(node.data.group);
+                                return;
+                            }
+                            if (node && node.data && node.data.type === 'module') {
+                                this.filterPrefix = (node.data.module && node.data.module.name) || node.id;
+                                this.switchView('providers');
                                 return;
                             }
                             if (node && node.data && node.data.type === 'type') {

@@ -145,21 +145,59 @@ test("assessLayoutMetrics rejects thin-strip layouts", async () => {
   assert.equal(assessLayoutMetrics(spread).ok, true);
 });
 
-test("layoutStarPositions spreads modules around a hub", async () => {
-  const { layoutStarPositions, assessLayoutMetrics } = await import("./graph_state.mjs");
+test("buildModuleMapGraph uses modules not objects as nodes", async () => {
+  const { buildModuleMapGraph } = await import("./graph_state.mjs");
+  const { nodes, edges } = buildModuleMapGraph([
+    { name: "app/a", provider_count: 2, object_count: 5, depends_on: ["app/b"] },
+    { name: "app/b", provider_count: 1, object_count: 1, depends_on: [] },
+  ]);
+  assert.equal(nodes.length, 2);
+  assert.equal(edges.length, 1);
+  assert.equal(nodes[0].data.type, "module");
+  assert.match(nodes[0].label, /2p\/5o/);
+});
+
+test("aggregateByGroups collapses matching providers", async () => {
+  const { aggregateByGroups, matchGroup, filterByPrefix, buildMermaidSource } = await import("./graph_workbench.mjs");
+  const rules = [{ name: "billing", prefixes: ["billing"] }];
+  assert.equal(matchGroup("billing.Service", "example/billing", rules), "billing");
   const nodes = [
-    { id: "main" },
-    { id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }, { id: "e" },
+    { id: "p1", data: { kind: "provider", packagePath: "example/billing" } },
+    { id: "p2", data: { kind: "provider", packagePath: "example/billing" } },
+    { id: "t1", data: { kind: "type", packagePath: "example/other" } },
   ];
   const edges = [
-    { from: "main", to: "a" },
-    { from: "main", to: "b" },
-    { from: "main", to: "c" },
-    { from: "main", to: "d" },
-    { from: "main", to: "e" },
+    { from: "p1", to: "t1" },
+    { from: "p2", to: "t1" },
   ];
-  const positions = layoutStarPositions(nodes, edges);
-  assert.deepEqual(positions.main, { x: 0, y: 0 });
-  assert.equal(Object.keys(positions).length, 6);
-  assert.equal(assessLayoutMetrics(positions).ok, true);
+  const agg = aggregateByGroups(nodes, edges, { enabled: true, groupRules: rules });
+  assert.equal(agg.nodes.some((n) => n.id === "group:billing"), true);
+  assert.equal(agg.nodes.some((n) => n.id === "p1"), false);
+  const filtered = filterByPrefix(nodes, edges, "billing");
+  assert.deepEqual(filtered.nodes.map((n) => n.id).sort(), ["p1", "p2"]);
+  assert.match(buildMermaidSource(agg.nodes, agg.edges), /flowchart TD/);
+});
+
+test("group rules persistence round-trips through storage", async () => {
+  const { loadGroupRulesState, saveGroupRulesState, mergeServerGroupRules } = await import("./graph_workbench.mjs");
+  const mem = new Map();
+  const storage = {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+  };
+  saveGroupRulesState({
+    aggregateGroups: true,
+    groupRules: [{ name: "core", prefixes: ["github.com/x"] }],
+  }, storage);
+  const loaded = loadGroupRulesState(storage);
+  assert.equal(loaded.aggregateGroups, true);
+  assert.deepEqual(loaded.groupRules, [{ name: "core", prefixes: ["github.com/x"] }]);
+  assert.deepEqual(
+    mergeServerGroupRules([], [{ name: "api", prefixes: ["api/"] }]),
+    [{ name: "api", prefixes: ["api/"] }],
+  );
+  assert.deepEqual(
+    mergeServerGroupRules([{ name: "local", prefixes: ["l"] }], [{ name: "api", prefixes: ["api/"] }]),
+    [{ name: "local", prefixes: ["l"] }],
+  );
 });

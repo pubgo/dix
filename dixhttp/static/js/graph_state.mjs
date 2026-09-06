@@ -82,6 +82,26 @@ export function layoutStarPositions(nodes = [], edges = [], opts = {}) {
   return positions;
 }
 
+/** Build package/module architecture graph; object counts are label text only. */
+export function buildModuleMapGraph(modules = []) {
+  const nodes = modules.map((m) => ({
+    id: m.name,
+    label: `${shortGraphLabel(m.name)}\n(${m.provider_count || 0}p/${m.object_count || 0}o)`,
+    title: m.name,
+    shape: "box",
+    font: { size: 12 },
+    color: { background: "#eef0ff", border: "#4f5ce5" },
+    data: { type: "module", module: m, packagePath: m.name },
+  }));
+  const edges = [];
+  for (const m of modules) {
+    for (const dep of m.depends_on || []) {
+      edges.push({ from: m.name, to: dep, arrows: "to", color: { color: "#9ca3af" } });
+    }
+  }
+  return { nodes, edges };
+}
+
 /**
  * Judge whether node positions are a readable 2D spread (not a hairline).
  * positions: { [id]: { x, y } }
@@ -201,7 +221,7 @@ if (typeof window !== "undefined") {
   window.DIXGraphState = {
     resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP, shortGraphLabel,
     resolveEffectiveLayout, resolveCameraStrategy, layoutStarPositions, assessLayoutMetrics, pickFocusNodeId,
-    createLoadGuard, rankHubNodes,
+    createLoadGuard, rankHubNodes, buildModuleMapGraph,
     issueGraphHash, issueTraceHash, matchTraceRecord, filterTraceRecords,
   };
 }

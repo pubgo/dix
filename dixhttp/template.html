@@ -177,6 +177,11 @@
                             class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1">
                             <span>🔷</span> 类型依赖
                         </button>
+                        <button @click="switchView('modules')"
+                            :class="{'bg-primary-500 text-white border-primary-500': currentView === 'modules', 'bg-white hover:bg-gray-50': currentView !== 'modules'}"
+                            class="px-3 py-1.5 text-sm border rounded-lg transition flex items-center gap-1">
+                            <span>📦</span> 模块地图
+                        </button>
                     </div>
                     <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-gray-500">布局:</span>
