@@ -42,9 +42,13 @@ func TestDependencyPackageFilterUsesOutputPkg(t *testing.T) {
 	if data.Providers[0].OutputType != "*analytics.Client" {
 		t.Fatalf("got provider %+v", data.Providers[0])
 	}
-	// extractPackage("*analytics.Client") == "analytics" must not be required as exact filter
-	empty := buildDependencyData(details, nil, "analytics", 0)
-	if len(empty.Providers) != 1 {
-		t.Fatalf("suffix/fragment filter analytics should still match OutputPkg path, got %+v", empty.Providers)
+	// extractPackage("*analytics.Client") == "analytics" should match path suffix
+	byShort := buildDependencyData(details, nil, "analytics", 0)
+	if len(byShort.Providers) != 1 {
+		t.Fatalf("short name analytics should match OutputPkg path suffix, got %+v", byShort.Providers)
+	}
+	byMain := buildDependencyData(details, nil, "main", 0)
+	if len(byMain.Providers) != 0 {
+		t.Fatalf("filter main must not match domain/.../analytics via substring, got %+v", byMain.Providers)
 	}
 }

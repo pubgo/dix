@@ -1110,11 +1110,11 @@ func packagePathMatchesFilter(pkg, pkgFilter string) bool {
 	if pkg == pkgFilter {
 		return true
 	}
-	// Allow suffix / prefix matches when one side is a path fragment.
-	if strings.HasSuffix(pkg, "/"+pkgFilter) || strings.HasSuffix(pkgFilter, "/"+pkg) {
+	// Sidebar uses full OutputPkg paths; type extract may be a short name ("analytics").
+	if !strings.Contains(pkg, "/") && strings.HasSuffix(pkgFilter, "/"+pkg) {
 		return true
 	}
-	if strings.Contains(pkg, pkgFilter) || strings.Contains(pkgFilter, pkg) {
+	if !strings.Contains(pkgFilter, "/") && strings.HasSuffix(pkg, "/"+pkgFilter) {
 		return true
 	}
 	return false
