@@ -347,41 +347,68 @@
                     </div>
                 </div>
 
-                <!-- Graph Container -->
-                <div class="flex-1 relative flex flex-col min-h-0">
-                    <div x-show="densityWarning.show" x-cloak
-                        class="mx-4 mt-2 p-3 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-900 flex-shrink-0">
-                        <p x-text="densityWarning.message"></p>
-                        <div class="mt-2 flex flex-wrap gap-2">
-                            <button type="button" class="px-2 py-1 text-xs border rounded bg-white"
-                                x-show="densityWarning.suggestModules"
-                                @click="switchView('modules')">切换到模块地图</button>
-                            <button type="button" class="px-2 py-1 text-xs border rounded bg-white"
-                                x-show="densityWarning.suggestAggregate && !aggregateGroups"
-                                @click="aggregateGroups = true; saveLocalState(); renderGraph()">开启按分组聚合</button>
-                        </div>
-                        <table class="mt-2 w-full text-xs" x-show="densityWarning.hubs.length">
-                            <thead>
-                                <tr>
-                                    <th class="text-left">耦合枢纽</th>
-                                    <th class="text-right">度数</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <template x-for="h in densityWarning.hubs" :key="h.id">
-                                    <tr>
-                                        <td class="font-mono truncate max-w-[28rem]">
-                                            <button type="button" class="underline text-left"
-                                                @click="filterPrefix = h.id; renderGraph()"
-                                                x-text="h.id"></button>
-                                        </td>
-                                        <td class="text-right" x-text="h.degree"></td>
-                                    </tr>
-                                </template>
-                            </tbody>
-                        </table>
+                <!-- Graph Container: full-bleed canvas; density tip floats and can collapse -->
+                <div class="flex-1 relative min-h-0">
+                    <div id="network" class="absolute inset-0"></div>
+
+                    <div x-show="densityWarning.show && densityWarning.minimized" x-cloak
+                        class="absolute bottom-3 left-3 z-20">
+                        <button type="button"
+                            class="px-3 py-1.5 text-xs rounded-full border border-amber-300 bg-amber-50 text-amber-900 shadow-md hover:bg-amber-100"
+                            @click="densityWarning.minimized = false">
+                            图规模过大 · 查看建议
+                        </button>
                     </div>
-                    <div id="network" class="w-full flex-1 min-h-0"></div>
+
+                    <div x-show="densityWarning.show && !densityWarning.minimized" x-cloak
+                        class="absolute bottom-3 left-3 z-20 w-[min(22rem,calc(100%-1.5rem))] rounded-lg border border-amber-200 bg-amber-50/95 text-amber-950 shadow-lg backdrop-blur-sm">
+                        <div class="flex items-start gap-2 px-3 pt-2.5 pb-1">
+                            <p class="text-xs leading-snug flex-1 min-w-0" x-text="densityWarning.message"></p>
+                            <button type="button"
+                                class="flex-shrink-0 px-1.5 py-0.5 text-[11px] text-amber-800/80 hover:text-amber-950"
+                                title="收起提示"
+                                @click="densityWarning.minimized = true">收起</button>
+                        </div>
+                        <div class="px-3 pb-2 flex flex-wrap gap-1.5">
+                            <button type="button"
+                                class="px-2 py-1 text-[11px] border border-amber-200 rounded bg-white hover:bg-amber-50"
+                                x-show="densityWarning.suggestModules"
+                                @click="switchView('modules')">模块地图</button>
+                            <button type="button"
+                                class="px-2 py-1 text-[11px] border border-amber-200 rounded bg-white hover:bg-amber-50"
+                                x-show="densityWarning.suggestAggregate && !aggregateGroups"
+                                @click="aggregateGroups = true; saveLocalState(); renderGraph()">分组聚合</button>
+                            <button type="button"
+                                class="px-2 py-1 text-[11px] border border-amber-200 rounded bg-white hover:bg-amber-50"
+                                x-show="densityWarning.hubs.length"
+                                @click="densityWarning.expanded = !densityWarning.expanded"
+                                x-text="densityWarning.expanded ? '收起枢纽' : '耦合枢纽'"></button>
+                        </div>
+                        <div class="px-3 pb-2.5 max-h-40 overflow-auto border-t border-amber-100"
+                            x-show="densityWarning.expanded && densityWarning.hubs.length">
+                            <table class="w-full text-[11px] mt-1.5">
+                                <thead>
+                                    <tr class="text-amber-800/70">
+                                        <th class="text-left font-medium py-0.5">枢纽</th>
+                                        <th class="text-right font-medium py-0.5">度数</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template x-for="h in densityWarning.hubs" :key="h.id">
+                                        <tr>
+                                            <td class="font-mono truncate max-w-[14rem] py-0.5">
+                                                <button type="button" class="underline text-left hover:text-amber-700"
+                                                    @click="filterPrefix = h.id; renderGraph()"
+                                                    x-text="h.id"></button>
+                                            </td>
+                                            <td class="text-right tabular-nums py-0.5" x-text="h.degree"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Loading Overlay -->
                     <div x-show="loading" x-cloak
                         class="absolute inset-0 bg-white/90 flex items-center justify-center z-50">
@@ -394,7 +421,6 @@
                     </div>
                 </div>
             </main>
-
             <!-- Right Sidebar - Details -->
             <aside class="w-80 bg-white border-l border-gray-200 flex flex-col flex-shrink-0">
                 <div class="p-4 border-b border-gray-200 bg-gray-50">
@@ -1240,9 +1266,9 @@
     </div>
 
     <script>window.DIX_BASE = "__DIX_BASE_PATH__";</script>
-    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_state.mjs?v=legacy-arch1"></script>
-    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_workbench.mjs?v=legacy-arch1"></script>
-    <script src="__DIX_BASE_PATH__/static/js/legacy/app.js?v=legacy-arch1"></script>
+    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_state.mjs?v=legacy-arch2"></script>
+    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_workbench.mjs?v=legacy-arch2"></script>
+    <script src="__DIX_BASE_PATH__/static/js/legacy/app.js?v=legacy-arch2"></script>
 </body>
 
 </html>

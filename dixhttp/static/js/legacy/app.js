@@ -36,7 +36,15 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 mermaidSvg: '',
                 mermaidError: '',
                 lastGraphData: null,
-                densityWarning: { show: false, message: '', hubs: [], suggestModules: false, suggestAggregate: false },
+                densityWarning: {
+                    show: false,
+                    message: '',
+                    hubs: [],
+                    suggestModules: false,
+                    suggestAggregate: false,
+                    expanded: false,
+                    minimized: false,
+                },
                 expandedGroups: [],
                 runtimeStats: [],
                 runtimeStatsLoading: false,
@@ -1539,6 +1547,15 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                             this.network.fit({ animation: false, padding: 48 });
                         }
                     }, 80);
+                    this.densityWarning = {
+                        show: false,
+                        message: '',
+                        hubs: [],
+                        suggestModules: false,
+                        suggestAggregate: false,
+                        expanded: false,
+                        minimized: false,
+                    };
                 },
 
                 renderGraph() {
@@ -1669,14 +1686,18 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     const helpers = this.graphHelpers();
                     const cap = helpers && helpers.READABLE_NODE_CAP ? helpers.READABLE_NODE_CAP : 40;
                     const over = ns.length > cap || es.length > cap * 3;
+                    const prevWarn = this.densityWarning || {};
                     this.densityWarning = {
                         show: over,
                         message: over
-                            ? `图规模过大（${ns.length} 节点 / ${es.length} 边）。建议先看模块地图或按分组聚合审查组织；下列为耦合枢纽。`
+                            ? `图规模过大（${ns.length} 节点 / ${es.length} 边）。可先看模块地图或开启分组聚合；需要时展开耦合枢纽。`
                             : '',
                         hubs: over && helpers && helpers.rankHubNodes ? helpers.rankHubNodes(ns, es, 8) : [],
                         suggestModules: over && this.currentView !== 'modules',
                         suggestAggregate: over && !this.aggregateGroups && (this.groupRules || []).length > 0,
+                        // Keep graph primary: start minimized; remember user's collapse choice across redraws.
+                        expanded: false,
+                        minimized: over ? (prevWarn.show ? !!prevWarn.minimized : true) : false,
                     };
                     if (over && helpers && helpers.applyGraphBudget) {
                         const bounded = helpers.applyGraphBudget(ns, es, { nodes: cap, edges: cap * 3 });
