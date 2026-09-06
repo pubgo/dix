@@ -1896,6 +1896,10 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
 
                 formatTypeName(typeName) {
                     if (!typeName) return '';
+                    const helpers = this.graphHelpers();
+                    if (helpers && helpers.shortGraphLabel) {
+                        return helpers.shortGraphLabel(typeName);
+                    }
                     let t = typeName.replace(/^\*/, '').replace(/^\[\]/, '');
                     const lastSlash = t.lastIndexOf('/');
                     if (lastSlash > -1) {
@@ -1909,6 +1913,10 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
 
                 formatFunctionName(fnName) {
                     if (!fnName) return 'unknown';
+                    const helpers = this.graphHelpers();
+                    if (helpers && helpers.shortGraphLabel) {
+                        return helpers.shortGraphLabel(fnName);
+                    }
                     const lastSlash = fnName.lastIndexOf('/');
                     let name = lastSlash > -1 ? fnName.substring(lastSlash + 1) : fnName;
                     if (name.length > 35) {
