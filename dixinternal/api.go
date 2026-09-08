@@ -220,27 +220,32 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 			var inputTypes []string
 			var inputPkgs []string
 			seen := make(map[string]bool)
+			appendInput := func(typ reflect.Type) {
+				if typ == nil {
+					return
+				}
+				name := typ.String()
+				if name == "" {
+					return
+				}
+				pkg := resolveTypePkgPath(typ)
+				// Distinct packages can share type.String() (e.g. */handler.Handler).
+				key := pkg + "\x00" + name
+				if seen[key] {
+					return
+				}
+				seen[key] = true
+				inputTypes = append(inputTypes, name)
+				inputPkgs = append(inputPkgs, pkg)
+			}
 			for _, input := range providerFn.inputList {
 				if input.isStruct || input.typ.Kind() == reflect.Struct {
 					for _, in := range getProvideAllInputs(input.typ) {
-						name := in.typ.String()
-						if name == "" || seen[name] {
-							continue
-						}
-						seen[name] = true
-						inputTypes = append(inputTypes, name)
-						inputPkgs = append(inputPkgs, resolveTypePkgPath(in.typ))
+						appendInput(in.typ)
 					}
 					continue
 				}
-
-				name := input.typ.String()
-				if name == "" || seen[name] {
-					continue
-				}
-				seen[name] = true
-				inputTypes = append(inputTypes, name)
-				inputPkgs = append(inputPkgs, resolveTypePkgPath(input.typ))
+				appendInput(input.typ)
 			}
 			details = append(details, ProviderDetails{
 				OutputType:     outputType.String(),

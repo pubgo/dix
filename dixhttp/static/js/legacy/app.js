@@ -5,10 +5,17 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
             return {
                 // State
                 loading: true,
-                sidebarCollapsed: false,
+                sidebarCollapsed: true,
+                /** Right inspector: inventory vs node detail. */
+                rightPanelCollapsed: false,
+                rightPanelTab: 'inventory',
+                toolbarMoreOpen: false,
+                packageGroupOpen: {},
+                /** Compact pyramid status for toolbar (not a floating tip). */
+                pyramidStatus: '',
                 stats: { provider_count: 0, object_count: 0, package_count: 0, edge_count: 0 },
                 packages: [],
-                uiVersion: 'trace-entry-v5-20260323',
+                uiVersion: 'arch-layout-v1',
                 packageSearch: '',
                 globalSearch: '',
                 searchResults: [],
@@ -16,6 +23,8 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 currentView: 'providers',
                 currentLayout: 'hierarchical',
                 currentDepth: '2',
+                /** Max pyramid level observed for current architecture view (depth UI). */
+                pyramidMaxLevel: 4,
                 allData: null,
                 modulesData: null,
                 selectedNode: null,
@@ -23,6 +32,22 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 focusedType: null,
                 focusedGraph: null,
                 focusedGroup: null,
+                /** Provider id seed for pyramid neighborhood (upstream/downstream). */
+                pyramidFocusProviderId: null,
+                /** Type id seed for types pyramid neighborhood. */
+                pyramidFocusTypeId: null,
+                /** Hidden canvas seeds shared across architecture views (session + URL). */
+                hiddenSeeds: [],
+                hiddenSeedsKey: 'dix.hiddenNodeSeeds.v1',
+                /** Snapshots of hiddenSeeds before each hide/clear (newest last); cap 20. */
+                hideHistory: [],
+                hideHistoryMax: 20,
+                /** Right-click menu on graph nodes. */
+                graphContextMenu: null,
+                /** Transient undo toast after hide. */
+                hideToast: null,
+                _hideToastTimer: null,
+                hiddenListOpen: false,
                 aggregateGroups: true,
                 debugGroupMatching: false,
                 groupRules: [],
@@ -36,12 +61,17 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 mermaidSvg: '',
                 mermaidError: '',
                 lastGraphData: null,
+                packageSummary: { providers: [], types: [] },
+                inventorySearch: '',
+                edgeDeclutter: true,
                 densityWarning: {
                     show: false,
                     message: '',
                     hubs: [],
                     suggestModules: false,
                     suggestAggregate: false,
+                    suggestKeepBusiness: false,
+                    edgesDropped: 0,
                     expanded: false,
                     minimized: false,
                 },
@@ -134,6 +164,33 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     return this.packages
                         .filter(p => p.name.toLowerCase().includes(query))
                         .sort((a, b) => b.provider_count - a.provider_count);
+                },
+
+                get packageGroups() {
+                    const order = ['app', 'bootstrap', 'router', 'domain', 'infra', 'plugins', 'other'];
+                    const labels = {
+                        app: '应用',
+                        bootstrap: '装配',
+                        router: '路由',
+                        domain: '领域',
+                        infra: '基础设施',
+                        plugins: '插件',
+                        other: '其它',
+                    };
+                    const buckets = Object.fromEntries(order.map((k) => [k, []]));
+                    for (const p of this.filteredPackages) {
+                        const key = this.packageBucket(p.name);
+                        if (!buckets[key]) buckets[key] = [];
+                        buckets[key].push(p);
+                    }
+                    return order
+                        .filter((k) => (buckets[k] || []).length)
+                        .map((k) => ({
+                            key: k,
+                            label: labels[k] || k,
+                            packages: buckets[k],
+                            count: buckets[k].reduce((sum, p) => sum + (p.provider_count || 0), 0),
+                        }));
                 },
 
                 get totalProviders() {
@@ -534,6 +591,8 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
 
                 async init() {
                     this.loadLocalState();
+                    this.loadHiddenSeeds();
+                    this.readArchitectureUrlState();
                     await this.loadGroupRules();
                     await this.loadStats();
                     await this.loadPackages();
@@ -541,10 +600,47 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     await this.loadRuntimeStats();
                     await this.loadRecentErrors();
                     await this.loadTraceRecords();
+                    this.syncArchitectureUrl();
                     if (window.mermaid && window.mermaid.initialize) {
                         window.mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
                     }
                     document.addEventListener('fullscreenchange', () => this.handleFullscreenChange());
+                    this._onArchKeydown = (e) => this.handleArchitectureHotkeys(e);
+                    document.addEventListener('keydown', this._onArchKeydown);
+                    if (typeof this.$watch === 'function') {
+                        this.$watch('selectedNode', (n) => {
+                            if (n && (n.id || (n.data && n.data.function_name))) {
+                                this.rightPanelTab = 'detail';
+                                this.rightPanelCollapsed = false;
+                            }
+                        });
+                    }
+                },
+
+                handleArchitectureHotkeys(e) {
+                    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+                    if (tag === 'input' || tag === 'textarea' || tag === 'select' || (e.target && e.target.isContentEditable)) {
+                        return;
+                    }
+                    if (e.key === 'Escape') {
+                        this.clearHidePreview();
+                        this.graphContextMenu = null;
+                        return;
+                    }
+                    if (e.key === 'h' || e.key === 'H') {
+                        if (this.selectedNode && this.selectedNode.id) {
+                            e.preventDefault();
+                            this.hideSelectedNodeAndDownstream();
+                        }
+                        return;
+                    }
+                    if (e.key === 'u' || e.key === 'U') {
+                        if (this.hideHistory.length) {
+                            e.preventDefault();
+                            this.undoLastHide();
+                        }
+                        return;
+                    }
                 },
 
                 async loadGroupRules() {
@@ -1077,21 +1173,23 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
 
                 async selectPackage(pkgName) {
                     this.currentPackage = pkgName;
-                    this.filterPrefix = pkgName || '';
-                    // Package scope applies to Providers/Types architecture views.
+                    this.pyramidFocusProviderId = null;
+                    this.pyramidFocusTypeId = null;
+                    this.filterPrefix = '';
+                    if (pkgName) this.sidebarCollapsed = false;
                     if (this.currentView === 'modules' && pkgName) {
                         this.currentView = 'providers';
                     }
+                    this.syncArchitectureUrl();
                     await this.loadDependencies();
                 },
 
                 async loadDependencies() {
                     this.loading = true;
                     try {
-                        let url = apiUrl('/api/dependencies');
-                        if (this.currentPackage) {
-                            url += '?package=' + encodeURIComponent(this.currentPackage);
-                        }
+                        // Always fetch the full provider set so package/provider scope can
+                        // include related upstream/downstream outside the selected package.
+                        const url = apiUrl('/api/dependencies');
                         const res = await fetch(url);
                         this.allData = await res.json();
                         this.renderGraph();
@@ -1106,6 +1204,7 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     this.currentView = view;
                     this.focusedType = null;
                     this.focusedGraph = null;
+                    this.filterPrefix = '';
                     if (view === 'modules') {
                         await this.loadModulesData();
                     }
@@ -1120,10 +1219,21 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                         console.error('加载模块地图失败:', e);
                         this.modulesData = [];
                     }
+                    // Need providers to disperse fat packages in the module tree.
+                    if (!this.allData) {
+                        try {
+                            const res = await fetch(apiUrl('/api/dependencies'));
+                            this.allData = await res.json();
+                        } catch (e) {
+                            console.error('加载依赖失败:', e);
+                        }
+                    }
                 },
 
                 resetView() {
                     this.currentPackage = null;
+                    this.pyramidFocusProviderId = null;
+                    this.pyramidFocusTypeId = null;
                     this.currentView = 'providers';
                     this.packageSearch = '';
                     this.globalSearch = '';
@@ -1131,12 +1241,15 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     this.selectedNode = null;
                     this.focusedType = null;
                     this.focusedGraph = null;
+                    this.filterPrefix = '';
                     this.saveLocalState();
+                    this.syncArchitectureUrl();
                     this.loadDependencies();
                 },
 
                 onDepthChange() {
                     this.normalizeCurrentDepth(2);
+                    this.syncArchitectureUrl();
                     if (this.focusedType) {
                         if (this.focusedGraph === 'dependency') {
                             this.showDependencyGraph(this.focusedType, 'type');
@@ -1160,11 +1273,41 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     if (!Number.isFinite(depth) || depth < 0) {
                         depth = defaultDepth;
                     }
-                    // 防止极端值导致页面卡顿
                     if (depth > 128) {
                         depth = 128;
                     }
+                    const max = Number(this.pyramidMaxLevel) || 0;
+                    if (depth > 0 && max > 0 && depth > max) {
+                        depth = max;
+                    }
                     return depth;
+                },
+
+                depthSelectOptions() {
+                    const max = Math.max(1, Number(this.pyramidMaxLevel) || 1);
+                    const preferred = [1, 2, 3, 5, 10];
+                    const values = [...new Set([
+                        ...preferred.filter((v) => v <= max),
+                        max,
+                    ])].sort((a, b) => a - b);
+                    return [
+                        ...values.map((v) => ({ value: String(v), label: `前 ${v} 级` })),
+                        { value: '0', label: '全部层级' },
+                    ];
+                },
+
+                updatePyramidMaxLevel(levels) {
+                    if (!levels || typeof levels.values !== 'function') return;
+                    let max = 1;
+                    for (const lv of levels.values()) {
+                        const n = Number(lv) || 1;
+                        if (n > max) max = n;
+                    }
+                    this.pyramidMaxLevel = max;
+                    const cur = Number.parseInt(String(this.currentDepth ?? ''), 10);
+                    if (Number.isFinite(cur) && cur > max) {
+                        this.currentDepth = String(max);
+                    }
                 },
 
                 normalizeCurrentDepth(defaultDepth = 2) {
@@ -1295,196 +1438,71 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 },
 
                 // 显示以某个类型为中心的依赖图（包含依赖者和被依赖者）
-                showDependencyGraph(targetType, nodeType) {
-                    if (!this.allData) return;
-
-                    this.focusedType = targetType;
-                    this.focusedGraph = 'dependency';
-                    this.focusedGroup = null;
-
-                    const depth = this.parseDepthValue(2);
-                    const nodes = [];
-                    const edges = [];
-                    const nodeMap = new Map();
-                    const typePkgMap = this.buildTypePkgMap();
-
-                    // 构建类型到 Provider 的映射
-                    const typeToProviders = new Map(); // outputType -> providers
-                    const typeToConsumers = new Map(); // inputType -> providers that use it
-
-                    this.allData.providers.forEach(provider => {
-                        const outputTypes = this.providerOutputTypes(provider);
-                        outputTypes.forEach(outputType => {
-                            if (!typeToProviders.has(outputType)) {
-                                typeToProviders.set(outputType, []);
-                            }
-                            typeToProviders.get(outputType).push(provider);
+                showDependencyGraph(targetType, nodeType, pkgHint = '') {
+                    // Types: use package-qualified pyramid neighborhood (depth 0 = unlimited).
+                    // Legacy short-type BFS broke when「全部层级」parsed as maxDepth 0.
+                    if (nodeType === 'type' || nodeType == null || nodeType === '') {
+                        this.focusTypeNeighborhood({
+                            id: String(targetType || '').includes('\x00') ? String(targetType) : '',
+                            data: {
+                                fullType: String(targetType || '').includes('\x00')
+                                    ? String(targetType).split('\x00').pop()
+                                    : String(targetType || ''),
+                                packagePath: String(pkgHint || ''),
+                                type: 'type',
+                            },
                         });
-
-                        (provider.input_types || []).forEach(inputType => {
-                            if (!typeToConsumers.has(inputType)) {
-                                typeToConsumers.set(inputType, []);
-                            }
-                            typeToConsumers.get(inputType).push(provider);
-                        });
-                    });
-
-                    // BFS 向上查找依赖（当前类型依赖什么）
-                    const findDependencies = (startType, maxDepth) => {
-                        const visited = new Set();
-                        const queue = [{ type: startType, level: 0 }];
-                        const result = [];
-
-                        while (queue.length > 0) {
-                            const { type, level } = queue.shift();
-                            if (visited.has(type) || level > maxDepth) continue;
-                            visited.add(type);
-
-                            result.push({ type, level, direction: 'dependency' });
-
-                            // 找到生产这个类型的 providers，获取它们的输入类型
-                            const providers = typeToProviders.get(type) || [];
-                            providers.forEach(p => {
-                                (p.input_types || []).forEach(inputType => {
-                                    if (!visited.has(inputType)) {
-                                        queue.push({ type: inputType, level: level + 1 });
-                                    }
-                                });
-                            });
-                        }
-                        return result;
-                    };
-
-                    // BFS 向下查找被依赖者（什么依赖当前类型）
-                    const findDependents = (startType, maxDepth) => {
-                        const visited = new Set();
-                        const queue = [{ type: startType, level: 0 }];
-                        const result = [];
-
-                        while (queue.length > 0) {
-                            const { type, level } = queue.shift();
-                            if (visited.has(type) || level > maxDepth) continue;
-                            visited.add(type);
-
-                            if (level > 0) { // 不重复添加起始节点
-                                result.push({ type, level, direction: 'dependent' });
-                            }
-
-                            // 找到使用这个类型作为输入的 providers，获取它们的输出类型
-                            const consumers = typeToConsumers.get(type) || [];
-                            consumers.forEach(p => {
-                                this.providerOutputTypes(p).forEach(outputType => {
-                                    if (outputType && !visited.has(outputType)) {
-                                        queue.push({ type: outputType, level: level + 1 });
-                                    }
-                                });
-                            });
-                        }
-                        return result;
-                    };
-
-                    // 获取依赖和被依赖者
-                    const dependencies = findDependencies(targetType, depth);
-                    const dependents = findDependents(targetType, depth);
-
-                    // 添加所有节点
-                    const allTypes = [...dependencies, ...dependents];
-                    allTypes.forEach(({ type, level, direction }) => {
-                        if (!nodeMap.has(type)) {
-                            const isTarget = type === targetType;
-                            let bgColor, borderColor;
-
-                            if (isTarget) {
-                                bgColor = '#fde68a'; borderColor = '#f59e0b'; // 目标：黄色
-                            } else if (direction === 'dependency') {
-                                bgColor = '#bbf7d0'; borderColor = '#22c55e'; // 依赖：绿色
-                            } else {
-                                bgColor = '#fecaca'; borderColor = '#ef4444'; // 被依赖：红色
-                            }
-
-                            nodes.push({
-                                id: type,
-                                label: this.formatTypeName(type),
-                                title: `类型: ${type}\n层级: ${level}\n${direction === 'dependency' ? '← 依赖' : '→ 被依赖'}`,
-                                color: { background: bgColor, border: borderColor },
-                                level: direction === 'dependency' ? -level : level,
-                                data: { type: 'type', fullType: type, packagePath: typePkgMap.get(type) || '' }
-                            });
-                            nodeMap.set(type, true);
-                        }
-                    });
-
-                    // 添加边
-                    this.allData.providers.forEach(provider => {
-                        const outputType = provider.output_type;
-                        (provider.input_types || []).forEach(inputType => {
-                            if (nodeMap.has(inputType) && nodeMap.has(outputType)) {
-                                const edgeId = `${inputType}->${outputType}`;
-                                if (!nodeMap.has(edgeId)) {
-                                    nodeMap.set(edgeId, true);
-                                    edges.push({
-                                        from: inputType,
-                                        to: outputType,
-                                        arrows: 'to',
-                                        color: { color: '#9ca3af' }
-                                    });
-                                }
-                            }
-                        });
-                    });
-
-                    // 渲染图形
-                    const aggregated = this.aggregateByGroups(nodes, edges, new Set([targetType]));
-                    const filteredByPrefix = this.filterByPrefix(aggregated.nodes, aggregated.edges, new Set([targetType]));
-
-                    const container = document.getElementById('network');
-                    const graphData = {
-                        nodes: new vis.DataSet(filteredByPrefix.nodes),
-                        edges: new vis.DataSet(filteredByPrefix.edges)
-                    };
-                    this.lastGraphData = graphData;
-                    this.lastGraphData = graphData;
-                    this.lastGraphData = graphData;
-
-                    if (this.network) {
-                        this.network.destroy();
+                        return;
                     }
+                    // Fallback: still support non-type callers via neighborhood on output type.
+                    this.focusTypeNeighborhood({
+                        data: {
+                            fullType: String(targetType || ''),
+                            packagePath: String(pkgHint || ''),
+                            type: 'type',
+                        },
+                    });
+                },
 
-                    this.network = new vis.Network(container, graphData, this.getNetworkOptions());
+                /** Focus types pyramid on one type and its upstream/downstream. */
+                focusTypeNeighborhood(node) {
+                    if (!node) return;
+                    const helpers = this.graphHelpers();
+                    const data = node.data || {};
+                    const fullType = String(data.fullType || data.output_type || '').trim();
+                    const pkg = String(data.packagePath || data.output_pkg || '').trim();
+                    let seedId = String(node.id || '').trim();
+                    if ((!seedId || seedId === fullType) && helpers && helpers.typeNodeIdentity && fullType) {
+                        seedId = helpers.typeNodeIdentity(fullType, pkg);
+                    }
+                    if (!seedId) seedId = fullType;
+                    if (!seedId) return;
 
-                    // 聚焦到目标节点
+                    this.currentView = 'types';
+                    this.pyramidFocusTypeId = seedId;
+                    this.pyramidFocusProviderId = null;
+                    this.focusedType = null;
+                    this.focusedGraph = null;
+                    this.focusedGroup = null;
+                    this.rightPanelTab = 'detail';
+                    this.rightPanelCollapsed = false;
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
                     setTimeout(() => {
+                        if (!this.network || !this.lastGraphData) return;
+                        if (!this.lastGraphData.nodes.get(seedId)) return;
                         try {
-                            this.network.selectNodes([targetType]);
-                            this.network.focus(targetType, { scale: 1, animation: true });
-                        } catch (e) { }
-                    }, 100);
-
-                    this.network.on('click', params => {
-                        if (params.nodes.length > 0) {
-                            const nodeId = params.nodes[0];
-                            const node = graphData.nodes.get(nodeId);
-                            this.selectedNode = node;
-                            if (node && node.data && node.data.type === 'provider') {
-                                this.openProviderDetailModal(node);
-                            }
+                            this.network.selectNodes([seedId]);
+                            this.network.focus(seedId, {
+                                scale: 1.05,
+                                animation: { duration: 280, easingFunction: 'easeInOutQuad' },
+                            });
+                            const n = this.lastGraphData.nodes.get(seedId);
+                            if (n) this.selectedNode = n;
+                        } catch (e) {
+                            // ignore
                         }
-                    });
-
-                    // 双击展开该节点的依赖
-                    this.network.on('doubleClick', params => {
-                        if (params.nodes.length > 0) {
-                            const nodeId = params.nodes[0];
-                            const node = graphData.nodes.get(nodeId);
-                            if (node && node.data && node.data.type === 'group') {
-                                this.toggleGroupExpand(node.data.group);
-                                return;
-                            }
-                            if (node && node.data && node.data.fullType) {
-                                this.showDependencyGraph(node.data.fullType, 'type');
-                            }
-                        }
-                    });
+                    }, 140);
                 },
 
                 renderModulesGraph() {
@@ -1497,32 +1515,54 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     this.focusedGraph = null;
                     this.focusedGroup = null;
 
-                    let { nodes, edges } = helpers.buildModuleMapGraph(this.modulesData || []);
-                    const filteredByPrefix = this.filterByPrefix(nodes, edges);
-                    nodes = filteredByPrefix.nodes;
-                    edges = filteredByPrefix.edges;
-
-                    if (nodes.length >= 2 && helpers.layoutStarPositions) {
-                        const positions = helpers.layoutStarPositions(nodes, edges);
-                        nodes = nodes.map(n => ({
-                            ...n,
-                            x: positions[n.id]?.x,
-                            y: positions[n.id]?.y,
-                            fixed: false,
-                        }));
-                    }
-
+                    let { nodes, edges } = helpers.buildModuleMapGraph(this.modulesData || [], {
+                        providers: (this.allData && this.allData.providers) || [],
+                        minDepth: 5,
+                        fatThreshold: 12,
+                    });
+                    // Don't apply substring filterPrefix here — package tree ids are relative paths.
                     const container = document.getElementById('network');
+                    nodes = nodes.map((n) => ({
+                        ...n,
+                        font: { ...(n.font || {}), size: 13 },
+                        widthConstraint: { maximum: 150 },
+                        data: { ...(n.data || {}), displayLabel: (n.data && n.data.displayLabel) || n.label },
+                    }));
                     const data = {
                         nodes: new vis.DataSet(nodes),
                         edges: new vis.DataSet(edges),
                     };
                     this.lastGraphData = data;
 
-                    const options = this.getNetworkOptions(false);
+                    // Package TREE: hierarchical by path depth; containment edges only.
+                    const options = this.getNetworkOptions('hierarchical');
+                    options.layout = {
+                        hierarchical: {
+                            enabled: true,
+                            direction: 'UD',
+                            sortMethod: 'directed',
+                            shakeTowards: 'roots',
+                            blockShifting: true,
+                            edgeMinimization: true,
+                            parentCentralization: true,
+                            levelSeparation: 180,
+                            nodeSpacing: 220,
+                            treeSpacing: 240,
+                        },
+                    };
                     options.physics = { enabled: false };
-                    options.layout = { improvedLayout: false, hierarchical: { enabled: false } };
-                    options.edges = { ...(options.edges || {}), smooth: false };
+                    options.edges = {
+                        ...(options.edges || {}),
+                        smooth: { type: 'cubicBezier', roundness: 0.2 },
+                        width: 1.25,
+                        color: { color: '#94a3b8', opacity: 0.85 },
+                    };
+                    options.interaction = {
+                        ...(options.interaction || {}),
+                        hover: true,
+                        zoomView: true,
+                        dragView: true,
+                    };
 
                     if (this.network) {
                         this.network.destroy();
@@ -1541,25 +1581,35 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                             const nodeId = params.nodes[0];
                             const node = data.nodes.get(nodeId);
                             if (node && node.data && node.data.type === 'module') {
-                                this.filterPrefix = (node.data.module && node.data.module.name) || node.id;
-                                this.switchView('providers');
+                                const pkg = (node.data.packagePath || node.data.module && node.data.module.name || node.id);
+                                this.selectPackage(pkg);
                             }
                         }
                     });
+                    this.network.on('zoom', () => this.applyLabelLod());
 
                     setTimeout(() => {
-                        if (this.network) {
-                            this.network.fit({ animation: false, padding: 48 });
+                        if (!this.network) return;
+                        this.network.fit({ animation: false, padding: 56 });
+                        // If still microscopic, focus the root instead of a hairline.
+                        let scale = 1;
+                        try { scale = this.network.getScale(); } catch { scale = 1; }
+                        if (scale < 0.45 && nodes.length) {
+                            const root = nodes.reduce((a, b) => ((a.level || 99) <= (b.level || 99) ? a : b), nodes[0]);
+                            this.network.focus(root.id, { scale: 0.85, animation: false });
                         }
-                    }, 80);
+                        this.applyLabelLod();
+                    }, 100);
+                    const maxLevel = nodes.reduce((m, n) => Math.max(m, n.level || 1), 1);
                     this.densityWarning = {
-                        show: false,
-                        message: '',
+                        show: true,
+                        message: `模块包树：深度 ${maxLevel} · ${nodes.length} 个包节点（含路径父节点）。过肥包拆成 app/plugins/workers 等桶。双击进入 Providers。`,
                         hubs: [],
                         suggestModules: false,
                         suggestAggregate: false,
+                        suggestKeepBusiness: false,
                         expanded: false,
-                        minimized: false,
+                        minimized: true,
                     };
                 },
 
@@ -1580,13 +1630,52 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     const typePkgMap = this.buildTypePkgMap();
 
                     if (this.currentView === 'providers') {
-                        this.allData.providers.forEach((provider) => {
-                            const providerNodeId = provider.id;
-                            const fnName = this.providerNodeLabel(provider);
-                            const outputTypes = this.providerOutputTypes(provider);
-
-                            // Provider node
-                            if (!nodeMap.has(providerNodeId)) {
+                        const helpers = this.graphHelpers();
+                        const depth = this.parseDepthValue(2);
+                        const seedIds = this.pyramidFocusProviderId ? [this.pyramidFocusProviderId] : [];
+                        if (helpers && helpers.buildProvidersPyramidView) {
+                            const built = helpers.buildProvidersPyramidView(this.allData.providers || [], {
+                                depth,
+                                packageName: this.currentPackage || '',
+                                seedProviderIds: seedIds,
+                            });
+                            built.nodes.forEach((n) => {
+                                const provider = n.data || {};
+                                const label = this.providerNodeLabel(provider) || n.label;
+                                nodes.push({
+                                    ...n,
+                                    label,
+                                    title: this.buildProviderTooltip(provider),
+                                    color: this.getProviderNodeColor(provider),
+                                    shape: 'box',
+                                    font: { size: 11 },
+                                    level: n.level || 1,
+                                    data: {
+                                        ...provider,
+                                        type: 'provider',
+                                        packagePath: provider.output_pkg || provider.function_pkg || '',
+                                        displayLabel: label,
+                                        pyramidLevel: n.level || 1,
+                                    },
+                                });
+                                nodeMap.set(n.id, true);
+                            });
+                            built.edges.forEach((e) => edges.push({ ...e }));
+                            this._lastPyramidMeta = {
+                                entries: built.entries || [],
+                                depth: built.depth,
+                                totalProviders: (this.allData.providers || []).length,
+                            };
+                            this.updatePyramidMaxLevel(built.levels);
+                            if (this._lastPyramidMeta) {
+                                this._lastPyramidMeta.maxLevel = this.pyramidMaxLevel;
+                            }
+                        } else {
+                            // Fallback: provider nodes only, no type ellipses.
+                            this.allData.providers.forEach((provider) => {
+                                const providerNodeId = provider.id;
+                                if (nodeMap.has(providerNodeId)) return;
+                                const fnName = this.providerNodeLabel(provider);
                                 nodes.push({
                                     id: providerNodeId,
                                     label: fnName,
@@ -1594,134 +1683,232 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                                     color: this.getProviderNodeColor(provider),
                                     shape: 'box',
                                     font: { size: 11 },
-                                    data: { ...provider, type: 'provider', packagePath: provider.function_pkg || '' }
+                                    data: {
+                                        ...provider,
+                                        type: 'provider',
+                                        packagePath: provider.output_pkg || provider.function_pkg || '',
+                                    },
                                 });
                                 nodeMap.set(providerNodeId, true);
-                            }
-
-                            // Output type nodes + Provider -> Output edges
-                            outputTypes.forEach((outType) => {
-                                if (!nodeMap.has(outType)) {
-                                    nodes.push({
-                                        id: outType,
-                                        label: this.formatTypeName(outType),
-                                        title: '类型: ' + outType,
-                                        color: { background: '#bfdbfe', border: '#3b82f6' },
-                                        shape: 'ellipse',
-                                        font: { size: 10 },
-                                        data: { type: 'type', fullType: outType, packagePath: typePkgMap.get(outType) || provider.output_pkg || '' }
-                                    });
-                                    nodeMap.set(outType, true);
-                                }
-
-                                edges.push({
-                                    from: providerNodeId,
-                                    to: outType,
-                                    arrows: 'to',
-                                    color: { color: '#22c55e' }
-                                });
                             });
-
-                            // Input types
-                            (provider.input_types || []).forEach(inputType => {
-                                if (!nodeMap.has(inputType)) {
-                                    nodes.push({
-                                        id: inputType,
-                                        label: this.formatTypeName(inputType),
-                                        title: '类型: ' + inputType,
-                                        color: { background: '#bfdbfe', border: '#3b82f6' },
-                                        shape: 'ellipse',
-                                        font: { size: 10 },
-                                        data: { type: 'type', fullType: inputType, packagePath: typePkgMap.get(inputType) || '' }
-                                    });
-                                    nodeMap.set(inputType, true);
-                                }
-
-                                edges.push({
-                                    from: inputType,
-                                    to: providerNodeId,
-                                    arrows: 'to',
-                                    dashes: true,
-                                    color: { color: '#f59e0b' }
-                                });
+                            this._lastPyramidMeta = null;
+                        }
+                    } else if (this.currentView === 'types') {
+                        const helpers = this.graphHelpers();
+                        const depth = this.parseDepthValue(2);
+                        const seedIds = this.pyramidFocusTypeId ? [this.pyramidFocusTypeId] : [];
+                        if (helpers && helpers.buildTypesPyramidView) {
+                            const built = helpers.buildTypesPyramidView(this.allData, {
+                                depth,
+                                packageName: this.currentPackage || '',
+                                seedTypeIds: seedIds,
                             });
-                        });
-                    } else {
-                        // Types view
-                        this.allData.edges.forEach(edge => {
-                            if (edge.type !== 'provider') return;
-
-                            if (!nodeMap.has(edge.from)) {
+                            built.nodes.forEach((n) => {
+                                const fullType = (n.data && n.data.fullType) || n.id;
+                                const pkgPath = (n.data && n.data.packagePath) || typePkgMap.get(fullType) || '';
+                                const label = (n.data && n.data.displayLabel) || n.label
+                                    || (helpers.labelTypeWithPackage
+                                        ? helpers.labelTypeWithPackage(fullType, pkgPath)
+                                        : this.formatTypeName(fullType));
+                                const isFocus = this.pyramidFocusTypeId && n.id === this.pyramidFocusTypeId;
                                 nodes.push({
-                                    id: edge.from,
-                                    label: this.formatTypeName(edge.from),
-                                    title: '类型: ' + edge.from,
-                                    color: { background: '#bfdbfe', border: '#3b82f6' },
-                                    data: { type: 'type', fullType: edge.from, packagePath: typePkgMap.get(edge.from) || '' }
+                                    ...n,
+                                    label,
+                                    title: (pkgPath ? pkgPath + '\n' : '') + fullType,
+                                    color: isFocus
+                                        ? { background: '#fde68a', border: '#f59e0b' }
+                                        : (n.color || { background: '#bfdbfe', border: '#3b82f6' }),
+                                    shape: 'ellipse',
+                                    level: n.level || 1,
+                                    data: {
+                                        ...(n.data || {}),
+                                        type: 'type',
+                                        fullType,
+                                        packagePath: pkgPath,
+                                        displayLabel: label,
+                                        pyramidLevel: n.level || 1,
+                                    },
                                 });
-                                nodeMap.set(edge.from, true);
-                            }
-
-                            if (!nodeMap.has(edge.to)) {
-                                nodes.push({
-                                    id: edge.to,
-                                    label: this.formatTypeName(edge.to),
-                                    title: '类型: ' + edge.to,
-                                    color: { background: '#bfdbfe', border: '#3b82f6' },
-                                    data: { type: 'type', fullType: edge.to, packagePath: typePkgMap.get(edge.to) || '' }
-                                });
-                                nodeMap.set(edge.to, true);
-                            }
-
-                            edges.push({
-                                from: edge.from,
-                                to: edge.to,
-                                arrows: 'to',
-                                color: { color: '#9ca3af' }
+                                nodeMap.set(n.id, true);
                             });
-                        });
+                            built.edges.forEach((e) => edges.push({ ...e }));
+                            this._lastPyramidMeta = {
+                                entries: built.entries || [],
+                                depth: built.depth,
+                                totalTypes: built.levels ? built.levels.size : nodes.length,
+                                kind: 'types',
+                            };
+                            this.updatePyramidMaxLevel(built.levels);
+                            if (this._lastPyramidMeta) {
+                                this._lastPyramidMeta.maxLevel = this.pyramidMaxLevel;
+                            }
+                        } else {
+                            this.allData.edges.forEach(edge => {
+                                if (edge.type !== 'provider') return;
+                                if (!nodeMap.has(edge.from)) {
+                                    nodes.push({
+                                        id: edge.from,
+                                        label: this.formatTypeName(edge.from),
+                                        title: '类型: ' + edge.from,
+                                        color: { background: '#bfdbfe', border: '#3b82f6' },
+                                        data: { type: 'type', fullType: edge.from, packagePath: typePkgMap.get(edge.from) || '' }
+                                    });
+                                    nodeMap.set(edge.from, true);
+                                }
+                                if (!nodeMap.has(edge.to)) {
+                                    nodes.push({
+                                        id: edge.to,
+                                        label: this.formatTypeName(edge.to),
+                                        title: '类型: ' + edge.to,
+                                        color: { background: '#bfdbfe', border: '#3b82f6' },
+                                        data: { type: 'type', fullType: edge.to, packagePath: typePkgMap.get(edge.to) || '' }
+                                    });
+                                    nodeMap.set(edge.to, true);
+                                }
+                                edges.push({
+                                    from: edge.to,
+                                    to: edge.from,
+                                    arrows: 'to',
+                                    color: { color: '#9ca3af' }
+                                });
+                            });
+                            this._lastPyramidMeta = { kind: 'types' };
+                        }
                     }
 
                     // Create network
                     const aggregated = this.aggregateByGroups(nodes, edges);
-                    const filteredByPrefix = this.filterByPrefix(aggregated.nodes, aggregated.edges);
+                    // Pyramid views already scoped by package/seeds — avoid substring cuts.
+                    const filteredByPrefix = (this.currentView === 'providers' || this.currentView === 'types')
+                        ? { nodes: aggregated.nodes, edges: aggregated.edges }
+                        : this.filterByPrefix(aggregated.nodes, aggregated.edges);
                     let ns = filteredByPrefix.nodes;
                     let es = filteredByPrefix.edges;
 
                     const helpers = this.graphHelpers();
+                    if (helpers && helpers.applyHiddenNodeSeeds && this.hiddenSeeds.length) {
+                        const cut = helpers.applyHiddenNodeSeeds(
+                            ns,
+                            es,
+                            this.hiddenSeeds
+                        );
+                        ns = cut.nodes;
+                        es = cut.edges;
+                        if (this.selectedNode && cut.hiddenIds.has(this.selectedNode.id)) {
+                            this.selectedNode = null;
+                        }
+                    }
+                    this.refreshPackageSummary();
+                    let edgesDropped = 0;
+                    if (this.edgeDeclutter && helpers && helpers.declutterEdges) {
+                        const maxEdges = Math.max(200, ns.length * 3);
+                        const cleaned = helpers.declutterEdges(ns, es, {
+                            maxEdges,
+                            hubLimit: 16,
+                        });
+                        if (cleaned.decluttered) {
+                            es = cleaned.edges;
+                            edgesDropped = cleaned.dropped || 0;
+                        }
+                    }
+
                     const cap = helpers && helpers.READABLE_NODE_CAP ? helpers.READABLE_NODE_CAP : 40;
+                    const hierNodeBudget = helpers && helpers.HIERARCHICAL_NODE_BUDGET
+                        ? helpers.HIERARCHICAL_NODE_BUDGET
+                        : 150;
+                    const hierEdgeBudget = helpers && helpers.HIERARCHICAL_EDGE_BUDGET
+                        ? helpers.HIERARCHICAL_EDGE_BUDGET
+                        : 400;
                     const over = ns.length > cap || es.length > cap * 3;
                     const prevWarn = this.densityWarning || {};
+                    const pyramidMeta = this._lastPyramidMeta;
+                    let message = '';
+                    let suggestKeepBusiness = false;
+                    this.pyramidStatus = '';
+                    if ((this.currentView === 'providers' || this.currentView === 'types') && pyramidMeta && pyramidMeta.entries) {
+                        const entryN = (pyramidMeta.entries || []).length;
+                        const depthLabel = pyramidMeta.depth > 0 ? pyramidMeta.depth : '全部';
+                        const kindLabel = this.currentView === 'types' ? 'Type' : 'Provider';
+                        this.pyramidStatus = `${kindLabel} · ${entryN} 入口 · ${depthLabel} 层 · ${ns.length} 节点`;
+                        const unscoped = !this.currentPackage && !this.pyramidFocusProviderId && !this.pyramidFocusTypeId;
+                        if (entryN > 12 && unscoped) {
+                            message = `入口较多（${entryN}）。可选左侧包缩小范围`;
+                            if (this.currentView === 'providers' && !(this.hiddenSeeds && this.hiddenSeeds.length)) {
+                                message += '，或「只留业务入口」收敛 diag / Dix / plugins。';
+                                suggestKeepBusiness = true;
+                            } else {
+                                message += '。';
+                            }
+                        }
+                    } else if (over) {
+                        message = `图规模较大（${ns.length} 节点 / ${es.length} 边）。可先看模块地图，或缩小左侧包范围。`;
+                    }
+                    if (edgesDropped > 0) {
+                        message += (message ? ' ' : '')
+                            + `已隐藏 ${edgesDropped} 条次要边。`;
+                    }
+                    const actionable = !!(suggestKeepBusiness || over || edgesDropped > 0);
                     this.densityWarning = {
-                        show: over,
-                        message: over
-                            ? `图规模过大（${ns.length} 节点 / ${es.length} 边）。可先看模块地图或开启分组聚合；需要时展开耦合枢纽。`
-                            : '',
-                        hubs: over && helpers && helpers.rankHubNodes ? helpers.rankHubNodes(ns, es, 8) : [],
+                        show: actionable,
+                        message,
+                        hubs: (over && helpers && helpers.rankHubNodes) ? helpers.rankHubNodes(ns, es, 8) : [],
                         suggestModules: over && this.currentView !== 'modules',
                         suggestAggregate: over && !this.aggregateGroups && (this.groupRules || []).length > 0,
-                        // Keep graph primary: start minimized; remember user's collapse choice across redraws.
+                        suggestKeepBusiness,
+                        edgesDropped,
                         expanded: false,
-                        minimized: over ? (prevWarn.show ? !!prevWarn.minimized : true) : false,
+                        minimized: actionable ? (prevWarn.show ? !!prevWarn.minimized : true) : false,
                     };
-                    if (over && helpers && helpers.applyGraphBudget) {
-                        const bounded = helpers.applyGraphBudget(ns, es, { nodes: cap, edges: cap * 3 });
+                    if (helpers && helpers.applyGraphBudget
+                        && this.currentView !== 'providers'
+                        && this.currentView !== 'types'
+                        && (ns.length > hierNodeBudget || es.length > hierEdgeBudget)) {
+                        const beforeN = ns.length;
+                        const bounded = helpers.applyGraphBudget(ns, es, {
+                            nodes: hierNodeBudget,
+                            edges: hierEdgeBudget,
+                        });
                         ns = bounded.nodes;
                         es = bounded.edges;
+                        if (bounded.degraded) {
+                            this.densityWarning.show = true;
+                            this.densityWarning.message = (this.densityWarning.message
+                                ? this.densityWarning.message + ' '
+                                : '')
+                                + `为可读性保留约 ${ns.length}/${beforeN} 个高连通节点；完整列表见右侧清单或缩小包范围。`;
+                            if (!prevWarn.show) this.densityWarning.minimized = true;
+                        }
                     }
 
                     const container = document.getElementById('network');
                     const preferred = this.currentLayout === 'force' ? 'physics' : 'hierarchical';
+                    const stripRisk = helpers && helpers.estimateHierarchicalStripRisk
+                        ? helpers.estimateHierarchicalStripRisk(ns, es)
+                        : { wide: false };
                     const effective = helpers && helpers.resolveEffectiveLayout
                         ? helpers.resolveEffectiveLayout(preferred, ns.length)
-                        : (this.currentLayout === 'force' ? 'physics' : 'hierarchical');
-                    if (over && effective === 'physics' && this.currentLayout === 'hierarchical') {
-                        this.densityWarning.message += ' 已自动改用分散布局。';
+                        : preferred;
+                    if ((over || stripRisk.wide) && this.currentLayout === 'hierarchical') {
+                        const scopeTip = stripRisk.wide
+                            ? `图过宽（约 ${stripRisk.roots || '?'} 个根/岛）。请先选左侧包范围或改用模块地图。`
+                            : '';
+                        if (scopeTip) {
+                            this.densityWarning.show = true;
+                            this.densityWarning.message = (this.densityWarning.message
+                                ? this.densityWarning.message + ' '
+                                : '') + scopeTip;
+                            if (!this.densityWarning.hubs.length && helpers && helpers.rankHubNodes) {
+                                this.densityWarning.hubs = helpers.rankHubNodes(ns, es, 8);
+                            }
+                            this.densityWarning.suggestModules = this.currentView !== 'modules';
+                            if (!prevWarn.show) this.densityWarning.minimized = true;
+                        }
                     }
                     const options = this.getNetworkOptions(effective);
                     const fontSize = ns.length <= 12 ? 15 : ns.length <= 24 ? 13 : 11;
                     ns = ns.map(n => ({
                         ...n,
+                        level: n.level || (n.data && n.data.pyramidLevel) || n.level,
                         font: { ...(n.font || {}), size: Math.max((n.font && n.font.size) || 0, fontSize) },
                         data: { ...(n.data || {}), displayLabel: n.label },
                     }));
@@ -1732,83 +1919,189 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     this.lastGraphData = data;
 
                     if (this.network) {
+                        this.clearHidePreview();
                         this.network.destroy();
                     }
 
                     this.network = new vis.Network(container, data, options);
 
-                    const applyCamera = () => {
+                    const bindGraphInteractions = () => {
                         if (!this.network) return;
-                        this.network.fit({ animation: false, padding: 56 });
+                        this.network.off('zoom');
+                        this.network.off('click');
+                        this.network.off('doubleClick');
+                        this.network.off('oncontext');
+                        this.clearHidePreview();
+                        this.graphContextMenu = null;
+                        const canvas = document.getElementById('network');
+                        if (canvas && !canvas._dixCtxBound) {
+                            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+                            canvas._dixCtxBound = true;
+                        }
+                        this.network.on('zoom', () => this.applyLabelLod());
+                        this.network.on('click', params => {
+                            this.clearHidePreview();
+                            this.graphContextMenu = null;
+                            if (params.nodes.length > 0) {
+                                const nodeId = params.nodes[0];
+                                const node = data.nodes.get(nodeId);
+                                // Shift+click: one-step hide (keep main graph tidy).
+                                const ev = params.event && (params.event.srcEvent || params.event);
+                                if (ev && ev.shiftKey) {
+                                    this.hideNodeAndDownstream(node);
+                                    return;
+                                }
+                                this.selectedNode = node;
+                            } else {
+                                this.selectedNode = null;
+                            }
+                        });
+                        this.network.on('oncontext', (params) => {
+                            if (params.event && params.event.preventDefault) {
+                                params.event.preventDefault();
+                            }
+                            const dom = params.pointer && params.pointer.DOM;
+                            const nodeId = dom ? this.network.getNodeAt(dom) : null;
+                            if (!nodeId) {
+                                this.clearHidePreview();
+                                this.graphContextMenu = null;
+                                return;
+                            }
+                            const node = data.nodes.get(nodeId);
+                            if (!node) return;
+                            this.selectedNode = node;
+                            const count = this.estimateHiddenCount(node.id);
+                            const rect = (canvas && canvas.getBoundingClientRect) ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+                            this.applyHidePreview(String(node.id));
+                            this.graphContextMenu = {
+                                x: rect.left + (dom.x || 0),
+                                y: rect.top + (dom.y || 0),
+                                nodeId: String(node.id),
+                                label: this.nodeDisplayLabel(node),
+                                count,
+                                packageOptions: this.packageHideOptions(node),
+                            };
+                        });
+                        this.network.on('doubleClick', params => {
+                            this.clearHidePreview();
+                            this.graphContextMenu = null;
+                            if (params.nodes.length > 0) {
+                                const nodeId = params.nodes[0];
+                                const node = data.nodes.get(nodeId);
+                                if (node && node.data && node.data.type === 'group') {
+                                    this.toggleGroupExpand(node.data.group);
+                                    return;
+                                }
+                                if (node && node.data && node.data.type === 'module') {
+                                    this.filterPrefix = (node.data.module && node.data.module.name) || node.id;
+                                    this.switchView('providers');
+                                    return;
+                                }
+                                if (node && node.data && node.data.type === 'provider') {
+                                    this.pyramidFocusProviderId = node.id;
+                                    this.pyramidFocusTypeId = null;
+                                    this.renderGraph();
+                                    return;
+                                }
+                                if (node && node.data && node.data.type === 'type') {
+                                    this.pyramidFocusTypeId = node.id;
+                                    this.pyramidFocusProviderId = null;
+                                    this.currentView = 'types';
+                                    this.renderGraph();
+                                    return;
+                                }
+                                if (node && node.data) {
+                                    if (node.data.output_type) {
+                                        this.focusOnType(node.data.output_type);
+                                    }
+                                }
+                            }
+                        });
+                    };
+
+                    const applyReadableCamera = () => {
+                        if (!this.network) return;
+                        this.network.fit({ animation: false, padding: 48 });
+                        let scale = 1;
+                        try {
+                            scale = this.network.getScale();
+                        } catch {
+                            scale = 1;
+                        }
+                        const cam = helpers && helpers.resolvePostFitCamera
+                            ? helpers.resolvePostFitCamera(scale)
+                            : (scale < 0.55 ? 'focus' : 'fit');
+                        if (cam === 'focus') {
+                            if (this.currentLayout === 'hierarchical' && ns.length > 40) {
+                                const pos = this.network.getViewPosition();
+                                this.network.moveTo({ scale: 0.32, position: pos, animation: false });
+                                this.densityWarning.show = true;
+                                this.densityWarning.message = (this.densityWarning.message
+                                    ? this.densityWarning.message + ' '
+                                    : '')
+                                    + `层级图较宽，当前约 ${ns.length} 个节点在画布中；拖拽查看，或缩小包范围 / 改用模块地图。`;
+                                if (!prevWarn.show) this.densityWarning.minimized = true;
+                            } else {
+                                const focusId = helpers && helpers.pickFocusNodeId
+                                    ? helpers.pickFocusNodeId(ns, es, this.filterPrefix || this.focusedType || '')
+                                    : (ns[0] && ns[0].id);
+                                if (focusId) {
+                                    this.network.focus(focusId, { scale: 1.05, animation: false });
+                                }
+                                if (!this.densityWarning.show) {
+                                    this.densityWarning.show = true;
+                                    this.densityWarning.message = '数据过多导致全图过小。请缩小包范围或改用模块地图。';
+                                    this.densityWarning.suggestModules = this.currentView !== 'modules';
+                                    this.densityWarning.hubs = helpers && helpers.rankHubNodes
+                                        ? helpers.rankHubNodes(ns, es, 8)
+                                        : [];
+                                    this.densityWarning.minimized = true;
+                                }
+                            }
+                        }
                         this.applyLabelLod();
                     };
+
+                    bindGraphInteractions();
                     if (effective === 'hierarchical') {
-                        setTimeout(applyCamera, 80);
+                        setTimeout(applyReadableCamera, 80);
                     } else {
-                        this.network.once('stabilizationIterationsDone', applyCamera);
-                        setTimeout(applyCamera, 450);
+                        this.network.once('stabilizationIterationsDone', applyReadableCamera);
+                        setTimeout(applyReadableCamera, 450);
                     }
-                    this.network.on('zoom', () => this.applyLabelLod());
-
-                    // Click event
-                    this.network.on('click', params => {
-                        if (params.nodes.length > 0) {
-                            const nodeId = params.nodes[0];
-                            const node = data.nodes.get(nodeId);
-                            this.selectedNode = node;
-                            if (node && node.data && node.data.type === 'provider') {
-                                this.openProviderDetailModal(node);
-                            }
-                        }
-                    });
-
-                    // Double click to focus
-                    this.network.on('doubleClick', params => {
-                        if (params.nodes.length > 0) {
-                            const nodeId = params.nodes[0];
-                            const node = data.nodes.get(nodeId);
-                            if (node && node.data && node.data.type === 'group') {
-                                this.toggleGroupExpand(node.data.group);
-                                return;
-                            }
-                            if (node && node.data && node.data.type === 'module') {
-                                this.filterPrefix = (node.data.module && node.data.module.name) || node.id;
-                                this.switchView('providers');
-                                return;
-                            }
-                            if (node && node.data && node.data.type === 'type') {
-                                this.focusOnType(node.data.fullType);
-                            }
-                        }
-                    });
                 },
 
                 getNetworkOptions(layoutOverride = null) {
-                    const isHierarchical = layoutOverride === 'hierarchical' || layoutOverride === true
-                        ? true
-                        : layoutOverride === 'physics' || layoutOverride === 'force' || layoutOverride === false
-                            ? false
-                            : this.currentLayout === 'hierarchical';
-                    const levelSeparation = 150;
-                    const nodeSpacing = 180;
-                    const treeSpacing = 200;
+                    const mode = layoutOverride != null
+                        ? layoutOverride
+                        : (this.currentLayout === 'force' ? 'physics' : 'hierarchical');
+                    const isHierarchical = mode === 'hierarchical' || mode === true;
+                    const usePhysics = mode === 'physics' || mode === 'force' || mode === false;
+                    const architecturePyramid = (this.currentView === 'providers' || this.currentView === 'types') && isHierarchical;
+                    // Boxes/ellipses need spacing wider than node width or siblings glue together.
+                    const levelSeparation = architecturePyramid ? 200 : 150;
+                    const nodeSpacing = architecturePyramid ? 260 : 180;
+                    const treeSpacing = architecturePyramid ? 280 : 200;
                     return {
                         nodes: {
                             shape: 'box',
-                            font: { size: 12, face: 'system-ui, sans-serif' },
+                            font: { size: architecturePyramid ? 13 : 12, face: 'system-ui, sans-serif' },
                             borderWidth: 2,
                             shadow: { enabled: true, size: 5, x: 2, y: 2 },
-                            margin: 10,
-                            widthConstraint: { maximum: 160 },
+                            margin: 12,
+                            widthConstraint: { maximum: architecturePyramid ? 140 : 160 },
                         },
                         edges: {
-                            width: 1.5,
+                            width: architecturePyramid ? 1 : 1.5,
+                            color: architecturePyramid
+                                ? { color: '#c4c9d4', opacity: 0.55, highlight: '#64748b' }
+                                : undefined,
                             smooth: isHierarchical
-                                ? { type: 'cubicBezier', roundness: 0.4 }
+                                ? { type: 'cubicBezier', roundness: architecturePyramid ? 0.25 : 0.4 }
                                 : { type: 'continuous' }
                         },
                         physics: {
-                            enabled: !isHierarchical,
+                            enabled: usePhysics && !isHierarchical,
                             stabilization: { iterations: 180 },
                             barnesHut: {
                                 gravitationalConstant: -3500,
@@ -1829,6 +2122,10 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                                 enabled: true,
                                 direction: 'UD',
                                 sortMethod: 'directed',
+                                shakeTowards: 'roots',
+                                blockShifting: true,
+                                edgeMinimization: true,
+                                parentCentralization: true,
                                 levelSeparation,
                                 nodeSpacing,
                                 treeSpacing
@@ -1866,11 +2163,92 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     });
                     this.lastGraphData.nodes.update(updates);
                 },
-
                 fitGraph() {
                     if (!this.network) return;
-                    this.network.fit({ animation: { duration: 280, easingFunction: 'easeInOutQuad' }, padding: 56 });
+                    this.network.fit({ animation: { duration: 280, easingFunction: 'easeInOutQuad' }, padding: 48 });
                     setTimeout(() => this.applyLabelLod(), 300);
+                },
+
+                refreshPackageSummary() {
+                    const helpers = this.graphHelpers();
+                    if (!this.allData || !helpers) {
+                        this.packageSummary = { providers: [], types: [] };
+                        return;
+                    }
+                    if (helpers.buildProviderInventory) {
+                        this.packageSummary = helpers.buildProviderInventory(
+                            this.allData,
+                            this.currentPackage || ""
+                        );
+                        return;
+                    }
+                    if (!this.currentPackage || !helpers.buildPackageSummary) {
+                        this.packageSummary = { providers: [], types: [] };
+                        return;
+                    }
+                    this.packageSummary = helpers.buildPackageSummary(this.allData, this.currentPackage);
+                },
+
+                filteredInventoryProviders() {
+                    const q = String(this.inventorySearch || this.globalSearch || "").trim().toLowerCase();
+                    const list = (this.packageSummary && this.packageSummary.providers) || [];
+                    if (!q) return list;
+                    return list.filter((p) => {
+                        const hay = `${p.function_name || ""} ${p.output_type || ""} ${p.output_pkg || ""} ${p.label || ""}`.toLowerCase();
+                        return hay.includes(q);
+                    });
+                },
+                focusSummaryProvider(item) {
+                    if (!item) return;
+                    const provider = (this.allData?.providers || []).find((p) => p.id === item.id)
+                        || (this.allData?.providers || []).find((p) => p.function_name === item.function_name);
+                    if (!provider) return;
+                    this.currentView = 'providers';
+                    this.pyramidFocusProviderId = provider.id;
+                    this.selectedNode = { id: provider.id, data: { ...provider, type: 'provider' } };
+                    this.renderGraph();
+                    setTimeout(() => {
+                        if (!this.network || !this.lastGraphData) return;
+                        const nodeId = this.lastGraphData.nodes.get(provider.id) ? provider.id : null;
+                        if (!nodeId) return;
+                        try {
+                            this.network.selectNodes([nodeId]);
+                            this.network.focus(nodeId, {
+                                scale: 1.2,
+                                animation: { duration: 280, easingFunction: 'easeInOutQuad' },
+                            });
+                            const n = this.lastGraphData.nodes.get(nodeId);
+                            if (n) this.selectedNode = n;
+                            setTimeout(() => this.applyLabelLod(), 300);
+                        } catch (e) {
+                            // ignore focus errors
+                        }
+                    }, 120);
+                },
+
+                focusSummaryType(item) {
+                    if (!item || !item.id) return;
+                    this.currentView = 'types';
+                    this.pyramidFocusTypeId = item.id;
+                    this.pyramidFocusProviderId = null;
+                    this.renderGraph();
+                    setTimeout(() => {
+                        if (!this.network || !this.lastGraphData) return;
+                        const typeId = item.id;
+                        if (!this.lastGraphData.nodes.get(typeId)) return;
+                        try {
+                            this.network.selectNodes([typeId]);
+                            this.network.focus(typeId, {
+                                scale: 1.2,
+                                animation: { duration: 280, easingFunction: 'easeInOutQuad' },
+                            });
+                            const n = this.lastGraphData.nodes.get(typeId);
+                            if (n) this.selectedNode = n;
+                            setTimeout(() => this.applyLabelLod(), 300);
+                        } catch (e) {
+                            // ignore
+                        }
+                    }, 120);
                 },
 
                 focusHubNode() {
@@ -2105,6 +2483,38 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
 
 
                 // Helpers
+                packageBucket(name) {
+                    const parts = String(name || '').split('/').filter(Boolean);
+                    for (const key of ['domain', 'plugins', 'infra', 'app', 'bootstrap', 'router']) {
+                        if (parts.includes(key)) return key;
+                    }
+                    return 'other';
+                },
+
+                packageLeafLabel(name) {
+                    const parts = String(name || '').split('/').filter(Boolean);
+                    for (const key of ['domain', 'plugins', 'infra']) {
+                        const i = parts.indexOf(key);
+                        if (i >= 0) {
+                            const rest = parts.slice(i + 1).join('/');
+                            return rest || key;
+                        }
+                    }
+                    return this.formatPackageName(name);
+                },
+
+                isPackageGroupOpen(key) {
+                    if (Object.prototype.hasOwnProperty.call(this.packageGroupOpen || {}, key)) {
+                        return !!this.packageGroupOpen[key];
+                    }
+                    return key === 'domain' || key === 'app' || key === 'plugins';
+                },
+
+                togglePackageGroup(key) {
+                    const open = !this.isPackageGroupOpen(key);
+                    this.packageGroupOpen = { ...(this.packageGroupOpen || {}), [key]: open };
+                },
+
                 formatPackageName(name) {
                     if (!name) return '(anonymous)';
                     const parts = name.split('/');
@@ -2239,7 +2649,11 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                 },
 
                 providerNodeLabel(provider) {
-                    const base = this.formatFunctionName(provider.function_name);
+                    const helpers = this.graphHelpers();
+                    const base = (helpers && helpers.providerDisplayLabel)
+                        ? helpers.providerDisplayLabel(provider)
+                        : (this.formatTypeName(provider.output_type)
+                            || this.formatFunctionName(provider.function_name));
                     if (this.isProviderErrored(provider)) {
                         return `🚨 ${base}`;
                     }
@@ -2443,6 +2857,15 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                         if (typeof data.aggregateGroups === 'boolean') {
                             this.aggregateGroups = data.aggregateGroups;
                         }
+                        if (typeof data.edgeDeclutter === 'boolean') {
+                            this.edgeDeclutter = data.edgeDeclutter;
+                        }
+                        if (typeof data.currentLayout === 'string'
+                            && ['hierarchical', 'force'].includes(data.currentLayout)) {
+                            this.currentLayout = data.currentLayout;
+                        } else if (data.currentLayout === 'panorama') {
+                            this.currentLayout = 'hierarchical';
+                        }
                         if (Array.isArray(data.groupRules)) {
                             this.groupRules = data.groupRules.map(g => ({
                                 name: g.name,
@@ -2460,6 +2883,8 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     try {
                         const payload = {
                             aggregateGroups: this.aggregateGroups,
+                            edgeDeclutter: this.edgeDeclutter,
+                            currentLayout: this.currentLayout,
                             groupRules: this.groupRules.map(g => ({
                                 name: g.name,
                                 prefixes: g.prefixes || []
@@ -2469,6 +2894,543 @@ const API_BASE = window.DIX_BASE || ""; // 由 template.html 内联注入(服务
                     } catch (e) {
                         console.warn('[dix] failed to save group rules to storage', e);
                     }
+                },
+
+                loadHiddenSeeds() {
+                    try {
+                        const raw = sessionStorage.getItem(this.hiddenSeedsKey);
+                        if (!raw) {
+                            this.hiddenSeeds = [];
+                            return;
+                        }
+                        const data = JSON.parse(raw);
+                        this.hiddenSeeds = Array.isArray(data)
+                            ? data.filter((s) => s && (s.id || s.packagePrefix)).map((s) => ({
+                                id: String(s.id || ('pkg:' + s.packagePrefix)),
+                                label: String(s.label || s.packagePrefix || s.id),
+                                packagePrefix: s.packagePrefix ? String(s.packagePrefix) : undefined,
+                            }))
+                            : [];
+                    } catch (e) {
+                        console.warn('[dix] failed to load hidden seeds', e);
+                        this.hiddenSeeds = [];
+                    }
+                },
+
+                saveHiddenSeeds() {
+                    try {
+                        sessionStorage.setItem(this.hiddenSeedsKey, JSON.stringify(this.hiddenSeeds));
+                    } catch (e) {
+                        console.warn('[dix] failed to save hidden seeds', e);
+                    }
+                    this.syncArchitectureUrl();
+                },
+
+                /** URL wins over session when `hide` is present; also restore depth/pkg. */
+                readArchitectureUrlState() {
+                    try {
+                        const params = new URLSearchParams(window.location.search);
+                        if (params.has('hide')) {
+                            this.hiddenSeeds = this.decodeHiddenSeedsParam(params.get('hide'));
+                            try {
+                                sessionStorage.setItem(this.hiddenSeedsKey, JSON.stringify(this.hiddenSeeds));
+                            } catch (e) {
+                                // ignore
+                            }
+                        }
+                        if (params.has('depth')) {
+                            const d = String(params.get('depth') || '').trim();
+                            if (d !== '') this.currentDepth = d;
+                        }
+                        if (params.has('pkg')) {
+                            const pkg = String(params.get('pkg') || '').trim();
+                            this.currentPackage = pkg || null;
+                            if (pkg) this.sidebarCollapsed = false;
+                        }
+                    } catch (e) {
+                        console.warn('[dix] failed to read architecture URL state', e);
+                    }
+                },
+
+                encodeHiddenSeedsParam(seeds) {
+                    const helpers = this.graphHelpers();
+                    if (helpers && helpers.encodeHiddenSeedsForUrl) {
+                        return helpers.encodeHiddenSeedsForUrl(seeds);
+                    }
+                    return (seeds || [])
+                        .map((s) => {
+                            if (!s) return '';
+                            if (s.packagePrefix) return 'pkg:' + s.packagePrefix;
+                            return String(s.id || '');
+                        })
+                        .filter(Boolean)
+                        .join('|');
+                },
+
+                decodeHiddenSeedsParam(param) {
+                    const helpers = this.graphHelpers();
+                    if (helpers && helpers.decodeHiddenSeedsFromUrl) {
+                        return helpers.decodeHiddenSeedsFromUrl(param);
+                    }
+                    if (param == null || String(param).trim() === '') return [];
+                    return String(param).split('|').map((part) => {
+                        const token = String(part || '').trim();
+                        if (!token) return null;
+                        if (token.startsWith('pkg:')) {
+                            const pref = token.slice(4).trim();
+                            if (!pref) return null;
+                            return {
+                                id: 'pkg:' + pref,
+                                label: pref.split('/').filter(Boolean).slice(-2).join('/') || pref,
+                                packagePrefix: pref,
+                            };
+                        }
+                        return { id: token, label: token };
+                    }).filter(Boolean);
+                },
+
+                syncArchitectureUrl() {
+                    try {
+                        const url = new URL(window.location.href);
+                        const encoded = this.encodeHiddenSeedsParam(this.hiddenSeeds);
+                        if (encoded) url.searchParams.set('hide', encoded);
+                        else url.searchParams.delete('hide');
+
+                        const depth = String(this.currentDepth ?? '').trim();
+                        if (depth && depth !== '2') url.searchParams.set('depth', depth);
+                        else url.searchParams.delete('depth');
+
+                        if (this.currentPackage) url.searchParams.set('pkg', this.currentPackage);
+                        else url.searchParams.delete('pkg');
+
+                        const next = url.pathname + url.search + url.hash;
+                        const cur = window.location.pathname + window.location.search + window.location.hash;
+                        if (next !== cur) {
+                            history.replaceState(null, '', next);
+                        }
+                    } catch (e) {
+                        console.warn('[dix] failed to sync architecture URL', e);
+                    }
+                },
+
+                cloneHiddenSeeds(seeds) {
+                    return (seeds || []).map((s) => ({
+                        id: String(s.id),
+                        label: String(s.label || s.id),
+                        packagePrefix: s.packagePrefix ? String(s.packagePrefix) : undefined,
+                    }));
+                },
+
+                pushHideHistory() {
+                    const snap = this.cloneHiddenSeeds(this.hiddenSeeds);
+                    const next = [...(this.hideHistory || []), snap];
+                    const max = this.hideHistoryMax || 20;
+                    this.hideHistory = next.length > max ? next.slice(next.length - max) : next;
+                },
+
+                selectedNodeHideLabel() {
+                    return this.nodeDisplayLabel(this.selectedNode);
+                },
+
+                nodeDisplayLabel(node) {
+                    if (!node) return '';
+                    const d = node.data || {};
+                    const raw = d.displayLabel || node.label || d.function_name || d.fullType || d.group
+                        || d.packagePath || node.id || '';
+                    return String(raw).split('\n')[0].trim();
+                },
+
+                estimateHiddenCount(nodeId) {
+                    const helpers = this.graphHelpers();
+                    if (!helpers || !helpers.collectDownstreamNodeIds || !this.lastGraphData) {
+                        return 1;
+                    }
+                    try {
+                        const nodes = this.lastGraphData.nodes.get();
+                        const edges = this.lastGraphData.edges.get();
+                        return helpers.collectDownstreamNodeIds(nodes, edges, [String(nodeId)]).size || 1;
+                    } catch (e) {
+                        return 1;
+                    }
+                },
+
+                estimatePackageHideCount(prefix) {
+                    const helpers = this.graphHelpers();
+                    if (!helpers || !this.lastGraphData) return 0;
+                    try {
+                        const nodes = this.lastGraphData.nodes.get();
+                        const edges = this.lastGraphData.edges.get();
+                        const expanded = helpers.expandHiddenSeedsToNodeIds
+                            ? helpers.expandHiddenSeedsToNodeIds(nodes, [{ packagePrefix: prefix }])
+                            : [];
+                        if (!expanded.length) return 0;
+                        return helpers.collectDownstreamNodeIds(nodes, edges, expanded).size || expanded.length;
+                    } catch (e) {
+                        return 0;
+                    }
+                },
+
+                nodePackagePath(node) {
+                    if (!node) return '';
+                    const d = node.data || {};
+                    if (d.type === 'module') {
+                        return String(d.packagePath || node.id || '');
+                    }
+                    return String(d.packagePath || d.output_pkg || '').trim();
+                },
+
+                packageHideOptions(node) {
+                    const pkg = this.nodePackagePath(node);
+                    if (!pkg) return [];
+                    const opts = [];
+                    const push = (prefix, shortLabel) => {
+                        if (!prefix || opts.some((o) => o.prefix === prefix)) return;
+                        opts.push({
+                            prefix,
+                            label: shortLabel || prefix.split('/').slice(-2).join('/'),
+                            count: this.estimatePackageHideCount(prefix),
+                        });
+                    };
+                    push(pkg, pkg.split('/').filter(Boolean).slice(-2).join('/') || pkg);
+                    const parts = pkg.split('/').filter(Boolean);
+                    const pluginsAt = parts.lastIndexOf('plugins');
+                    if (pluginsAt >= 0) {
+                        push(parts.slice(0, pluginsAt + 1).join('/'), '…/plugins');
+                    }
+                    const diagAt = parts.lastIndexOf('diag');
+                    if (diagAt >= 0) {
+                        push(parts.slice(0, diagAt + 1).join('/'), '…/diag');
+                    }
+                    const domainAt = parts.lastIndexOf('domain');
+                    if (domainAt >= 0 && parts.length > domainAt + 1) {
+                        push(parts.slice(0, domainAt + 2).join('/'), '…/domain/' + parts[domainAt + 1]);
+                    }
+                    return opts.filter((o) => o.count > 0);
+                },
+
+                clearHidePreview() {
+                    if (!this._hidePreviewBackup || !this.lastGraphData || !this.lastGraphData.nodes) {
+                        this._hidePreviewBackup = null;
+                        return;
+                    }
+                    try {
+                        this.lastGraphData.nodes.update(this._hidePreviewBackup);
+                    } catch (e) {
+                        // network may already be destroyed
+                    }
+                    this._hidePreviewBackup = null;
+                },
+
+                applyHidePreview(seedId) {
+                    this.clearHidePreview();
+                    const helpers = this.graphHelpers();
+                    if (!helpers || !helpers.collectDownstreamNodeIds || !this.lastGraphData) return;
+                    const nodes = this.lastGraphData.nodes.get();
+                    const edges = this.lastGraphData.edges.get();
+                    const hide = helpers.collectDownstreamNodeIds(nodes, edges, [String(seedId)]);
+                    if (!hide.size) return;
+                    const backup = [];
+                    const updates = [];
+                    for (const n of nodes) {
+                        backup.push({
+                            id: n.id,
+                            color: n.color,
+                            opacity: n.opacity,
+                            borderWidth: n.borderWidth,
+                        });
+                        if (hide.has(n.id)) {
+                            updates.push({
+                                id: n.id,
+                                borderWidth: 3,
+                                color: {
+                                    background: (n.color && n.color.background) || '#fecaca',
+                                    border: '#e11d48',
+                                    highlight: n.color && n.color.highlight,
+                                },
+                                opacity: 1,
+                            });
+                        } else {
+                            updates.push({
+                                id: n.id,
+                                opacity: 0.22,
+                            });
+                        }
+                    }
+                    this._hidePreviewBackup = backup;
+                    try {
+                        this.lastGraphData.nodes.update(updates);
+                    } catch (e) {
+                        this._hidePreviewBackup = null;
+                    }
+                },
+
+                fitGraphCameraSoon() {
+                    setTimeout(() => {
+                        if (!this.network) return;
+                        try {
+                            this.network.fit({ animation: { duration: 220, easingFunction: 'easeInOutQuad' }, padding: 48 });
+                            this.applyLabelLod();
+                        } catch (e) {
+                            // ignore
+                        }
+                    }, 100);
+                },
+
+                showHideToast(message, seedId) {
+                    if (this._hideToastTimer) {
+                        clearTimeout(this._hideToastTimer);
+                        this._hideToastTimer = null;
+                    }
+                    this.hideToast = {
+                        message,
+                        seedId: String(seedId || ''),
+                        canUndo: (this.hideHistory || []).length > 0,
+                    };
+                    this._hideToastTimer = setTimeout(() => {
+                        this.hideToast = null;
+                        this._hideToastTimer = null;
+                    }, 5000);
+                },
+
+                hideNodeAndDownstream(node) {
+                    if (!node || !node.id) return;
+                    const id = String(node.id);
+                    const label = this.nodeDisplayLabel(node) || id;
+                    if (this.hiddenSeeds.some((s) => s.id === id)) {
+                        this.graphContextMenu = null;
+                        this.showHideToast(`「${label}」已在隐藏列表中`, id);
+                        return;
+                    }
+                    const count = this.estimateHiddenCount(id);
+                    this.pushHideHistory();
+                    this.hiddenSeeds = [
+                        ...this.hiddenSeeds,
+                        { id, label },
+                    ];
+                    this.saveHiddenSeeds();
+                    this.selectedNode = null;
+                    this.clearHidePreview();
+                    this.graphContextMenu = null;
+                    this.hiddenListOpen = true;
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
+                    const down = Math.max(0, count - 1);
+                    this.showHideToast(
+                        down > 0 ? `已隐藏「${label}」及 ${down} 个下游` : `已隐藏「${label}」`,
+                        id
+                    );
+                },
+
+                hideSelectedNodeAndDownstream() {
+                    this.hideNodeAndDownstream(this.selectedNode);
+                },
+
+                hideFromContextMenu() {
+                    if (!this.graphContextMenu) return;
+                    const id = this.graphContextMenu.nodeId;
+                    const node = (this.lastGraphData && this.lastGraphData.nodes)
+                        ? this.lastGraphData.nodes.get(id)
+                        : { id, label: this.graphContextMenu.label, data: { displayLabel: this.graphContextMenu.label } };
+                    this.hideNodeAndDownstream(node || { id, label: this.graphContextMenu.label });
+                },
+
+                hidePackageFromContextMenu(prefix, label) {
+                    this.hidePackagePrefix(prefix, label);
+                },
+
+                hidePackagePrefix(prefix, label) {
+                    const pref = String(prefix || '').trim();
+                    if (!pref) return;
+                    const id = 'pkg:' + pref;
+                    if (this.hiddenSeeds.some((s) => s.id === id || s.packagePrefix === pref)) {
+                        this.graphContextMenu = null;
+                        this.clearHidePreview();
+                        this.showHideToast(`「${label || pref}」已在隐藏列表中`, id);
+                        return;
+                    }
+                    const count = this.estimatePackageHideCount(pref);
+                    this.pushHideHistory();
+                    this.hiddenSeeds = [
+                        ...this.hiddenSeeds,
+                        { id, label: label || pref.split('/').slice(-2).join('/'), packagePrefix: pref },
+                    ];
+                    this.saveHiddenSeeds();
+                    this.selectedNode = null;
+                    this.clearHidePreview();
+                    this.graphContextMenu = null;
+                    this.hiddenListOpen = true;
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
+                    this.showHideToast(
+                        count > 1 ? `已隐藏包「${label || pref}」及相关 ${count} 个节点` : `已隐藏包「${label || pref}」`,
+                        id
+                    );
+                },
+
+                previewPackageHide(prefix) {
+                    if (!prefix || !this.lastGraphData) return;
+                    const helpers = this.graphHelpers();
+                    if (!helpers || !helpers.expandHiddenSeedsToNodeIds) return;
+                    const nodes = this.lastGraphData.nodes.get();
+                    const edges = this.lastGraphData.edges.get();
+                    const expanded = helpers.expandHiddenSeedsToNodeIds(nodes, [{ packagePrefix: prefix }]);
+                    if (!expanded.length) return;
+                    // Reuse node preview by temporarily painting expanded set
+                    this.clearHidePreview();
+                    const hide = helpers.collectDownstreamNodeIds(nodes, edges, expanded);
+                    const backup = [];
+                    const updates = [];
+                    for (const n of nodes) {
+                        backup.push({
+                            id: n.id,
+                            color: n.color,
+                            opacity: n.opacity,
+                            borderWidth: n.borderWidth,
+                        });
+                        if (hide.has(n.id)) {
+                            updates.push({
+                                id: n.id,
+                                borderWidth: 3,
+                                color: {
+                                    background: (n.color && n.color.background) || '#fecaca',
+                                    border: '#e11d48',
+                                },
+                                opacity: 1,
+                            });
+                        } else {
+                            updates.push({ id: n.id, opacity: 0.22 });
+                        }
+                    }
+                    this._hidePreviewBackup = backup;
+                    try {
+                        this.lastGraphData.nodes.update(updates);
+                    } catch (e) {
+                        this._hidePreviewBackup = null;
+                    }
+                },
+
+                keepBusinessEntriesOnly() {
+                    if (!this.lastGraphData) {
+                        this.renderGraph();
+                    }
+                    const nodes = (this.lastGraphData && this.lastGraphData.nodes)
+                        ? this.lastGraphData.nodes.get()
+                        : [];
+                    const add = [];
+                    for (const n of nodes) {
+                        const out = String((n.data && n.data.output_type) || n.label || '');
+                        const pkg = String((n.data && n.data.packagePath) || '');
+                        let hit = false;
+                        let label = this.nodeDisplayLabel(n);
+                        if (out.includes('dixinternal.Dix') || /\/dixinternal$/.test(pkg)) {
+                            hit = true;
+                            label = 'Dix';
+                        } else if (out.includes('TimeoutProbe')) {
+                            hit = true;
+                            label = 'TimeoutProbe';
+                        } else if (pkg.includes('/infra/diag') || out.includes('SlowRemote')) {
+                            hit = true;
+                            label = label || 'diag';
+                        }
+                        if (!hit) continue;
+                        const id = String(n.id);
+                        if (this.hiddenSeeds.some((s) => s.id === id)) continue;
+                        add.push({ id, label });
+                    }
+                    // Also hide whole plugins package if present on canvas
+                    const pluginPkgs = new Set();
+                    for (const n of nodes) {
+                        const pkg = String((n.data && n.data.packagePath) || '');
+                        const parts = pkg.split('/').filter(Boolean);
+                        const i = parts.lastIndexOf('plugins');
+                        if (i >= 0) pluginPkgs.add(parts.slice(0, i + 1).join('/'));
+                    }
+                    for (const pref of pluginPkgs) {
+                        const id = 'pkg:' + pref;
+                        if (this.hiddenSeeds.some((s) => s.id === id)) continue;
+                        add.push({ id, label: '…/plugins', packagePrefix: pref });
+                    }
+                    if (!add.length) {
+                        this.showHideToast('当前画布没有可收敛的 diag/Dix/plugins 节点', '');
+                        return;
+                    }
+                    this.pushHideHistory();
+                    this.hiddenSeeds = [...this.hiddenSeeds, ...add];
+                    this.saveHiddenSeeds();
+                    this.hiddenListOpen = true;
+                    this.clearHidePreview();
+                    this.graphContextMenu = null;
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
+                    this.showHideToast(`已收敛主图（隐藏 ${add.length} 组噪声）`, add[add.length - 1].id);
+                },
+
+                hideInventoryProvider(p, event) {
+                    if (event && event.stopPropagation) event.stopPropagation();
+                    if (!p || !p.id) return;
+                    this.hideNodeAndDownstream({
+                        id: p.id,
+                        label: p.label || p.function_name || p.id,
+                        data: { ...p, type: 'provider', displayLabel: p.label || p.function_name },
+                    });
+                },
+
+                undoLastHide() {
+                    if (!(this.hideHistory && this.hideHistory.length)) return;
+                    this.hiddenSeeds = this.cloneHiddenSeeds(this.hideHistory.pop());
+                    this.saveHiddenSeeds();
+                    if (!this.hiddenSeeds.length) this.hiddenListOpen = false;
+                    this.hideToast = null;
+                    if (this._hideToastTimer) {
+                        clearTimeout(this._hideToastTimer);
+                        this._hideToastTimer = null;
+                    }
+                    this.clearHidePreview();
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
+                },
+
+                unhideSeed(id) {
+                    const target = String(id || '');
+                    this.hiddenSeeds = this.hiddenSeeds.filter((s) => s.id !== target);
+                    this.saveHiddenSeeds();
+                    if (!this.hiddenSeeds.length) this.hiddenListOpen = false;
+                    this.clearHidePreview();
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
+                },
+
+                clearHiddenSeeds() {
+                    if (!this.hiddenSeeds.length) return;
+                    this.pushHideHistory();
+                    this.hiddenSeeds = [];
+                    this.saveHiddenSeeds();
+                    this.hiddenListOpen = false;
+                    this.clearHidePreview();
+                    this.graphContextMenu = null;
+                    this.renderGraph();
+                    this.fitGraphCameraSoon();
+                },
+
+                isInventoryProviderHidden(p) {
+                    if (!p || !p.id) return false;
+                    const id = String(p.id);
+                    if (this.hiddenSeeds.some((s) => s.id === id)) return true;
+                    const pkg = String(p.output_pkg || p.packagePath || '');
+                    return this.hiddenSeeds.some((s) => {
+                        const pref = s.packagePrefix;
+                        if (!pref) return false;
+                        return pkg === pref || pkg.startsWith(pref + '/');
+                    });
+                },
+
+                inventoryProviderAction(p, event) {
+                    if (this.isInventoryProviderHidden(p)) {
+                        if (event && event.stopPropagation) event.stopPropagation();
+                        this.unhideSeed(p.id);
+                        return;
+                    }
+                    this.hideInventoryProvider(p, event);
                 },
 
                 aggregateByGroups(nodes, edges, protectedIds = new Set()) {

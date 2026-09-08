@@ -20,22 +20,54 @@ func TestPackageInfoUsesResolvedOutputPackage(t *testing.T) {
 	}
 }
 
+func TestAggregateProviderInfosKeepsCollidingInputPkgs(t *testing.T) {
+	details := []dixinternal.ProviderDetails{
+		{
+			RegistrationID: 1,
+			OutputType:     "*app.Application",
+			OutputPkg:      "example/http/app",
+			FunctionName:   "app.Provide",
+			InputTypes: []string{
+				"*handler.Handler",
+				"*handler.Handler",
+				"*plugins.Platform",
+			},
+			InputPkgs: []string{
+				"example/http/domain/billing/handler",
+				"example/http/domain/inventory/handler",
+				"example/http/plugins",
+			},
+		},
+	}
+	_, providers := aggregateProviderInfos(details, "", 0)
+	if len(providers) != 1 {
+		t.Fatalf("providers = %d, want 1", len(providers))
+	}
+	p := providers[0]
+	if len(p.InputTypes) != 3 || len(p.InputPkgs) != 3 {
+		t.Fatalf("inputs collapsed: types=%v pkgs=%v", p.InputTypes, p.InputPkgs)
+	}
+	if p.InputPkgs[0] != "example/http/domain/billing/handler" || p.InputPkgs[1] != "example/http/domain/inventory/handler" {
+		t.Fatalf("input pkgs = %v", p.InputPkgs)
+	}
+}
+
 func TestDependencyPackageFilterUsesOutputPkg(t *testing.T) {
 	details := []dixinternal.ProviderDetails{
 		{
 			FunctionName: "analytics.NewClient",
 			OutputType:   "*analytics.Client",
-			OutputPkg:    "github.com/pubgo/dix/example/http/domain/analytics",
-			FunctionPkg:  "github.com/pubgo/dix/example/http/domain/analytics",
+			OutputPkg:    "github.com/pubgo/dix/example/http/domain/analytics/infra",
+			FunctionPkg:  "github.com/pubgo/dix/example/http/domain/analytics/infra",
 		},
 		{
 			FunctionName: "billing.NewClient",
 			OutputType:   "*billing.Client",
-			OutputPkg:    "github.com/pubgo/dix/example/http/domain/billing",
-			FunctionPkg:  "github.com/pubgo/dix/example/http/domain/billing",
+			OutputPkg:    "github.com/pubgo/dix/example/http/domain/billing/infra",
+			FunctionPkg:  "github.com/pubgo/dix/example/http/domain/billing/infra",
 		},
 	}
-	data := buildDependencyData(details, nil, "github.com/pubgo/dix/example/http/domain/analytics", 0)
+	data := buildDependencyData(details, nil, "github.com/pubgo/dix/example/http/domain/analytics/infra", 0)
 	if len(data.Providers) != 1 {
 		t.Fatalf("providers = %+v, want 1 analytics provider", data.Providers)
 	}

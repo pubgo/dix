@@ -925,16 +925,20 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 
 		for i, in := range detail.InputTypes {
 			in = strings.TrimSpace(in)
-			if in == "" || bucket.inputSeen[in] {
+			if in == "" {
 				continue
 			}
-			bucket.inputSeen[in] = true
-			bucket.provider.InputTypes = append(bucket.provider.InputTypes, in)
-
 			pkg := ""
 			if i < len(detail.InputPkgs) {
 				pkg = strings.TrimSpace(detail.InputPkgs[i])
 			}
+			// Same type.String() can come from different packages (*/handler.Handler).
+			seenKey := pkg + "\x00" + in
+			if bucket.inputSeen[seenKey] {
+				continue
+			}
+			bucket.inputSeen[seenKey] = true
+			bucket.provider.InputTypes = append(bucket.provider.InputTypes, in)
 			bucket.provider.InputPkgs = append(bucket.provider.InputPkgs, pkg)
 		}
 	}
