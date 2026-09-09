@@ -4,9 +4,23 @@
 
 [English](./README.md)
 
+## 规模优先工作流
+
+主界面为 legacy `/`。面向 DI 架构审查：
+
+```text
+模块地图 / 分组聚合 -> 范围内的 Providers 或类型依赖 -> 详情 / Trace
+```
+
+- 默认仍可进全局 Providers；超规模时提示换粒度、标耦合枢纽、短标签与可读布局，最后才裁点。
+- 模块地图看跨边界依赖；包侧栏用于缩小架构切片。
+- Object 默认不上架构画布，只在统计/详情中展示。
+- `/api/dependencies` 仍是 Providers/类型全量数据接口。
+- 可视化入口仅为 `/`（已移除 `/next`）。
+
 ## 功能特性
 
-- 📊 **交互式可视化** - 使用 vis.js + Tailwind CSS + Alpine.js 构建现代化界面
+- 📊 **交互式可视化** - 使用原生 JS、本地 CSS 和 vis-network 构建无构建现代化界面
 - 🔍 **全局模糊搜索** - 快速搜索类型名或函数名，直接查看依赖关系
 - 📦 **按包分组** - 左侧可折叠面板，按包过滤查看依赖
 - 🔄 **双向依赖追踪** - 同时展示依赖（上游）和被依赖（下游）关系
@@ -305,7 +319,7 @@ dixhttp.RegisterGroupRules(
 ```
 
 ### GET `/api/dependencies?package=xxx&limit=100`
-返回依赖关系数据，支持按包过滤
+返回全局/旧视图使用的全量依赖数据，支持包过滤。规模优先的模块图和邻域图优先使用各自的有界接口。
 
 ```json
 {
@@ -443,11 +457,8 @@ dixhttp.RegisterGroupRules(
 ## 技术栈
 
 - **后端**: Go 标准库 `net/http`
-- **前端框架**: 
-  - [Tailwind CSS](https://tailwindcss.com/) - 样式
-  - [Alpine.js](https://alpinejs.dev/) - 响应式交互
-  - [vis-network](https://visjs.github.io/vis-network/) - 图形渲染
-- **模板**: Go embed 嵌入单文件 HTML
+- **前端**: 原生 JS、本地 CSS 和 [vis-network](https://visjs.github.io/vis-network/) 图形渲染
+- **静态资源**: Go embed 本地文件；无构建步骤，无 CDN 依赖
 
 ## 适用场景
 

@@ -4,22 +4,35 @@ This module provides an HTTP server to visualize dependency relationships in the
 
 [中文文档](./README_zh.md)
 
-## UI 信息架构(五视图)
+## UI 信息架构
 
-前端为无构建的本地静态资源(`static/`:原生 JS + 自绘 CSS + 本地 vendored vis-network,**零 CDN 依赖**),按任务组织为五个视图:
+主界面为 legacy `/`（Alpine + vis-network + 本地静态资源）。面向 DI **架构审查**：包/模块边界、Providers、类型依赖、业务分组聚合。
 
-| 视图(hash 路由) | 主任务 | 数据源 |
-| --- | --- | --- |
-| 概览 `#/overview` | 全局状态一览 | `/api/stats`、`/api/errors` |
-| 依赖图 `#/graph` | 模块列表 + 任意类型为中心的邻域子图 | `/api/modules`、`/api/search`、`/api/ego` |
-| 检索 `#/search` | 服务端检索 + 状态过滤,一键跳转依赖图 | `/api/search` |
-| 调用链 `#/trace` | trace 列表(错误优先)+ 嵌套调用树 | `/api/trace`、`/api/trace-tree` |
-| 诊断 `#/diag` | 最近注入错误 + provider 启动耗时 | `/api/errors`、`/api/runtime-stats` |
+| 能力 | 说明 |
+| --- | --- |
+| Providers / 类型依赖 | 现有全局构图；默认仍可进 Providers |
+| 模块地图 | `/api/modules` 跨模块边界总览；双击下钻到包前缀过滤的 Providers |
+| 包范围侧栏 | 选择包以缩小架构切片（前缀过滤） |
+| 按分组聚合 | `dix.groupRules.v1` / `/api/group-rules` |
+| 规模提示 | 超可读预算时横幅建议换粒度，列出耦合枢纽，最后才 Top-K 裁点 |
+| Trace / 诊断 | 页内弹层；排障主路径仍是调用链 |
 
+Object（已创建实例）默认不作为架构画布节点，只在统计/详情中展示。
 
+## Scale-first graph workflow
+
+```text
+Module map / group aggregate  ->  scoped Providers or Types  ->  detail / Trace
+```
+
+- The default graph mode remains Providers (legacy habit); crowding is handled by semantic prompts, hubs, short labels, readable layout, then truncation.
+- Module map is bounded by module count; Providers/Types use a soft on-canvas readability cap (~40 nodes) with hub listing.
+- Objects are shown as state in details and counts; they are not rendered as architecture nodes by default.
+- `/api/dependencies` remains the full-data endpoint for Providers/Types views.
+- Visualization UI entry is `/` only (`/next` removed).
 ## Features
 
-- 📊 **Interactive Visualization** - Modern UI built with vis.js + Tailwind CSS + Alpine.js
+- 📊 **Interactive Visualization** - Modern no-build UI built with vanilla JS, local CSS, and vis-network
 - 🔍 **Global Fuzzy Search** - Quickly search for type names or function names to view dependencies
 - 📦 **Package Grouping** - Collapsible left panel to browse by package
 - 🔄 **Bidirectional Dependency Tracking** - Show both upstream (dependencies) and downstream (dependents)
@@ -425,7 +438,7 @@ Returns package list
 ```
 
 ### GET `/api/dependencies?package=xxx&limit=100`
-Returns dependency data, supports package filtering
+Returns full dependency data for global/legacy views and package filtering. New scale-first module and ego views use their own bounded endpoints first.
 
 ```json
 {
@@ -476,11 +489,8 @@ Returns backend-registered group rules (used as UI defaults)
 ## Tech Stack
 
 - **Backend**: Go standard library `net/http`
-- **Frontend**: 
-  - [Tailwind CSS](https://tailwindcss.com/) - Styling
-  - [Alpine.js](https://alpinejs.dev/) - Reactive interactions
-  - [vis-network](https://visjs.github.io/vis-network/) - Graph rendering
-- **Template**: Go embed single-file HTML
+- **Frontend**: vanilla JS, local CSS, and [vis-network](https://visjs.github.io/vis-network/) for graph rendering
+- **Assets**: Go-embedded local files; no build step and no CDN dependency
 
 ## Use Cases
 

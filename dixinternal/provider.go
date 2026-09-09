@@ -37,10 +37,11 @@ type providerOutputType struct {
 }
 
 type providerFn struct {
-	fn        reflect.Value
-	inputList []*providerInputType
-	output    *providerOutputType
-	hasError  bool
+	fn             reflect.Value
+	inputList      []*providerInputType
+	output         *providerOutputType
+	hasError       bool
+	registrationID uint64
 }
 
 type providerCallResult struct {

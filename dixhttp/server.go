@@ -8,9 +8,11 @@ import (
 	"io/fs"
 	"net/http"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/pubgo/dix/v2"
 	"github.com/pubgo/dix/v2/dixinternal"
@@ -131,13 +133,13 @@ func NewServerWithOptions(di *dix.Dix, opts ...ServerOption) *Server {
 // setupRoutes configures all HTTP routes
 func (s *Server) setupRoutes() {
 	base := s.basePath
-	indexPath := "/"
+	indexPath := "/{$}"
 	if base != "" {
-		indexPath = base + "/"
+		indexPath = base + "/{$}"
 		// Redirect /base -> /base/
 		s.mux.HandleFunc(base, func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == base {
-				http.Redirect(w, r, indexPath, http.StatusMovedPermanently)
+				http.Redirect(w, r, base+"/", http.StatusMovedPermanently)
 				return
 			}
 			http.NotFound(w, r)
@@ -149,6 +151,7 @@ func (s *Server) setupRoutes() {
 	s.mux.HandleFunc(base+"/api/stats", s.HandleStats)
 	s.mux.HandleFunc(base+"/api/runtime-stats", s.HandleRuntimeStats)
 	s.mux.HandleFunc(base+"/api/errors", s.HandleErrors)
+	s.mux.HandleFunc(base+"/api/issues", s.HandleIssues)
 	s.mux.HandleFunc(base+"/api/diagnostics", s.HandleDiagnostics)
 	s.mux.HandleFunc(base+"/api/trace", s.HandleTrace)
 	s.mux.HandleFunc(base+"/api/trace-tree", s.HandleTraceTree)
@@ -156,9 +159,9 @@ func (s *Server) setupRoutes() {
 	if err == nil {
 		s.mux.Handle(base+"/static/", http.StripPrefix(base+"/static/", http.FileServer(http.FS(staticRoot))))
 	}
-	s.mux.HandleFunc(base+"/next", s.HandleNextIndex)
 	s.mux.HandleFunc(base+"/api/search", s.HandleSearch)
 	s.mux.HandleFunc(base+"/api/modules", s.HandleModules)
+	s.mux.HandleFunc(base+"/api/module", s.HandleModule)
 	s.mux.HandleFunc(base+"/api/ego", s.HandleEgo)
 	s.mux.HandleFunc(base+"/api/packages", s.HandlePackages)
 	s.mux.HandleFunc(base+"/api/package/", s.HandlePackageDetails)
@@ -290,6 +293,24 @@ func (s *Server) HandleModules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.dix.ModuleGraph())
 }
 
+// HandleModule returns a bounded provider/type topology for one module.
+// Query params:
+// - name: exact module/package path (required)
+// - limit: max nodes, default 100, max 500
+// - edge_limit: max edges, default 300, max 1000
+func (s *Server) HandleModule(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		http.Error(w, "name required", http.StatusBadRequest)
+		return
+	}
+	writeJSON(w, s.dix.ModuleView(
+		name,
+		atoiOr(r.URL.Query().Get("limit"), 100),
+		atoiOr(r.URL.Query().Get("edge_limit"), 300),
+	))
+}
+
 // HandleEgo 返回以 center 为中心的 N 跳邻域子图。
 // Query params:
 // - center: 类型 label(必填)
@@ -309,18 +330,6 @@ func atoiOr(s string, def int) int {
 		return v
 	}
 	return def
-}
-
-// HandleNextIndex 服务五视图实验版 UI(/next)。
-func (s *Server) HandleNextIndex(w http.ResponseWriter, r *http.Request) {
-	index, err := fs.ReadFile(staticFS, "static/index.html")
-	if err != nil {
-		http.Error(w, "index not found", http.StatusInternalServerError)
-		return
-	}
-	html := strings.ReplaceAll(string(index), "__DIX_BASE_PATH__", s.basePath)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	fmt.Fprint(w, html)
 }
 
 // ServeHTTP implements http.Handler interface
@@ -391,6 +400,161 @@ func (s *Server) HandleStats(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, stats)
 }
 
+// IssueInfo is one actionable diagnostic item with a stable link back to the graph/trace.
+type IssueInfo struct {
+	Severity           string `json:"severity"`
+	Kind               string `json:"kind"`
+	ProviderID         string `json:"provider_id,omitempty"`
+	Provider           string `json:"provider,omitempty"`
+	OutputType         string `json:"output_type,omitempty"`
+	Module             string `json:"module,omitempty"`
+	Title              string `json:"title"`
+	RootCause          string `json:"root_cause,omitempty"`
+	Hint               string `json:"hint,omitempty"`
+	TraceID            string `json:"trace_id,omitempty"`
+	OccurredAtUnixNano int64  `json:"occurred_at_unix_nano,omitempty"`
+}
+
+// HandleIssues merges injection failures, provider failures, and slow providers
+// into one issue-first diagnostic feed.
+func (s *Server) HandleIssues(w http.ResponseWriter, r *http.Request) {
+	details, _ := s.cachedGraphInputs()
+	issues := buildIssues(
+		details,
+		s.dix.GetRecentErrors(atoiOr(r.URL.Query().Get("error_limit"), 100)),
+		s.dix.GetProviderRuntimeStats(),
+		s.dix.Option().SlowProviderThreshold,
+		atoiOr(r.URL.Query().Get("limit"), 100),
+	)
+	writeJSON(w, issues)
+}
+
+// buildIssues projects raw diagnostic records into a bounded, stable issue list.
+func buildIssues(details []dixinternal.ProviderDetails, recent []dixinternal.RecentError, stats []dixinternal.ProviderRuntimeStats, slowThreshold time.Duration, limit int) []IssueInfo {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	providerByID := make(map[string]dixinternal.ProviderDetails, len(details))
+	providerByFnOutput := make(map[string]dixinternal.ProviderDetails, len(details))
+	for _, detail := range details {
+		if detail.ProviderID != "" {
+			providerByID[detail.ProviderID] = detail
+		}
+		providerByFnOutput[detail.FunctionName+"\x00"+detail.OutputType] = detail
+	}
+
+	lookup := func(provider, output string) (dixinternal.ProviderDetails, bool) {
+		if provider != "" {
+			if detail, ok := providerByFnOutput[provider+"\x00"+output]; ok {
+				return detail, true
+			}
+		}
+		if output != "" {
+			for _, detail := range details {
+				if detail.OutputType == output && (provider == "" || detail.FunctionName == provider) {
+					return detail, true
+				}
+			}
+		}
+		return dixinternal.ProviderDetails{}, false
+	}
+
+	issues := make([]IssueInfo, 0, len(recent)+len(stats))
+	seenError := make(map[string]bool, len(recent))
+	for _, item := range recent {
+		key := item.ErrorType + "\x00" + item.Component + "\x00" + item.Stage + "\x00" +
+			item.ProviderFunction + "\x00" + item.OutputType + "\x00" + item.RootCause + "\x00" + item.Message
+		if seenError[key] {
+			continue
+		}
+		seenError[key] = true
+
+		issue := IssueInfo{
+			Severity:           "error",
+			Kind:               "inject_error",
+			Provider:           item.ProviderFunction,
+			OutputType:         item.OutputType,
+			Title:              item.ErrorType,
+			RootCause:          item.RootCause,
+			Hint:               item.Hint,
+			TraceID:            item.TraceID,
+			OccurredAtUnixNano: item.OccurredAtUnixNano,
+		}
+		if issue.Title == "" {
+			issue.Title = "inject error"
+		}
+		if detail, ok := lookup(item.ProviderFunction, item.OutputType); ok {
+			issue.ProviderID = detail.ProviderID
+			issue.Module = detail.OutputPkg
+		}
+		issues = append(issues, issue)
+	}
+
+	seenProvider := make(map[string]bool, len(stats))
+	for _, stat := range stats {
+		identity := stat.ProviderID
+		if identity == "" {
+			identity = stat.FunctionName + "\x00" + stat.OutputType
+		}
+		if seenProvider[identity] {
+			continue
+		}
+
+		isError := stat.LastError != ""
+		isSlow := slowThreshold > 0 &&
+			(stat.LastDuration > slowThreshold || (stat.CallCount > 0 && stat.AverageDuration > slowThreshold))
+		if !isError && !isSlow {
+			continue
+		}
+		seenProvider[identity] = true
+
+		detail, ok := providerByID[stat.ProviderID]
+		if !ok {
+			detail, _ = lookup(stat.FunctionName, stat.OutputType)
+		}
+		issue := IssueInfo{
+			Severity:           "slow",
+			Kind:               "provider_slow",
+			ProviderID:         stat.ProviderID,
+			Provider:           stat.FunctionName,
+			OutputType:         stat.OutputType,
+			Module:             detail.OutputPkg,
+			Title:              "slow provider",
+			RootCause:          stat.LastError,
+			OccurredAtUnixNano: stat.LastRunAtUnixNano,
+		}
+		if isError {
+			issue.Severity = "error"
+			issue.Kind = "provider_error"
+			issue.Title = "provider error"
+			issue.RootCause = stat.LastError
+		}
+		issues = append(issues, issue)
+	}
+
+	severityRank := map[string]int{"error": 0, "slow": 1}
+	sort.Slice(issues, func(i, j int) bool {
+		if severityRank[issues[i].Severity] != severityRank[issues[j].Severity] {
+			return severityRank[issues[i].Severity] < severityRank[issues[j].Severity]
+		}
+		if issues[i].OccurredAtUnixNano != issues[j].OccurredAtUnixNano {
+			return issues[i].OccurredAtUnixNano > issues[j].OccurredAtUnixNano
+		}
+		if issues[i].Kind != issues[j].Kind {
+			return issues[i].Kind < issues[j].Kind
+		}
+		return issues[i].Title < issues[j].Title
+	})
+	if len(issues) > limit {
+		issues = issues[:limit]
+	}
+	return issues
+}
+
 // HandleRuntimeStats returns provider runtime stats for startup/perf diagnosis.
 // Query params:
 // - limit: optional positive integer to limit returned rows.
@@ -413,45 +577,44 @@ func (s *Server) HandleRuntimeStats(w http.ResponseWriter, r *http.Request) {
 // HandlePackages returns list of packages for navigation
 func (s *Server) HandlePackages(w http.ResponseWriter, r *http.Request) {
 	providerDetails, _ := s.cachedGraphInputs()
+	packages := buildPackageInfos(providerDetails)
+	writeJSON(w, packages)
+}
 
-	// Group by package
+// buildPackageInfos groups provider outputs by their resolved package path.
+func buildPackageInfos(details []dixinternal.ProviderDetails) []PackageInfo {
 	packageMap := make(map[string]*PackageInfo)
-	for _, detail := range providerDetails {
-		pkg := extractPackage(detail.OutputType)
+	for _, detail := range details {
+		pkg := detail.OutputPkg
 		if pkg == "" {
 			pkg = "(anonymous)"
 		}
 
-		if _, exists := packageMap[pkg]; !exists {
-			packageMap[pkg] = &PackageInfo{
-				Name:          pkg,
-				ProviderCount: 0,
-				Types:         make([]string, 0),
-			}
+		packageInfo, exists := packageMap[pkg]
+		if !exists {
+			packageInfo = &PackageInfo{Name: pkg, Types: make([]string, 0)}
+			packageMap[pkg] = packageInfo
 		}
 
-		packageMap[pkg].ProviderCount++
-
-		// Track unique types
+		packageInfo.ProviderCount++
 		found := false
-		for _, t := range packageMap[pkg].Types {
-			if t == detail.OutputType {
+		for _, typ := range packageInfo.Types {
+			if typ == detail.OutputType {
 				found = true
 				break
 			}
 		}
 		if !found {
-			packageMap[pkg].Types = append(packageMap[pkg].Types, detail.OutputType)
+			packageInfo.Types = append(packageInfo.Types, detail.OutputType)
 		}
 	}
 
-	// Convert to slice
 	packages := make([]PackageInfo, 0, len(packageMap))
 	for _, pkg := range packageMap {
 		packages = append(packages, *pkg)
 	}
-
-	writeJSON(w, packages)
+	sort.Slice(packages, func(i, j int) bool { return packages[i].Name < packages[j].Name })
+	return packages
 }
 
 // HandlePackageDetails returns details for a specific package
@@ -663,30 +826,16 @@ func buildDependencyData(details []dixinternal.ProviderDetails, objects map[refl
 		Edges:     []EdgeInfo{},
 	}
 
-	data.Providers = aggregateProviderInfos(details, pkgFilter, limit)
-
-	for _, provider := range data.Providers {
-		outputTypes := provider.OutputTypes
-		if len(outputTypes) == 0 && provider.OutputType != "" {
-			outputTypes = []string{provider.OutputType}
-		}
-		for _, outputType := range outputTypes {
-			for _, inputTypeStr := range provider.InputTypes {
-				data.Edges = append(data.Edges, EdgeInfo{
-					From: inputTypeStr,
-					To:   outputType,
-					Type: "provider",
-				})
-			}
-		}
-	}
+	providerEdges, providers := aggregateProviderInfos(details, pkgFilter, limit)
+	data.Providers = providers
+	data.Edges = append(data.Edges, providerEdges...)
 
 	// Extract object information using the cached objects table
 	for outputType, groupsMap := range objects {
-		// Apply package filter if specified
+		// Apply package filter if specified (align with sidebar OutputPkg names)
 		if pkgFilter != "" {
 			pkg := extractPackage(outputType.String())
-			if pkg != pkgFilter {
+			if !packagePathMatchesFilter(pkg, pkgFilter) {
 				continue
 			}
 		}
@@ -717,22 +866,21 @@ func buildDependencyData(details []dixinternal.ProviderDetails, objects map[refl
 	return data
 }
 
-func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter string, limit int) []ProviderInfo {
+func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter string, limit int) ([]EdgeInfo, []ProviderInfo) {
 	type providerBucket struct {
-		provider   ProviderInfo
-		outputSeen map[string]bool
-		inputSeen  map[string]bool
+		provider       ProviderInfo
+		details        []dixinternal.ProviderDetails
+		outputSeen     map[string]bool
+		inputSeen      map[string]bool
+		providerIDSeen map[string]bool
 	}
 
 	buckets := make(map[string]*providerBucket)
 	order := make([]string, 0, len(details))
 
 	for _, detail := range details {
-		if pkgFilter != "" {
-			pkg := extractPackage(detail.OutputType)
-			if pkg != pkgFilter {
-				continue
-			}
+		if pkgFilter != "" && !providerMatchesPackageFilter(detail, pkgFilter) {
+			continue
 		}
 
 		key := providerAggregateKey(detail)
@@ -740,19 +888,22 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 		if !exists {
 			bucket = &providerBucket{
 				provider: ProviderInfo{
-					ID:           "provider_" + key,
-					OutputType:   detail.OutputType,
-					OutputPkg:    detail.OutputPkg,
-					FunctionName: detail.FunctionName,
-					FunctionPkg:  detail.FunctionPkg,
-					FunctionFile: detail.FunctionFile,
-					FunctionLine: detail.FunctionLine,
-					OutputTypes:  make([]string, 0, 4),
-					InputTypes:   make([]string, 0, 8),
-					InputPkgs:    make([]string, 0, 8),
+					ID:             "provider_registration_" + key,
+					RegistrationID: detail.RegistrationID,
+					ProviderIDs:    make([]string, 0, 4),
+					OutputType:     detail.OutputType,
+					OutputPkg:      detail.OutputPkg,
+					FunctionName:   detail.FunctionName,
+					FunctionPkg:    detail.FunctionPkg,
+					FunctionFile:   detail.FunctionFile,
+					FunctionLine:   detail.FunctionLine,
+					OutputTypes:    make([]string, 0, 4),
+					InputTypes:     make([]string, 0, 8),
+					InputPkgs:      make([]string, 0, 8),
 				},
-				outputSeen: make(map[string]bool),
-				inputSeen:  make(map[string]bool),
+				outputSeen:     make(map[string]bool),
+				inputSeen:      make(map[string]bool),
+				providerIDSeen: make(map[string]bool),
 			}
 			buckets[key] = bucket
 			order = append(order, key)
@@ -766,35 +917,73 @@ func aggregateProviderInfos(details []dixinternal.ProviderDetails, pkgFilter str
 			}
 		}
 
+		if detail.ProviderID != "" && !bucket.providerIDSeen[detail.ProviderID] {
+			bucket.providerIDSeen[detail.ProviderID] = true
+			bucket.provider.ProviderIDs = append(bucket.provider.ProviderIDs, detail.ProviderID)
+		}
+		bucket.details = append(bucket.details, detail)
+
 		for i, in := range detail.InputTypes {
 			in = strings.TrimSpace(in)
-			if in == "" || bucket.inputSeen[in] {
+			if in == "" {
 				continue
 			}
-			bucket.inputSeen[in] = true
-			bucket.provider.InputTypes = append(bucket.provider.InputTypes, in)
-
 			pkg := ""
 			if i < len(detail.InputPkgs) {
 				pkg = strings.TrimSpace(detail.InputPkgs[i])
 			}
+			// Same type.String() can come from different packages (*/handler.Handler).
+			seenKey := pkg + "\x00" + in
+			if bucket.inputSeen[seenKey] {
+				continue
+			}
+			bucket.inputSeen[seenKey] = true
+			bucket.provider.InputTypes = append(bucket.provider.InputTypes, in)
 			bucket.provider.InputPkgs = append(bucket.provider.InputPkgs, pkg)
 		}
 	}
 
 	providers := make([]ProviderInfo, 0, len(order))
+	edges := make([]EdgeInfo, 0, len(details)*2)
+	edgeSeen := make(map[string]bool, len(details)*2)
 	for _, key := range order {
-		providers = append(providers, buckets[key].provider)
+		bucket := buckets[key]
+		providers = append(providers, bucket.provider)
+
+		for _, detail := range bucket.details {
+			var outputTypes []string
+			if len(outputTypes) == 0 && detail.OutputType != "" {
+				outputTypes = []string{detail.OutputType}
+			}
+			for _, outputType := range outputTypes {
+				for _, inputType := range detail.InputTypes {
+					inputType = strings.TrimSpace(inputType)
+					outputType = strings.TrimSpace(outputType)
+					if inputType == "" || outputType == "" {
+						continue
+					}
+					edgeKey := inputType + "\x00" + outputType
+					if edgeSeen[edgeKey] {
+						continue
+					}
+					edgeSeen[edgeKey] = true
+					edges = append(edges, EdgeInfo{From: inputType, To: outputType, Type: "provider"})
+				}
+			}
+		}
 	}
 
 	if limit > 0 && len(providers) > limit {
 		providers = providers[:limit]
 	}
 
-	return providers
+	return edges, providers
 }
 
 func providerAggregateKey(detail dixinternal.ProviderDetails) string {
+	if detail.RegistrationID != 0 {
+		return fmt.Sprintf("registration_%d", detail.RegistrationID)
+	}
 	if detail.FunctionFile != "" && detail.FunctionLine > 0 {
 		return fmt.Sprintf("%s:%d", detail.FunctionFile, detail.FunctionLine)
 	}
@@ -868,16 +1057,18 @@ type DependencyData struct {
 
 // ProviderInfo contains information about a provider
 type ProviderInfo struct {
-	ID           string   `json:"id"`
-	OutputType   string   `json:"output_type"`
-	OutputTypes  []string `json:"output_types,omitempty"`
-	OutputPkg    string   `json:"output_pkg"`
-	FunctionName string   `json:"function_name"`
-	FunctionPkg  string   `json:"function_pkg"`
-	FunctionFile string   `json:"function_file"`
-	FunctionLine int      `json:"function_line"`
-	InputTypes   []string `json:"input_types"`
-	InputPkgs    []string `json:"input_pkgs"`
+	ID             string   `json:"id"`
+	RegistrationID uint64   `json:"registration_id"`
+	ProviderIDs    []string `json:"provider_ids"`
+	OutputType     string   `json:"output_type"`
+	OutputTypes    []string `json:"output_types,omitempty"`
+	OutputPkg      string   `json:"output_pkg"`
+	FunctionName   string   `json:"function_name"`
+	FunctionPkg    string   `json:"function_pkg"`
+	FunctionFile   string   `json:"function_file"`
+	FunctionLine   int      `json:"function_line"`
+	InputTypes     []string `json:"input_types"`
+	InputPkgs      []string `json:"input_pkgs"`
 }
 
 // ObjectInfo contains information about an object instance
@@ -896,6 +1087,42 @@ type EdgeInfo struct {
 }
 
 // Helper functions
+
+// providerMatchesPackageFilter aligns /api/packages sidebar names (OutputPkg)
+// with /api/dependencies?package= filtering. extractPackage(OutputType) alone is
+// wrong for module paths like github.com/.../domain/analytics vs type "analytics.Client".
+func providerMatchesPackageFilter(detail dixinternal.ProviderDetails, pkgFilter string) bool {
+	if pkgFilter == "" {
+		return true
+	}
+	if detail.OutputPkg != "" && packagePathMatchesFilter(detail.OutputPkg, pkgFilter) {
+		return true
+	}
+	if detail.FunctionPkg != "" && packagePathMatchesFilter(detail.FunctionPkg, pkgFilter) {
+		return true
+	}
+	return packagePathMatchesFilter(extractPackage(detail.OutputType), pkgFilter)
+}
+
+func packagePathMatchesFilter(pkg, pkgFilter string) bool {
+	if pkgFilter == "" {
+		return true
+	}
+	if pkg == "" {
+		return false
+	}
+	if pkg == pkgFilter {
+		return true
+	}
+	// Sidebar uses full OutputPkg paths; type extract may be a short name ("analytics").
+	if !strings.Contains(pkg, "/") && strings.HasSuffix(pkgFilter, "/"+pkg) {
+		return true
+	}
+	if !strings.Contains(pkgFilter, "/") && strings.HasSuffix(pkg, "/"+pkgFilter) {
+		return true
+	}
+	return false
+}
 
 func extractPackage(typeName string) string {
 	// Handle pointer types

@@ -9,7 +9,7 @@
 - 运行时依赖图 Graph（P1）：Provide 增量维护声明边/执行计数，环检测改读增量图；`/api/search`、`/api/modules`、`/api/ego` 服务端检索与分层查询；dixhttp 依赖数据按图版本快照缓存（热请求零反射）
 - trace 容器化（P2）：事件携带随机 container_id 实现多容器隔离，TraceID 改为随机 32 hex；`WithTraceBuffer(n)` 私有 trace 缓冲；`Dix.TraceTree` 与 `/api/trace-tree` 嵌套调用树查询，`/api/trace` 支持 container_id 过滤
 - 大规模演示容器 example/http：10 个域模块 + 120 个泛型插件/工作器，约 190 provider / 190+ 对象 / 12 模块
-- 五视图实验版 UI（`/next`）：概览/依赖图/检索/调用链/诊断，本地静态资源零 CDN
+- legacy `/` 架构可视化：模块地图、短标签、密度横幅/耦合枢纽、可读布局；共享 `graph_state.mjs`  helpers
 
 ## 修复
 
@@ -21,7 +21,7 @@
 ## 变更
 
 - DI 点事件统一走 tracer 事件流（console `di_trace` 与 diag file 成为订阅者，输出契约不变）；直接移除独立 LLM 诊断通道（`DIX_LLM_DIAG_MODE`、stderr `DIX_LLM_DIAG` 行、diag `kind:llm`），`error_type`/`root_cause`/`hint` 结构化字段在全部出口保留
-- 默认 Web UI 恢复 v2.0.2 交互版本（完整依赖图、双视图、节点详情、Mermaid/SVG 导出、Trace 诊断），五视图新版 UI 移至 `/next` 实验入口
+- 默认 Web UI 为 legacy `/`（完整依赖图、模块地图、分组聚合、Mermaid/SVG、Trace 诊断）；已移除 `/next` 五视图实验壳
 - example/http 升级为大规模演示容器；任务 `task web-demo` 改为整包构建
 
 ## 文档

@@ -164,20 +164,24 @@ func (dix *Dix) GetObjects() map[reflect.Type]map[string][]reflect.Value {
 
 // ProviderDetails contains detailed information about a provider
 type ProviderDetails struct {
-	OutputType   string
-	OutputPkg    string
-	FunctionName string
-	FunctionPkg  string
-	FunctionFile string
-	FunctionLine int
-	InputTypes   []string
-	InputPkgs    []string
+	OutputType     string   `json:"output_type"`
+	OutputPkg      string   `json:"output_pkg"`
+	FunctionName   string   `json:"function_name"`
+	FunctionPkg    string   `json:"function_pkg"`
+	FunctionFile   string   `json:"function_file"`
+	FunctionLine   int      `json:"function_line"`
+	InputTypes     []string `json:"input_types"`
+	InputPkgs      []string `json:"input_pkgs"`
+	RegistrationID uint64   `json:"registration_id"`
+	ProviderID     string   `json:"provider_id"`
 }
 
 // ProviderRuntimeStats contains provider runtime metrics for diagnostics.
 type ProviderRuntimeStats struct {
 	FunctionName      string        `json:"function_name"`
 	OutputType        string        `json:"output_type"`
+	RegistrationID    uint64        `json:"registration_id"`
+	ProviderID        string        `json:"provider_id"`
 	CallCount         int           `json:"call_count"`
 	TotalDuration     time.Duration `json:"total_duration"`
 	AverageDuration   time.Duration `json:"average_duration"`
@@ -199,6 +203,7 @@ type RecentError struct {
 	Message            string        `json:"message"`
 	RootCause          string        `json:"root_cause,omitempty"`
 	Hint               string        `json:"hint,omitempty"`
+	TraceID            string        `json:"trace_id,omitempty"`
 	TimedOut           bool          `json:"timed_out,omitempty"`
 	Duration           time.Duration `json:"duration,omitempty"`
 	Timeout            time.Duration `json:"timeout,omitempty"`
@@ -215,37 +220,44 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 			var inputTypes []string
 			var inputPkgs []string
 			seen := make(map[string]bool)
+			appendInput := func(typ reflect.Type) {
+				if typ == nil {
+					return
+				}
+				name := typ.String()
+				if name == "" {
+					return
+				}
+				pkg := resolveTypePkgPath(typ)
+				// Distinct packages can share type.String() (e.g. */handler.Handler).
+				key := pkg + "\x00" + name
+				if seen[key] {
+					return
+				}
+				seen[key] = true
+				inputTypes = append(inputTypes, name)
+				inputPkgs = append(inputPkgs, pkg)
+			}
 			for _, input := range providerFn.inputList {
 				if input.isStruct || input.typ.Kind() == reflect.Struct {
 					for _, in := range getProvideAllInputs(input.typ) {
-						name := in.typ.String()
-						if name == "" || seen[name] {
-							continue
-						}
-						seen[name] = true
-						inputTypes = append(inputTypes, name)
-						inputPkgs = append(inputPkgs, resolveTypePkgPath(in.typ))
+						appendInput(in.typ)
 					}
 					continue
 				}
-
-				name := input.typ.String()
-				if name == "" || seen[name] {
-					continue
-				}
-				seen[name] = true
-				inputTypes = append(inputTypes, name)
-				inputPkgs = append(inputPkgs, resolveTypePkgPath(input.typ))
+				appendInput(input.typ)
 			}
 			details = append(details, ProviderDetails{
-				OutputType:   outputType.String(),
-				OutputPkg:    resolveTypePkgPath(outputType),
-				FunctionName: fnName,
-				FunctionPkg:  resolveFuncPkgPath(fnName),
-				FunctionFile: fnFile,
-				FunctionLine: fnLine,
-				InputTypes:   inputTypes,
-				InputPkgs:    inputPkgs,
+				OutputType:     outputType.String(),
+				OutputPkg:      resolveTypePkgPath(outputType),
+				FunctionName:   fnName,
+				FunctionPkg:    resolveFuncPkgPath(fnName),
+				FunctionFile:   fnFile,
+				FunctionLine:   fnLine,
+				InputTypes:     inputTypes,
+				InputPkgs:      inputPkgs,
+				RegistrationID: providerFn.registrationID,
+				ProviderID:     fmt.Sprintf("provider_%d_%s", providerFn.registrationID, outputType.String()),
 			})
 		}
 	}
@@ -256,23 +268,29 @@ func (dix *Dix) GetProviderDetails() []ProviderDetails {
 // This is helpful for startup latency diagnosis.
 func (dix *Dix) GetProviderRuntimeStats() []ProviderRuntimeStats {
 	stats := make([]ProviderRuntimeStats, 0, len(dix.providers))
-	seen := make(map[reflect.Value]bool)
+	seen := make(map[string]bool)
 
 	for _, providerList := range dix.providers {
 		for _, p := range providerList {
-			if p == nil || seen[p.fn] {
+			if p == nil {
 				continue
 			}
-			seen[p.fn] = true
 
 			outputType := ""
 			if p.output != nil && p.output.typ != nil {
 				outputType = p.output.typ.String()
 			}
+			identity := fmt.Sprintf("%d:%s", p.registrationID, outputType)
+			if seen[identity] {
+				continue
+			}
+			seen[identity] = true
 
 			item := ProviderRuntimeStats{
-				FunctionName: GetFnName(p.fn),
-				OutputType:   outputType,
+				FunctionName:   GetFnName(p.fn),
+				OutputType:     outputType,
+				RegistrationID: p.registrationID,
+				ProviderID:     fmt.Sprintf("provider_%d_%s", p.registrationID, outputType),
 			}
 
 			if s, ok := dix.providerStats[p.fn]; ok && s != nil {
@@ -333,6 +351,7 @@ func (dix *Dix) GetRecentErrors(limit int) []RecentError {
 			Message:            r.Message,
 			RootCause:          r.RootCause,
 			Hint:               r.Hint,
+			TraceID:            r.TraceID,
 			TimedOut:           r.TimedOut,
 			Duration:           r.Duration,
 			Timeout:            r.Timeout,

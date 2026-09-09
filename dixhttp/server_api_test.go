@@ -311,6 +311,29 @@ func TestHandleSearchModulesEgo(t *testing.T) {
 	}
 }
 
+func TestHandleModuleReturnsBoundedTopology(t *testing.T) {
+	di := dixinternal.New()
+	server := NewServer(di)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/module?name=github.com%2Fpubgo%2Fdix%2Fv2%2Fdixinternal&limit=20&edge_limit=20", nil)
+	rec := httptest.NewRecorder()
+	server.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+	var view dixinternal.ModuleDetailView
+	if err := json.Unmarshal(rec.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Name != "github.com/pubgo/dix/v2/dixinternal" {
+		t.Fatalf("view = %+v", view)
+	}
+	if len(view.Nodes) == 0 || len(view.Edges) == 0 {
+		t.Fatalf("empty topology: %+v", view)
+	}
+}
+
 // 回归:stats/packages 先行"预热"输入缓存后,/api/dependencies 仍必须
 // 返回完整数据(此前 snapFull 未随缓存刷新,返回了字面量 null)。
 func TestHandleDependenciesAfterStatsWarmup(t *testing.T) {
