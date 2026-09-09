@@ -557,6 +557,28 @@ test("applyHiddenNodeSeeds supports packagePrefix seeds", async () => {
   assert.deepEqual(cut.nodes.map((n) => n.id).sort(), ["app", "h1"]);
 });
 
+test("applyHiddenNodeSeeds exact seeds hide only that node", async () => {
+  const { applyHiddenNodeSeeds } = await import("./graph_state.mjs");
+  const nodes = [{ id: "app" }, { id: "svc" }, { id: "noise" }];
+  const edges = [
+    { from: "app", to: "svc" },
+    { from: "noise", to: "svc" },
+  ];
+  const cut = applyHiddenNodeSeeds(nodes, edges, [{ id: "noise", exact: true }]);
+  assert.deepEqual(cut.nodes.map((n) => n.id).sort(), ["app", "svc"]);
+  assert.equal(cut.hiddenIds.has("noise"), true);
+  assert.equal(cut.hiddenIds.has("svc"), false);
+});
+
+test("encode/decode exact hide seeds for URL", async () => {
+  const { encodeHiddenSeedsForUrl, decodeHiddenSeedsFromUrl } = await import("./graph_state.mjs");
+  const encoded = encodeHiddenSeedsForUrl([{ id: "n1", exact: true, label: "n1" }]);
+  assert.equal(encoded, "exact:n1");
+  const decoded = decodeHiddenSeedsFromUrl(encoded);
+  assert.equal(decoded[0].exact, true);
+  assert.equal(decoded[0].id, "n1");
+});
+
 test("encode/decode hidden seeds for URL round-trip", async () => {
   const { encodeHiddenSeedsForUrl, decodeHiddenSeedsFromUrl } = await import("./graph_state.mjs");
   const seeds = [
@@ -574,16 +596,54 @@ test("encode/decode hidden seeds for URL round-trip", async () => {
   assert.deepEqual(decodeHiddenSeedsFromUrl(null), []);
 });
 
-test("providerDisplayLabel uses plugin impl path for shared Worker type", async () => {
+test("providerDisplayLabel uses plugin Provide symbol for shared Worker type", async () => {
   const { providerDisplayLabel } = await import("./graph_state.mjs");
   assert.equal(
     providerDisplayLabel({
       output_type: "plugins.Worker",
       output_pkg: "github.com/pubgo/dix/example/http/plugins",
-      function_pkg: "github.com/pubgo/dix/example/http/plugins/auth.Provide",
+      function_pkg: "github.com/pubgo/dix/example/http/plugins/auth",
+      function_name: "github.com/pubgo/dix/example/http/plugins/auth.Provide.func2",
     }),
-    "auth.Worker"
+    "auth.Provide → Worker"
   );
+});
+
+test("providerDisplayLabel prefers Provide symbol for plugin map providers", async () => {
+  const { providerDisplayLabel } = await import("./graph_state.mjs");
+  assert.equal(
+    providerDisplayLabel({
+      output_type: "map[string]github.com/pubgo/dix/example/http/plugins.Worker",
+      output_pkg: "github.com/pubgo/dix/example/http/plugins",
+      function_pkg: "github.com/pubgo/dix/example/http/plugins/vault",
+      function_name: "github.com/pubgo/dix/example/http/plugins/vault.Provide.func2",
+    }),
+    "vault.Provide → Worker"
+  );
+  assert.equal(
+    providerDisplayLabel({
+      output_type: "map[string]github.com/pubgo/dix/example/http/plugins.Plugin",
+      output_pkg: "github.com/pubgo/dix/example/http/plugins",
+      function_pkg: "github.com/pubgo/dix/example/http/plugins/login",
+      function_name: "github.com/pubgo/dix/example/http/plugins/login.Provide.func1",
+    }),
+    "login.Provide → Plugin"
+  );
+});
+
+test("classifyRelatedRoles marks seed dependency and dependent", async () => {
+  const { classifyRelatedRoles } = await import("./graph_state.mjs");
+  const nodes = [{ id: "app" }, { id: "svc" }, { id: "repo" }, { id: "other" }];
+  const edges = [
+    { from: "app", to: "svc" },
+    { from: "svc", to: "repo" },
+    { from: "other", to: "svc" },
+  ];
+  const roles = classifyRelatedRoles(nodes, edges, ["svc"]);
+  assert.equal(roles.get("svc"), "seed");
+  assert.equal(roles.get("repo"), "dependency");
+  assert.equal(roles.get("app"), "dependent");
+  assert.equal(roles.get("other"), "dependent");
 });
 
 test("buildTypesPyramidView is type-only with entry types at level 1", async () => {
@@ -661,4 +721,91 @@ test("buildTypeDependencyGraph keeps same short type from different packages", a
   assert.equal(services.length, 2);
   assert.ok(nodes.length >= 5);
   assert.ok(edges.length >= 4);
+});
+
+test("buildArchitectureFindings detects cross-bucket domain edges and hubs", async () => {
+  const { buildArchitectureFindings } = await import("./graph_state.mjs");
+  const findings = buildArchitectureFindings({
+    providers: [
+      {
+        id: "p_plugin",
+        function_name: "plugins/auth.Provide",
+        output_type: "*auth.Plugin",
+        output_pkg: "example/http/plugins/auth",
+        input_types: ["*billing.Service"],
+        input_pkgs: ["example/http/domain/billing/service"],
+      },
+      {
+        id: "p_billing",
+        function_name: "billing/service.Provide",
+        output_type: "*billing.Service",
+        output_pkg: "example/http/domain/billing/service",
+        input_types: [],
+        input_pkgs: [],
+      },
+      {
+        id: "p_inv",
+        function_name: "inventory/service.Provide",
+        output_type: "*inventory.Service",
+        output_pkg: "example/http/domain/inventory/service",
+        input_types: ["*billing.Service"],
+        input_pkgs: ["example/http/domain/billing/service"],
+      },
+    ],
+  });
+  const kinds = findings.map((f) => f.kind);
+  assert.ok(kinds.includes("cross_bucket"), "expected cross_bucket for plugins→domain or domain→domain");
+  for (const f of findings) {
+    assert.ok(f.id && f.title && f.summary && f.action && f.action.view);
+    assert.ok(["error", "warn", "info"].includes(f.severity));
+  }
+});
+
+test("buildArchitectureFindings flags super hub entry fanout and fat package", async () => {
+  const { buildArchitectureFindings } = await import("./graph_state.mjs");
+  const providers = [];
+  // One hub consumed by many
+  providers.push({
+    id: "hub",
+    function_name: "infra.ProvideHub",
+    output_type: "*infra.DB",
+    output_pkg: "example/http/infra/db",
+    input_types: [],
+    input_pkgs: [],
+  });
+  for (let i = 0; i < 12; i++) {
+    providers.push({
+      id: "c" + i,
+      function_name: "domain/foo.P" + i,
+      output_type: "*foo.T" + i,
+      output_pkg: "example/http/domain/foo",
+      input_types: ["*infra.DB"],
+      input_pkgs: ["example/http/infra/db"],
+    });
+  }
+  // Extra entries (indegree 0) beyond the consumers — hub is also entry
+  for (let i = 0; i < 8; i++) {
+    providers.push({
+      id: "e" + i,
+      function_name: "app.Entry" + i,
+      output_type: "*app.E" + i,
+      output_pkg: "example/http/app",
+      input_types: [],
+      input_pkgs: [],
+    });
+  }
+  const findings = buildArchitectureFindings(
+    { providers },
+    { hubDegree: 12, entryFanout: 8, fatPackage: 12 }
+  );
+  assert.ok(findings.some((f) => f.kind === "super_hub"));
+  assert.ok(findings.some((f) => f.kind === "entry_fanout"));
+  assert.ok(findings.some((f) => f.kind === "fat_package"));
+  assert.equal(findings[0].severity === "warn" || findings[0].severity === "error", true);
+});
+
+test("buildArchitectureFindings empty providers returns empty list", async () => {
+  const { buildArchitectureFindings } = await import("./graph_state.mjs");
+  assert.deepEqual(buildArchitectureFindings({}), []);
+  assert.deepEqual(buildArchitectureFindings({ providers: [] }), []);
 });

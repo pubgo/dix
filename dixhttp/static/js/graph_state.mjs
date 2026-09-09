@@ -65,27 +65,58 @@ export function labelTypeWithPackage(typeName, pkgPath = "") {
   return short;
 }
 
-/** Canvas/inventory label: prefer produced type over anonymous .funcN names. */
+/**
+ * Provider node label for the Providers canvas.
+ * Prefer the Provide symbol (vault.Provide); arrow suffix only disambiguates
+ * which Dix map/interface namespace that provider registers into — not a Go type
+ * living under the plugin package.
+ */
 export function providerDisplayLabel(provider = {}) {
   const outs = provider.output_types && provider.output_types.length
     ? provider.output_types.filter(Boolean)
     : (provider.output_type ? [provider.output_type] : []);
   const pkg = provider.output_pkg || provider.function_pkg || "";
+  const symbol = providerSymbolLabel(provider);
+  const nsLeaf = outs.length === 1 ? dixNamespaceLeaf(outs[0]) : "";
+
+  // Plugin package providers: always show as providers, not fake types.
+  if (symbol && /\/plugins\/[^/]+/.test(String(provider.function_pkg || provider.function_name || ""))) {
+    return nsLeaf ? `${symbol} → ${nsLeaf}` : symbol;
+  }
+
   if (outs.length === 1) {
-    let label = labelTypeWithPackage(outs[0], pkg);
-    // Map/interface providers often share OutputPkg (plugins.Worker); use impl path.
-    const fnPkg = String(provider.function_pkg || provider.function_name || "");
-    const impl = fnPkg.match(/\/plugins\/([^/.]+)/);
-    if (impl && /\/plugins\.|plugins\.(Plugin|Worker)\b/.test(label)) {
-      const typeLeaf = label.includes(".") ? label.split(".").pop() : label;
-      label = `${impl[1]}.${typeLeaf}`;
-    }
-    return label;
+    return labelTypeWithPackage(outs[0], pkg);
   }
   if (outs.length > 1) {
     return outs.map((t) => labelTypeWithPackage(t, pkg)).join(", ");
   }
-  return shortGraphLabel(provider.function_name || provider.id || "");
+  return symbol || shortGraphLabel(provider.function_name || provider.id || "");
+}
+
+/** `vault.Provide.func2` → `vault.Provide` */
+export function providerSymbolLabel(provider = {}) {
+  const fn = String(provider.function_name || "").trim();
+  if (!fn) return "";
+  const leaf = fn.includes("/") ? fn.slice(fn.lastIndexOf("/") + 1) : fn;
+  const cleaned = leaf.replace(/\.func\d+$/i, "");
+  if (cleaned && cleaned.includes(".")) return cleaned;
+  const pkg = String(provider.function_pkg || "").trim();
+  if (pkg) {
+    const parts = pkg.split("/").filter(Boolean);
+    const last = parts[parts.length - 1] || "";
+    if (last && cleaned) return `${last}.${cleaned}`;
+    if (last) return last;
+  }
+  return cleaned || leaf;
+}
+
+/** Map/interface namespace leaf: map[string]…plugins.Worker → Worker */
+export function dixNamespaceLeaf(typeName = "") {
+  const raw = String(typeName || "").replace(/^\*/, "");
+  const mapMatch = raw.match(/^map\[([^\]]+)\](.+)$/);
+  const inner = mapMatch ? mapMatch[2] : raw;
+  const short = shortGraphLabel(inner);
+  return short.includes(".") ? short.split(".").pop() : short;
 }
 
 /** Pick which node ids keep visible labels at a given zoom scale. */
@@ -306,7 +337,7 @@ export function collectDownstreamNodeIds(nodes = [], edges = [], seedIds = []) {
 
 /**
  * Expand hide seeds (node ids and/or packagePrefix) to concrete node ids
- * present on the current canvas.
+ * present on the current canvas. Skips `exact` seeds (those hide one id only).
  */
 export function expandHiddenSeedsToNodeIds(nodes = [], seeds = []) {
   const ids = [];
@@ -316,6 +347,7 @@ export function expandHiddenSeedsToNodeIds(nodes = [], seeds = []) {
       ids.push(String(s));
       continue;
     }
+    if (s.exact) continue;
     const prefix = String(s.packagePrefix || "").trim();
     if (prefix) {
       for (const n of nodes) {
@@ -339,7 +371,7 @@ export function expandHiddenSeedsToNodeIds(nodes = [], seeds = []) {
   return [...new Set(ids)];
 }
 
-/** Compact hide seeds for URL `hide=` (pipe-separated; pkg:prefix for packages). */
+/** Compact hide seeds for URL `hide=` (pipe-separated; pkg: / exact: prefixes). */
 export function encodeHiddenSeedsForUrl(seeds = []) {
   return (seeds || [])
     .map((s) => {
@@ -347,6 +379,7 @@ export function encodeHiddenSeedsForUrl(seeds = []) {
       if (typeof s === "string" || typeof s === "number") return String(s);
       const prefix = String(s.packagePrefix || "").trim();
       if (prefix) return "pkg:" + prefix;
+      if (s.exact && s.id) return "exact:" + String(s.id);
       return String(s.id || "").trim();
     })
     .filter(Boolean)
@@ -370,20 +403,42 @@ export function decodeHiddenSeedsFromUrl(param) {
         packagePrefix: pref,
       };
     }
+    if (token.startsWith("exact:")) {
+      const id = token.slice(6).trim();
+      if (!id) return null;
+      const short = id.includes("\x00") ? id.split("\x00").pop() : id;
+      return { id, label: short, exact: true };
+    }
     return { id: token, label: token };
   }).filter(Boolean);
 }
 
-/** Remove hidden seeds (ids or package prefixes) and their downstream. */
+/** Remove hidden seeds (ids or package prefixes) and their downstream.
+ * Seeds marked `exact: true` hide only that node (invert / keep-neighborhood).
+ */
 export function applyHiddenNodeSeeds(nodes = [], edges = [], seedIds = []) {
   const raw = seedIds || [];
-  const expanded = raw.length && typeof raw[0] === "object"
-    ? expandHiddenSeedsToNodeIds(nodes, raw)
-    : raw.map(String).filter(Boolean);
-  if (!expanded.length) {
+  if (!raw.length) {
     return { nodes: [...nodes], edges: [...edges], hiddenIds: new Set() };
   }
-  const hiddenIds = collectDownstreamNodeIds(nodes, edges, expanded);
+  const exactIds = [];
+  const soft = [];
+  for (const s of raw) {
+    if (s != null && typeof s === "object" && s.exact && s.id) {
+      exactIds.push(String(s.id));
+    } else {
+      soft.push(s);
+    }
+  }
+  const expanded = soft.length && typeof soft[0] === "object"
+    ? expandHiddenSeedsToNodeIds(nodes, soft)
+    : soft.map(String).filter(Boolean);
+  const hiddenIds = new Set(exactIds);
+  if (expanded.length) {
+    for (const id of collectDownstreamNodeIds(nodes, edges, expanded)) {
+      hiddenIds.add(id);
+    }
+  }
   if (!hiddenIds.size) {
     return { nodes: [...nodes], edges: [...edges], hiddenIds };
   }
@@ -426,6 +481,55 @@ export function providerRelatedSubgraph(nodes = [], edges = [], seedIds = []) {
     nodes: nodes.filter((n) => keep.has(n.id)),
     edges: edges.filter((e) => keep.has(e.from) && keep.has(e.to)),
   };
+}
+
+/**
+ * Role of each node relative to focus seeds.
+ * Edge direction is depends-on (from consumer → dependency):
+ * - dependency = downstream (what the seed depends on)
+ * - dependent = upstream (who depends on the seed)
+ */
+export function classifyRelatedRoles(nodes = [], edges = [], seedIds = []) {
+  const seeds = new Set((seedIds || []).filter(Boolean).map(String));
+  const roles = new Map();
+  if (!seeds.size) return roles;
+  const idSet = new Set(nodes.map((n) => n.id));
+  const down = new Map(nodes.map((n) => [n.id, []]));
+  const up = new Map(nodes.map((n) => [n.id, []]));
+  for (const e of edges) {
+    if (!idSet.has(e.from) || !idSet.has(e.to)) continue;
+    down.get(e.from).push(e.to);
+    up.get(e.to).push(e.from);
+  }
+  const walkReachable = (adj) => {
+    const reached = new Set();
+    const q = [...seeds].filter((id) => idSet.has(id));
+    while (q.length) {
+      const id = q.shift();
+      for (const n of adj.get(id) || []) {
+        if (seeds.has(n) || reached.has(n)) continue;
+        reached.add(n);
+        q.push(n);
+      }
+    }
+    return reached;
+  };
+  const dependencies = walkReachable(down);
+  const dependents = walkReachable(up);
+  for (const id of seeds) {
+    if (idSet.has(id)) roles.set(id, "seed");
+  }
+  for (const id of dependencies) {
+    roles.set(id, dependents.has(id) ? "both" : "dependency");
+  }
+  for (const id of dependents) {
+    if (roles.has(id) && roles.get(id) !== "seed") {
+      if (roles.get(id) === "dependency") roles.set(id, "both");
+    } else if (!roles.has(id)) {
+      roles.set(id, "dependent");
+    }
+  }
+  return roles;
 }
 
 /**
@@ -1117,6 +1221,222 @@ export function nodePackageKey(node = {}) {
   return dot > 0 ? short.slice(0, dot) : "";
 }
 
+/** Coarse architecture bucket from a Go package path (domain/plugins/infra/…). */
+export function architecturePathBucket(pkgPath = "") {
+  const parts = String(pkgPath || "").split("/").filter(Boolean);
+  for (const key of ["domain", "plugins", "infra", "app", "bootstrap", "router"]) {
+    if (parts.includes(key)) return key;
+  }
+  return "other";
+}
+
+/** Domain name under …/domain/<name>/… ; empty if not a domain path. */
+export function architectureDomainName(pkgPath = "") {
+  const parts = String(pkgPath || "").split("/").filter(Boolean);
+  const i = parts.indexOf("domain");
+  if (i < 0 || i + 1 >= parts.length) return "";
+  return parts[i + 1];
+}
+
+export const FINDINGS_HUB_DEGREE = 12;
+export const FINDINGS_ENTRY_FANOUT = 8;
+export const FINDINGS_FAT_PACKAGE = 12;
+export const FINDINGS_MAX = 30;
+
+const SEVERITY_RANK = { error: 0, warn: 1, info: 2 };
+
+/**
+ * Static architecture findings from provider graph (no runtime /api/issues).
+ * Returns actionable items with view/package/focus hints for the UI.
+ */
+export function buildArchitectureFindings(allData = {}, opts = {}) {
+  const providers = (allData && allData.providers) || [];
+  if (!providers.length) return [];
+
+  const hubDegree = opts.hubDegree ?? FINDINGS_HUB_DEGREE;
+  const entryFanout = opts.entryFanout ?? FINDINGS_ENTRY_FANOUT;
+  const fatPackage = opts.fatPackage ?? FINDINGS_FAT_PACKAGE;
+  const maxFindings = opts.max ?? FINDINGS_MAX;
+
+  const { nodes, edges } = buildProviderDependencyGraph(providers);
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const findings = [];
+
+  // --- cross_bucket (aggregate by smell key) ---
+  const crossGroups = new Map();
+  for (const e of edges) {
+    const from = byId.get(e.from);
+    const to = byId.get(e.to);
+    if (!from || !to) continue;
+    const fromPkg = nodePackageKey(from);
+    const toPkg = nodePackageKey(to);
+    const fb = architecturePathBucket(fromPkg);
+    const tb = architecturePathBucket(toPkg);
+
+    let smellKey = "";
+    let title = "";
+    let summary = "";
+    if ((fb === "plugins" || fb === "infra") && tb === "domain") {
+      smellKey = `cross:${fb}->domain`;
+      title = `${fb} 依赖 domain 实现`;
+      summary = `存在 ${fb} → domain 的依赖边，插件/基础设施可能耦合了业务实现。`;
+    } else {
+      const fd = architectureDomainName(fromPkg);
+      const td = architectureDomainName(toPkg);
+      if (fb === "domain" && tb === "domain" && fd && td && fd !== td) {
+        smellKey = `cross:domain:${fd}->${td}`;
+        title = `跨域依赖 ${fd} → ${td}`;
+        summary = `domain/${fd} 直接依赖 domain/${td}，边界可能需要通过接口或共享内核解耦。`;
+      }
+    }
+    if (!smellKey) continue;
+
+    let g = crossGroups.get(smellKey);
+    if (!g) {
+      g = {
+        id: smellKey,
+        kind: "cross_bucket",
+        severity: "warn",
+        title,
+        summary,
+        packages: new Set(),
+        providerIds: [],
+        edgeCount: 0,
+        seedId: e.from,
+        seedPkg: fromPkg,
+      };
+      crossGroups.set(smellKey, g);
+    }
+    g.edgeCount += 1;
+    if (fromPkg) g.packages.add(fromPkg);
+    if (toPkg) g.packages.add(toPkg);
+    if (e.from && !g.providerIds.includes(e.from)) g.providerIds.push(e.from);
+    if (e.to && !g.providerIds.includes(e.to)) g.providerIds.push(e.to);
+  }
+                for (const g of crossGroups.values()) {
+    const pkgs = [...g.packages];
+    findings.push({
+      id: g.id,
+      kind: g.kind,
+      severity: g.severity,
+      title: g.title,
+      summary: g.summary + `（${g.edgeCount} 边）`,
+      evidence: {
+        packages: pkgs,
+        providerIds: g.providerIds,
+        typeIds: [],
+        edgeCount: g.edgeCount,
+      },
+      action: {
+        view: "providers",
+        package: "",
+        focusProviderId: g.seedId,
+        keepNeighborhood: true,
+      },
+    });
+  }
+
+  // --- super_hub ---
+  for (const h of rankHubNodes(nodes, edges, 25)) {
+    if (h.degree < hubDegree) continue;
+    const node = byId.get(h.id);
+    if (!node) continue;
+    const pkg = nodePackageKey(node);
+    const label = (node.data && node.data.displayLabel) || node.label || h.id;
+    findings.push({
+      id: "hub:" + h.id,
+      kind: "super_hub",
+      severity: "warn",
+      title: `超级枢纽 · ${label}`,
+      summary: `该节点度数 ${h.degree}（阈值 ${hubDegree}），上下游过密，建议拆分或引入门面。`,
+      evidence: {
+        packages: pkg ? [pkg] : [],
+        providerIds: [h.id],
+        typeIds: [],
+        edgeCount: h.degree,
+      },
+      action: {
+        view: "providers",
+        package: "",
+        focusProviderId: h.id,
+        keepNeighborhood: true,
+      },
+    });
+  }
+
+  // --- entry_fanout ---
+  const idSet = new Set(nodes.map((n) => n.id));
+  const indeg = new Map([...idSet].map((id) => [id, 0]));
+  for (const e of edges) {
+    if (!idSet.has(e.from) || !idSet.has(e.to)) continue;
+    indeg.set(e.to, (indeg.get(e.to) || 0) + 1);
+  }
+  const entries = nodes.filter((n) => (indeg.get(n.id) || 0) === 0);
+  if (entries.length >= entryFanout) {
+    findings.push({
+      id: "entry_fanout",
+      kind: "entry_fanout",
+      severity: "info",
+      title: `入口过多 · ${entries.length} 个`,
+      summary: `未被子依赖消费的入口 provider 有 ${entries.length} 个（阈值 ${entryFanout}）。可收敛为业务入口或改用模块地图。`,
+      evidence: {
+        packages: [],
+        providerIds: entries.slice(0, 20).map((n) => n.id),
+        typeIds: [],
+        edgeCount: 0,
+      },
+      action: {
+        view: "modules",
+        keepNeighborhood: false,
+      },
+    });
+  }
+
+  // --- fat_package ---
+  const pkgCounts = new Map();
+  for (const p of providers) {
+    const pkg = String(p.output_pkg || p.function_pkg || "").trim();
+    if (!pkg) continue;
+    if (!pkgCounts.has(pkg)) pkgCounts.set(pkg, []);
+    const id = p.id || p.provider_id || p.function_name || p.output_type;
+    pkgCounts.get(pkg).push(id);
+  }
+  for (const [pkg, ids] of pkgCounts.entries()) {
+    if (ids.length < fatPackage) continue;
+    const leaf = pkg.split("/").filter(Boolean).slice(-2).join("/") || pkg;
+    findings.push({
+      id: "fat:" + pkg,
+      kind: "fat_package",
+      severity: "info",
+      title: `包过肥 · ${leaf}`,
+      summary: `${pkg} 含 ${ids.length} 个 provider（阈值 ${fatPackage}），建议按职责拆分子包。`,
+      evidence: {
+        packages: [pkg],
+        providerIds: ids.slice(0, 30),
+        typeIds: [],
+        edgeCount: 0,
+      },
+      action: {
+        view: "providers",
+        package: pkg,
+        keepNeighborhood: false,
+      },
+    });
+  }
+
+  findings.sort((a, b) => {
+    const sa = SEVERITY_RANK[a.severity] ?? 9;
+    const sb = SEVERITY_RANK[b.severity] ?? 9;
+    if (sa !== sb) return sa - sb;
+    const ea = (a.evidence && a.evidence.edgeCount) || (a.evidence && a.evidence.providerIds && a.evidence.providerIds.length) || 0;
+    const eb = (b.evidence && b.evidence.edgeCount) || (b.evidence && b.evidence.providerIds && b.evidence.providerIds.length) || 0;
+    if (eb !== ea) return eb - ea;
+    return String(a.id).localeCompare(String(b.id));
+  });
+
+  return findings.slice(0, maxFindings);
+}
+
 /**
  * Prefer cross-package and hub-touching edges when the canvas is too dense.
  * Same-package peripheral edges are dropped first.
@@ -1215,16 +1535,19 @@ export function buildPackageSummary(allData = {}, pkgName = "") {
 if (typeof window !== "undefined") {
   window.DIXGraphState = {
     resolveGraphMode, applyGraphBudget, READABLE_NODE_CAP, shortGraphLabel, labelTypeWithPackage, providerDisplayLabel, labelLodVisibleIds,
+    providerSymbolLabel, dixNamespaceLeaf,
     HIERARCHICAL_NODE_BUDGET, HIERARCHICAL_EDGE_BUDGET,
     resolveEffectiveLayout, resolveCameraStrategy, layoutStarPositions, assessLayoutMetrics, pickFocusNodeId,
     estimateHierarchicalStripRisk, resolvePostFitCamera, MIN_READABLE_FIT_SCALE,
     buildProviderInventory, buildProviderDependencyGraph, assignProviderPyramidLevels,
-    truncateProviderPyramid, providerRelatedSubgraph, buildProvidersPyramidView,
+    truncateProviderPyramid, providerRelatedSubgraph, classifyRelatedRoles, buildProvidersPyramidView,
     buildTypeDependencyGraph, buildTypesPyramidView,
     collectDownstreamNodeIds, expandHiddenSeedsToNodeIds, applyHiddenNodeSeeds,
     encodeHiddenSeedsForUrl, decodeHiddenSeedsFromUrl,
     typeNodeIdentity, createLoadGuard, rankHubNodes, buildModuleMapGraph, disperseModulesByProviders,
     expandPackageHierarchy, providerPackageSuffix, providerPackageBucket, nodePackageKey, declutterEdges, buildPackageSummary,
+    architecturePathBucket, architectureDomainName, buildArchitectureFindings,
+    FINDINGS_HUB_DEGREE, FINDINGS_ENTRY_FANOUT, FINDINGS_FAT_PACKAGE, FINDINGS_MAX,
     issueGraphHash, issueTraceHash, matchTraceRecord, filterTraceRecords,
   };
 }

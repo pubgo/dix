@@ -32,7 +32,7 @@
 <body class="bg-stone-100 h-screen flex flex-col overflow-hidden text-stone-800">
     <div x-data="app()" x-init="init()" class="flex flex-col h-full">
         <!-- Compact architecture header -->
-        <header class="bg-white border-b border-stone-200 px-4 py-2 flex-shrink-0">
+        <header x-show="!graphMaximized" x-cloak class="bg-white border-b border-stone-200 px-4 py-2 flex-shrink-0">
             <div class="flex items-center justify-between gap-4">
                 <div class="flex items-center gap-4 min-w-0">
                     <h1 class="text-sm font-semibold tracking-tight text-stone-900 flex-shrink-0">Dix</h1>
@@ -77,7 +77,8 @@
         <!-- Main Content -->
         <div class="flex flex-1 overflow-hidden min-h-0">
             <!-- Left: package scope -->
-            <aside :class="sidebarCollapsed ? 'w-10' : 'w-64'"
+            <aside x-show="!graphMaximized" x-cloak
+                :class="sidebarCollapsed ? 'w-10' : 'w-64'"
                 class="bg-white border-r border-stone-200 flex flex-col flex-shrink-0 transition-[width] duration-200">
                 <div class="h-10 px-1.5 border-b border-stone-200 bg-stone-50 flex items-center"
                     :class="sidebarCollapsed ? 'justify-center' : 'justify-between px-2'">
@@ -90,6 +91,12 @@
                                 :d="sidebarCollapsed ? 'M13 5l7 7-7 7M5 5l7 7-7 7' : 'M11 19l-7-7 7-7m8 14l-7-7 7-7'" />
                         </svg>
                     </button>
+                </div>
+                <div x-show="sidebarCollapsed" class="px-1 py-2 flex flex-col items-center gap-1">
+                    <button type="button" @click="sidebarCollapsed = false"
+                        class="writing-mode-vertical text-[10px] text-stone-500 hover:text-primary-700 px-1 py-2 rounded hover:bg-stone-100"
+                        style="writing-mode: vertical-rl; text-orientation: mixed;"
+                        title="展开包列表">包</button>
                 </div>
 
                 <template x-if="!sidebarCollapsed">
@@ -134,8 +141,12 @@
             <!-- Main Graph Area -->
             <main class="flex-1 flex flex-col bg-stone-50 min-w-0">
                 <!-- Primary toolbar -->
-                <div class="px-3 py-2 border-b border-stone-200 bg-white flex items-center gap-2 flex-wrap">
+                <div x-show="!graphMaximized" x-cloak
+                    class="px-3 py-2 border-b border-stone-200 bg-white flex items-center gap-2 flex-wrap">
                     <div class="inline-flex rounded-md border border-stone-200 overflow-hidden text-xs">
+                        <button type="button" @click="switchView('findings')"
+                            :class="currentView === 'findings' ? 'bg-primary-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'"
+                            class="px-2.5 py-1.5 border-r border-stone-200">体检</button>
                         <button type="button" @click="switchView('providers')"
                             :class="currentView === 'providers' ? 'bg-primary-600 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'"
                             class="px-2.5 py-1.5 border-r border-stone-200">Providers</button>
@@ -147,7 +158,8 @@
                             class="px-2.5 py-1.5">模块</button>
                     </div>
 
-                    <select x-model="currentDepth" @change="onDepthChange()"
+                    <select x-show="currentView !== 'findings'" x-cloak
+                        x-model="currentDepth" @change="onDepthChange()"
                         class="px-2 py-1.5 text-xs border border-stone-200 rounded-md bg-white outline-none"
                         title="金字塔截断深度">
                         <template x-for="opt in depthSelectOptions()" :key="'depth-' + opt.value">
@@ -155,25 +167,46 @@
                         </template>
                     </select>
 
+                    <button type="button" x-show="activeFindingId && currentView !== 'findings'" x-cloak
+                        @click="backToFindings()"
+                        class="text-[11px] px-2 py-1 rounded border border-teal-200 bg-teal-50 text-teal-900 hover:bg-teal-100 max-w-[220px] truncate"
+                        :title="activeFindingTitle()"
+                        x-text="'← 体检 · ' + activeFindingTitle()"></button>
+
                     <span class="text-[11px] text-stone-400 tabular-nums hidden lg:inline"
                         x-show="pyramidStatus" x-text="pyramidStatus"></span>
 
+                    <template x-for="chip in scopeChips()" :key="'scope-' + chip.key">
+                        <button type="button"
+                            class="text-[11px] px-2 py-1 rounded border border-stone-200 bg-stone-50 text-stone-700 hover:bg-stone-100 max-w-[180px] truncate"
+                            :title="chip.title"
+                            @click="clearScopeChip(chip.key)"
+                            x-text="chip.label + ' ×'"></button>
+                    </template>
+
                     <div class="flex items-center gap-1.5" x-show="pyramidFocusProviderId || pyramidFocusTypeId" x-cloak>
-                        <span class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 max-w-[160px] truncate"
-                            x-text="'聚焦: ' + (pyramidFocusProviderId || pyramidFocusTypeId)"></span>
-                        <button type="button" @click="pyramidFocusProviderId = null; pyramidFocusTypeId = null; renderGraph()"
-                            class="text-[11px] text-stone-500 underline">清除</button>
+                        <span class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded px-2 py-1 max-w-[200px] truncate"
+                            :title="pyramidFocusProviderId || pyramidFocusTypeId"
+                            x-text="'聚焦 ' + focusChipLabel()"></span>
+                        <button type="button" @click="clearPyramidFocus()"
+                            class="text-[11px] px-2 py-1 rounded border border-amber-200 bg-white text-amber-800 hover:bg-amber-50">退出聚焦</button>
                     </div>
 
-                    <div class="flex items-center gap-1.5" x-show="selectedNode && selectedNode.id" x-cloak>
+                    <div class="flex items-center gap-1.5" x-show="selectedNode && selectedNode.id && currentView !== 'findings'" x-cloak>
                         <button type="button" @click="hideSelectedNodeAndDownstream()"
                             class="text-[11px] px-2 py-1 rounded bg-rose-600 text-white hover:bg-rose-700"
                             :title="'约 ' + estimateHiddenCount(selectedNode.id) + ' 节点 · H'">
                             隐藏及下游
                         </button>
+                        <button type="button" @click="keepSelectedNeighborhoodOnly()"
+                            class="text-[11px] px-2 py-1 rounded border border-teal-600 text-teal-800 bg-white hover:bg-teal-50"
+                            title="隐藏邻域外的全部节点">
+                            只留邻域
+                        </button>
                     </div>
 
                     <button type="button" @click="keepBusinessEntriesOnly()"
+                        x-show="currentView === 'providers'"
                         class="text-[11px] px-2 py-1 rounded border border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
                         只留业务入口
                     </button>
@@ -243,6 +276,12 @@
                                 <input type="checkbox" x-model="edgeDeclutter" @change="saveLocalState(); renderGraph()" class="rounded border-stone-300">
                                 边降噪
                             </label>
+                            <label class="flex items-center gap-2 text-xs text-stone-600" title="关闭后仅保留本次标签页 session；开启后写入本机 localStorage">
+                                <input type="checkbox" :checked="persistHideSeeds"
+                                    @change="setPersistHideSeeds($event.target.checked)"
+                                    class="rounded border-stone-300">
+                                跨会话保留隐藏
+                            </label>
                             <label class="flex items-center gap-2 text-xs text-stone-600">
                                 <input type="checkbox" x-model="debugGroupMatching" class="rounded border-stone-300">
                                 调试分组匹配
@@ -286,8 +325,13 @@
                             <div class="flex flex-wrap gap-1.5 pt-1 border-t border-stone-100">
                                 <button type="button" @click="fitGraph(); toolbarMoreOpen=false"
                                     class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50" :disabled="!network">适应全图</button>
-                                <button type="button" @click="focusHubNode(); toolbarMoreOpen=false"
-                                    class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50" :disabled="!network">聚焦枢纽</button>
+                                <button type="button" @click="focusSelectedOrHub(); toolbarMoreOpen=false"
+                                    class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50" :disabled="!network">聚焦</button>
+                                <button type="button" @click="toggleGraphMaximize(); toolbarMoreOpen=false"
+                                    class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50"
+                                    x-text="graphMaximized ? '退出最大化' : '最大化'"></button>
+                                <button type="button" @click="shortcutsHelpOpen=true; toolbarMoreOpen=false"
+                                    class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50">快捷键 ?</button>
                                 <button type="button" @click="resetView(); toolbarMoreOpen=false"
                                     class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50">重置</button>
                                 <button type="button" @click="exportSvg(); toolbarMoreOpen=false"
@@ -295,17 +339,145 @@
                                 <button type="button" @click="openMermaid(); toolbarMoreOpen=false"
                                     class="px-2 py-1 text-xs border border-stone-200 rounded hover:bg-stone-50" :disabled="!network">Mermaid</button>
                             </div>
+                            <p class="text-[10px] text-stone-400 pt-1">快捷键：? 帮助 · +/− 缩放 · 方向键平移 · 0/F 适应 · M 最大化 · H 隐藏 · U 撤销</p>
                         </div>
                     </div>
 
+                    <button type="button" @click="toggleGraphMaximize()"
+                        class="px-2 py-1.5 text-xs rounded-md border border-stone-200 bg-white hover:bg-stone-50 text-stone-600"
+                        :class="graphMaximized ? 'bg-primary-50 border-primary-200 text-primary-800' : ''"
+                        x-text="graphMaximized ? '退出最大化' : '最大化'"></button>
                     <button type="button" @click="rightPanelCollapsed = !rightPanelCollapsed"
                         class="px-2 py-1.5 text-xs rounded-md border border-stone-200 bg-white hover:bg-stone-50 text-stone-600"
+                        x-show="!graphMaximized && currentView !== 'findings'"
                         x-text="rightPanelCollapsed ? '清单' : '收起右栏'"></button>
                 </div>
 
                 <!-- Graph Container -->
-                <div class="flex-1 relative min-h-0">
-                    <div id="network" class="absolute inset-0 bg-stone-50"></div>
+                <div id="graph-stage" class="flex-1 relative min-h-0 bg-stone-50"
+                    :class="graphMaximized ? 'bg-white' : ''">
+                    <div id="network" class="absolute inset-0 bg-stone-50"
+                        x-show="currentView !== 'findings'"></div>
+
+                    <!-- Architecture findings (default home) -->
+                    <div x-show="currentView === 'findings'" x-cloak
+                        class="absolute inset-0 overflow-y-auto bg-stone-50">
+                        <div class="max-w-3xl mx-auto px-4 py-6 space-y-4">
+                            <div class="flex flex-wrap items-end justify-between gap-3">
+                                <div>
+                                    <h2 class="text-base font-semibold text-stone-900">架构体检</h2>
+                                    <p class="text-xs text-stone-500 mt-1"
+                                        x-text="findingsSummary().total
+                                            ? ('发现 ' + findingsSummary().total + ' 条 · warn '
+                                                + findingsSummary().warn + ' · info ' + findingsSummary().info)
+                                            : '结构上看起来干净'"></p>
+                                </div>
+                                <button type="button" @click="openProvidersGraph()"
+                                    class="px-2.5 py-1.5 text-xs rounded-md border border-stone-200 bg-white hover:bg-stone-50 text-stone-700">
+                                    打开 Providers 全图
+                                </button>
+                            </div>
+
+                            <div x-show="!architectureFindings.length" class="rounded-lg border border-dashed border-stone-200 bg-white px-4 py-8 text-center">
+                                <p class="text-sm text-stone-600">未检出跨桶依赖、超级枢纽、入口扇出或过肥包。</p>
+                                <button type="button" @click="openProvidersGraph()"
+                                    class="mt-3 text-xs text-primary-700 underline">仍要看全图</button>
+                            </div>
+
+                            <div class="space-y-2">
+                                <template x-for="f in architectureFindings" :key="f.id">
+                                    <button type="button"
+                                        class="w-full text-left rounded-lg border bg-white px-3 py-2.5 hover:border-primary-300 hover:bg-primary-50/40 transition"
+                                        :class="activeFindingId === f.id ? 'border-primary-400 ring-1 ring-primary-200' : 'border-stone-200'"
+                                        @click="applyFinding(f)">
+                                        <div class="flex items-start gap-2">
+                                            <span class="mt-0.5 px-1.5 py-0.5 text-[10px] font-medium rounded border flex-shrink-0"
+                                                :class="findingSeverityClass(f.severity)"
+                                                x-text="f.severity"></span>
+                                            <div class="min-w-0 flex-1">
+                                                <div class="text-sm font-medium text-stone-900 truncate" x-text="f.title"></div>
+                                                <p class="text-xs text-stone-500 mt-0.5 leading-snug" x-text="f.summary"></p>
+                                                <div class="mt-1.5 flex flex-wrap gap-1"
+                                                    x-show="f.evidence && f.evidence.packages && f.evidence.packages.length">
+                                                    <template x-for="pkg in (f.evidence.packages || []).slice(0, 4)" :key="f.id + pkg">
+                                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-stone-100 text-stone-500 truncate max-w-[10rem]"
+                                                            x-text="packageLeafLabel(pkg)"></span>
+                                                    </template>
+                                                </div>
+                                            </div>
+                                            <span class="text-[11px] text-primary-700 flex-shrink-0 mt-0.5">查看</span>
+                                        </div>
+                                    </button>
+                                </template>
+                            </div>
+
+                            <details class="text-xs text-stone-500" x-data="{}" @toggle="findingsRulesOpen = $event.target.open">
+                                <summary class="cursor-pointer hover:text-stone-700">规则说明（阈值）</summary>
+                                <ul class="mt-2 space-y-1 list-disc pl-4">
+                                    <li>cross_bucket：plugins/infra → domain，或跨 domain 直连</li>
+                                    <li>super_hub：provider 度数 ≥ 12</li>
+                                    <li>entry_fanout：入口 provider ≥ 8</li>
+                                    <li>fat_package：单包 provider ≥ 12</li>
+                                </ul>
+                            </details>
+                        </div>
+                    </div>
+
+                    <!-- Camera controls -->
+                    <div class="absolute top-3 right-3 z-20 flex flex-col items-stretch gap-1"
+                        x-show="network && currentView !== 'findings'" x-cloak>
+                        <div class="rounded-lg border border-stone-200 bg-white/95 shadow-md backdrop-blur-sm overflow-hidden">
+                            <button type="button" class="w-9 h-8 text-sm text-stone-700 hover:bg-stone-100 border-b border-stone-100"
+                                title="放大 (+)" @click="zoomGraphIn()" :disabled="!network">+</button>
+                            <div class="w-9 py-1 text-[10px] text-center text-stone-400 tabular-nums border-b border-stone-100"
+                                x-text="graphScaleLabel || '—'"></div>
+                            <button type="button" class="w-9 h-8 text-sm text-stone-700 hover:bg-stone-100"
+                                title="缩小 (-)" @click="zoomGraphOut()" :disabled="!network">−</button>
+                        </div>
+                        <button type="button"
+                            class="w-9 h-8 rounded-lg border border-stone-200 bg-white/95 shadow-md text-[11px] text-stone-700 hover:bg-stone-100"
+                            title="适应全图 (0 / F)" @click="fitGraph()" :disabled="!network">⊡</button>
+                        <button type="button"
+                            class="w-9 h-8 rounded-lg border border-stone-200 bg-white/95 shadow-md text-[11px] text-stone-700 hover:bg-stone-100"
+                            title="聚焦选中或枢纽" @click="focusSelectedOrHub()" :disabled="!network">◎</button>
+                        <button type="button"
+                            class="w-9 h-8 rounded-lg border border-stone-200 bg-white/95 shadow-md text-[11px] text-stone-700 hover:bg-stone-100"
+                            :class="graphMaximized ? 'bg-primary-50 text-primary-800 border-primary-200' : ''"
+                            :title="graphMaximized ? '退出最大化 (M / Esc)' : '最大化画布 (M)'"
+                            @click="toggleGraphMaximize()"
+                            x-text="graphMaximized ? '⤓' : '⛶'"></button>
+                        <button type="button"
+                            class="w-9 h-8 rounded-lg border border-stone-200 bg-white/95 shadow-md text-[11px] text-stone-500 hover:bg-stone-100"
+                            title="快捷键 (?)"
+                            @click="shortcutsHelpOpen = true">?</button>
+                    </div>
+
+                    <div x-show="graphMaximized" x-cloak
+                        class="absolute top-3 left-3 z-20 rounded-md border border-stone-200 bg-white/90 px-2 py-1 text-[11px] text-stone-500 shadow-sm">
+                        Esc / M 退出最大化
+                    </div>
+
+                    <!-- First-run / dense graph guide -->
+                    <div x-show="showCanvasGuide" x-cloak
+                        class="absolute top-3 left-1/2 -translate-x-1/2 z-20 w-[min(28rem,calc(100%-1.5rem))] rounded-lg border border-stone-200 bg-white/95 shadow-lg backdrop-blur-sm px-3 py-2.5">
+                        <div class="flex items-start gap-2">
+                            <div class="flex-1 min-w-0 text-xs text-stone-700 leading-snug">
+                                <p class="font-medium text-stone-900 mb-0.5">图偏满时可以先缩小范围</p>
+                                <p class="text-stone-500">左侧选包切片 · 双击节点看上下游 · 或点「只留业务入口」</p>
+                            </div>
+                            <button type="button" class="text-[11px] text-stone-400 hover:text-stone-700 flex-shrink-0"
+                                @click="dismissCanvasGuide()">关闭</button>
+                        </div>
+                        <div class="mt-2 flex flex-wrap gap-1.5">
+                            <button type="button"
+                                class="px-2 py-1 text-[11px] rounded border border-stone-200 bg-stone-50 hover:bg-stone-100"
+                                @click="openPackageSidebar()">打开包列表</button>
+                            <button type="button"
+                                class="px-2 py-1 text-[11px] rounded border border-rose-200 text-rose-800 bg-white hover:bg-rose-50"
+                                x-show="currentView === 'providers'"
+                                @click="keepBusinessEntriesOnly(); dismissCanvasGuide()">只留业务入口</button>
+                        </div>
+                    </div>
 
                     <!-- Graph right-click menu -->
                     <div x-show="graphContextMenu" x-cloak
@@ -320,6 +492,16 @@
                             class="w-full text-left px-3 py-2 text-sm text-rose-700 hover:bg-rose-50"
                             @click="hideFromContextMenu()">
                             <span x-text="graphContextMenu ? ('隐藏此节点及下游 (' + graphContextMenu.count + ')') : '隐藏及下游'"></span>
+                        </button>
+                        <button type="button"
+                            class="w-full text-left px-3 py-2 text-sm text-teal-800 hover:bg-teal-50"
+                            @click="keepNeighborhoodFromContextMenu()">
+                            只留此节点邻域
+                        </button>
+                        <button type="button"
+                            class="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50"
+                            @click="copyContextLabel()">
+                            复制标签
                         </button>
                         <template x-for="opt in (graphContextMenu && graphContextMenu.packageOptions) || []" :key="'pkg-hide-' + opt.prefix">
                             <button type="button"
@@ -422,7 +604,7 @@
                 </div>
             </main>
             <!-- Right inspector -->
-            <aside x-show="!rightPanelCollapsed" x-cloak
+            <aside x-show="!rightPanelCollapsed && !graphMaximized && currentView !== 'findings'" x-cloak
                 class="w-80 bg-white border-l border-stone-200 flex flex-col flex-shrink-0 min-h-0">
                 <div class="h-10 px-2 border-b border-stone-200 bg-stone-50 flex items-center gap-1">
                     <button type="button"
@@ -591,7 +773,7 @@
                                     </div>
                                 </div>
                             </template>
-                            <button @click="showDependencyGraph(primaryOutputType(selectedNode.data), 'type', selectedNode.data.output_pkg || selectedNode.data.packagePath || '')"
+                            <button type="button" @click="focusProviderNeighborhood(selectedNode)"
                                 class="w-full px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition flex items-center justify-center gap-2">
                                 <span>查看上下游</span>
                             </button>
@@ -683,7 +865,27 @@
                 <!-- Legend -->
                 <div class="p-3 border-t border-stone-200 bg-stone-50">
                     <h4 class="text-[11px] font-semibold text-stone-400 uppercase mb-2">图例</h4>
-                    <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-stone-600">
+                    <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-stone-600"
+                        x-show="pyramidFocusProviderId || pyramidFocusTypeId">
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded bg-amber-400"></div>
+                            <span>焦点</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded bg-green-400"></div>
+                            <span>依赖</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded bg-red-400"></div>
+                            <span>被依赖</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <div class="w-3 h-3 rounded bg-purple-300"></div>
+                            <span>双向</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] text-stone-600"
+                        x-show="!(pyramidFocusProviderId || pyramidFocusTypeId)">
                         <div class="flex items-center gap-1.5">
                             <div class="w-3 h-3 rounded bg-amber-400"></div>
                             <span>目标</span>
@@ -711,6 +913,31 @@
                     </div>
                 </div>
             </aside>
+        </div>
+
+        <!-- Keyboard shortcuts help -->
+        <div x-show="shortcutsHelpOpen" x-cloak
+            class="fixed inset-0 bg-black/40 flex items-center justify-center z-[60]"
+            @click.self="shortcutsHelpOpen = false"
+            @keydown.escape.window="shortcutsHelpOpen = false">
+            <div class="bg-white text-stone-800 w-[min(28rem,92vw)] rounded-xl shadow-2xl border border-stone-200 overflow-hidden">
+                <div class="px-4 py-3 border-b border-stone-200 flex items-center justify-between bg-stone-50">
+                    <div class="text-sm font-semibold">画布快捷键</div>
+                    <button type="button" class="text-stone-400 hover:text-stone-700 text-sm"
+                        @click="shortcutsHelpOpen = false">关闭</button>
+                </div>
+                <div class="px-4 py-3 text-xs space-y-2">
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">放大 / 缩小</span><span class="font-mono text-stone-800">+ / −</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">平移</span><span class="font-mono text-stone-800">方向键</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">适应全图</span><span class="font-mono text-stone-800">0 · F</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">最大化 / 退出</span><span class="font-mono text-stone-800">M · Esc</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">隐藏选中及下游</span><span class="font-mono text-stone-800">H</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">撤销隐藏</span><span class="font-mono text-stone-800">U</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">Shift+单击</span><span class="font-mono text-stone-800">快速隐藏</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">双击节点</span><span class="font-mono text-stone-800">聚焦邻域</span></div>
+                    <div class="flex justify-between gap-4"><span class="text-stone-500">本面板</span><span class="font-mono text-stone-800">?</span></div>
+                </div>
+            </div>
         </div>
 
         <!-- Provider Detail Modal -->
@@ -1355,9 +1582,9 @@
     </div>
 
     <script>window.DIX_BASE = "__DIX_BASE_PATH__";</script>
-    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_state.mjs?v=legacy-arch31"></script>
-    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_workbench.mjs?v=legacy-arch31"></script>
-    <script src="__DIX_BASE_PATH__/static/js/legacy/app.js?v=legacy-arch31"></script>
+    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_state.mjs?v=legacy-arch40"></script>
+    <script type="module" src="__DIX_BASE_PATH__/static/js/graph_workbench.mjs?v=legacy-arch40"></script>
+    <script src="__DIX_BASE_PATH__/static/js/legacy/app.js?v=legacy-arch40"></script>
 </body>
 
 </html>

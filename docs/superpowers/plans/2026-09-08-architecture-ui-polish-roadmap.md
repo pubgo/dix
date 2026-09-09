@@ -103,17 +103,25 @@ Do **not** schedule Phase 3–4 as blockers for other features.
 
 ## Backlog (unsorted)
 
-- Merge consecutive hide toasts into one line  
-- “Hide everything except selected neighborhood” invert mode  
-- Persist hide seeds beyond session (opt-in localStorage)  
-- Further canvas LOD / label density tweaks after layout-v1 bake-in  
+- [x] Merge consecutive hide toasts into one line  
+- [x] “Hide everything except selected neighborhood” invert mode  
+- [x] Persist hide seeds beyond session (opt-in localStorage)  
+- [x] Further canvas LOD / label density tweaks after layout-v1 bake-in  
 
 ---
 
 ## Layout chrome (2026-09-08)
 
-Bold IA pass (`arch-layout-v1` / `legacy-arch29`): compact header, primary toolbar +「更多」, grouped package list, right inspector tabs, density tip only when actionable, no floating Trace FAB.
+Bold IA pass (`arch-layout-v1` / `legacy-arch29`+): compact header, primary toolbar +「更多」, grouped package list, right inspector tabs, density tip only when actionable, no floating Trace FAB.
+
+Focus neighborhood polish (`legacy-arch32`): yellow/green/red role coloring, status「聚焦邻域」,「退出聚焦」chip.
+
+Camera chrome (`legacy-arch35`): floating +/−/fit/focus/maximize, keyboard shortcuts, graph-stage fullscreen.
+
+Usability batch (`legacy-arch36`–`37`): `?` shortcuts help, arrow pan, immersive maximize, scope chips, copy label, opt-in persist hide, chrome prefs, denser LOD, remember last view.
+
+Architecture findings (`legacy-arch38`): default **体检** home — `buildArchitectureFindings` (cross_bucket / super_hub / entry_fanout / fat_package); click → scoped graph; chip back.
 
 ## Next concrete pick
 
-Architecture polish phases 0–4 are green. Remaining work is **Backlog** (merge hide toasts, invert-hide mode, opt-in localStorage) or unrelated dix/core features.
+Bake-in findings with example/http; tune thresholds; optionally CLI/CI export later.
